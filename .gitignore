@@ -1,0 +1,21 @@
+# Rust
+/target/
+**/*.rs.bk
+Cargo.lock
+Cargo.toml.orig
+
+# IDEs and editors
+/.idea/
+/.vscode/
+/*.swp
+
+# By-products of rustup
+/.rustup/
+/.rustup/
+
+# By-products of cargo
+/.cargo/
+/.cargo/
+
+# Misc
+*.log
