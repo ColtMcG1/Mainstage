@@ -8,73 +8,13 @@
 ///   -b, --build       Build the script
 ///   -r, --run         Run the script
 /// Example: mainstage -b path/to/script --dump --verbose
-use clap::{Arg, ArgMatches, Command, error};
-use console::{Style, strip_ansi_codes, measure_text_width};
+use clap::{Arg, ArgMatches, Command};
+use mainstage_core::*;
+use std::io::{self};
 
+mod output;
 
-const WIDTH: usize = 80;
-
-// content width between the two single-space paddings
-fn inner_content_width() -> usize {
-    // line format: '│' ' ' <content> ' ' '│' => 4 extra chars
-    WIDTH.saturating_sub(4)
-}
-
-fn print_top_border() {
-    // ┌────────────────────────────────────────────────────────────────────┐
-    println!("┌{}┐", "─".repeat(WIDTH.saturating_sub(2)));
-}
-
-fn print_bottom_border() {
-    // └────────────────────────────────────────────────────────────────────┘
-    println!("└{}┘", "─".repeat(WIDTH.saturating_sub(2)));
-}
-
-fn print_empty_line() {
-    println!("│ {} │", " ".repeat(inner_content_width()));
-}
-
-fn build_output(message: &str, style: &Style) {
-    let styled = style.apply_to(message).to_string();
-    let visible = strip_ansi_codes(&styled);
-    let visible_width = measure_text_width(&visible);
-
-    let inner_w = inner_content_width();
-    let padding = inner_w.saturating_sub(visible_width);
-
-    println!("│ {}{} │", styled, " ".repeat(padding));
-}
-
-fn build_stage_output(stage: &str, message: &str, style: &Style) {
-    // visible width reserved for stage label
-    let stage_field: usize = 30;
-
-    let styled_stage = style.apply_to(stage).to_string();
-    let visible_stage = strip_ansi_codes(&styled_stage);
-    let stage_width = measure_text_width(&visible_stage);
-
-    // pad visible stage label to stage_field
-    let stage_pad = if stage_field > stage_width { stage_field - stage_width } else { 1 };
-
-    // build label: styled (may contain ANSI) + visible padding spaces + ": "
-    let mut label = String::new();
-    label.push_str(&styled_stage);
-    label.push_str(&" ".repeat(stage_pad));
-    label.push_str(": ");
-
-    // compute visible width of label + message (strip all ANSI for measurement)
-    let visible_label = strip_ansi_codes(&label);
-    let visible_inner = format!("{}{}", visible_label, message);
-    let inner_vis_width = measure_text_width(&visible_inner);
-
-    let inner_w = inner_content_width();
-    let padding = inner_w.saturating_sub(inner_vis_width);
-
-    // print styled label (contains ANSI), then raw message, then padding and closing
-    print!("│ {}{}", label, message);
-    print!("{}", " ".repeat(padding));
-    println!(" │");
-}
+use output::*;
 
 fn build_cli() -> Command {
     Command::new("mainstage")
@@ -122,44 +62,114 @@ fn build_cli() -> Command {
         )
 }
 
-fn handle_build(matches: &ArgMatches) {
-    let header_style = Style::new().green().bold();
-    let message_style = Style::new().cyan();
-    let error_style = Style::new().red().bold();
-
-    print_top_border();
-    print_empty_line();
-    build_output("Mainstage - Starting Build Process", &header_style);
-    print_empty_line();
-
+fn handle_build(matches: &ArgMatches, out: &mut mainstage_fmt_stdout_handler) {
     if let Some(path) = matches.get_one::<String>("path").map(|s| s.as_str()) {
-        build_stage_output("Build", &format!("Building the script at: {}", path), &message_style);
-        // Add build logic here
-        print_empty_line();
-        build_output("Mainstage - Build Process Complete", &header_style);
+        pipeline(path, out);
     } else {
-        build_output("No path provided for build.", &error_style);
+        out.error("No path provided for build.").unwrap();
     }
 
-    print_empty_line();
-    print_bottom_border();
+    fn pipeline(path: &str, out: &mut mainstage_fmt_stdout_handler) {
+        // Simulate stages of the build process
+        let stages = vec![
+            ("Parsing", "Parsing the script..."),
+            ("Analyzing", "Analyzing the script..."),
+            ("Compiling", "Compiling the script..."),
+            ("Linking", "Linking the script..."),
+        ];
+
+        let mut collector = ReportCollector::new();
+        let script = Script::new(path, &mut collector);
+        let mut spnr = Spinner::new();
+        let mut pb = Progress::new(stages.len());
+
+        for (i, (stage, message)) in stages.iter().enumerate() {
+            match *stage {
+                "Parsing" => {
+                    std::thread::sleep(std::time::Duration::from_secs(1));
+                    if let Ok(script) = parse_script(&script, &mut collector) {
+                        out.info("Parsing completed successfully.")
+                            .unwrap();
+                    }
+                    // simulate work
+                }
+                _ => {
+                    // simulate work
+                    std::thread::sleep(std::time::Duration::from_secs(1));
+                    out.message(message).unwrap();
+                }
+            }
+            
+            pb.advance();
+            out.spinner_and_progress_with_message(&mut spnr, &mut pb, message, None)
+                .unwrap();
+        }
+
+        if !collector.is_empty() {
+            for report in collector.reports {
+                match report.severity {
+                    Severity::Info => out.message(&format!("Info: {}", report.message)).unwrap(),
+                    Severity::Warning => out
+                        .warning(&format!("Warning: {}", report.message))
+                        .unwrap(),
+                    Severity::Error => out.error(&format!("Error: {}", report.message)).unwrap(),
+                    Severity::Fatal => {
+                        out.error(&format!("Fatal Error: {}", report.message))
+                            .unwrap();
+                        return;
+                    }
+                }
+            }
+        } else {
+            out.message("No reports generated. Build successful.")
+                .unwrap();
+        }
+    }
 }
 
-fn handle_run(matches: &ArgMatches) {
+fn handle_run(matches: &ArgMatches, out: &mut mainstage_fmt_stdout_handler) {
     if let Some(path) = matches.get_one::<String>("path").map(|s| s.as_str()) {
-        println!("Running the script at: {}", path);
+        out.message(&format!("Running script at: {}", path))
+            .unwrap();
         // Add run logic here
     } else {
-        println!("No path provided for run.");
+        out.error("No path provided for run.").unwrap();
     }
+}
+
+fn setup_output() -> mainstage_fmt_stdout_handler {
+    let width = 80; // or any desired width
+    let mut out =
+        FormattedOutputHandler::new(io::stdout(), width).with_newline_on_task_complete(false);
+    out.top_border().unwrap();
+    let title_style = out.get_formatting().title.clone();
+    let message_style = out.get_formatting().info.clone();
+    out.line(
+        &format!("Mainstage{:>5}v{}", " ", env!("CARGO_PKG_VERSION")),
+        Some(&title_style),
+        true,
+    )
+    .unwrap();
+    out.hr().unwrap();
+    out.line("Building the script...", Some(&message_style), true)
+        .unwrap();
+    out.hr().unwrap();
+    out
+}
+fn teardown_output(out: &mut mainstage_fmt_stdout_handler) {
+    out.bottom_border().unwrap();
+    out.flush().unwrap();
 }
 
 fn main() {
+    let mut out = setup_output();
     let matches = build_cli().try_get_matches().unwrap_or_else(|e| e.exit());
 
     match matches.subcommand() {
-        Some(("build", sub_m)) => handle_build(sub_m),
-        Some(("run", sub_m)) => handle_run(sub_m),
+        Some(("build", sub_m)) => handle_build(sub_m, &mut out),
+        Some(("run", sub_m)) => handle_run(sub_m, &mut out),
         _ => println!("No valid command provided. Use --help for more information."),
     }
+
+    teardown_output(&mut out);
 }

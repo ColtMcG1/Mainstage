@@ -1,6 +1,10 @@
 [package]
-name = "mainstage.core"
+name = "mainstage_core"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+console = "0.16.1"
+pest = "2.8.3"
+serde = { version = "1.0", features = ["derive", "std"] }
+serde_json = { version = "1.0", features = ["std"] }
