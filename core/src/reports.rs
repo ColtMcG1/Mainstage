@@ -236,7 +236,7 @@ impl Location {
 /// Used to categorize the importance of reports.
 /// Severity levels for reports
 /// Used to categorize the importance of reports.
-/// 
+///
 /// # Examples
 /// ```
 /// let severity = Severity::Error;
@@ -465,7 +465,7 @@ impl Error for Report {}
 /// Collector that aggregates reports, supports dedupe, sorting, counts and exporting
 /// This structure collects multiple reports, ensuring no duplicates based on message and code.
 /// It provides methods to add reports, check if empty, get counts by severity, and export
-/// 
+///
 /// # Examples
 /// ```
 /// let mut collector = ReportCollector::new();
@@ -503,6 +503,18 @@ impl ReportCollector {
         self.reports.is_empty()
     }
 
+    pub fn has_fatal(&self) -> bool {
+        self.reports.iter().any(|r| r.severity == Severity::Fatal)
+    }
+
+    pub fn has_errors(&self) -> bool {
+        self.reports.iter().any(|r| r.severity == Severity::Error)
+    }
+
+    pub fn has_warnings(&self) -> bool {
+        self.reports.iter().any(|r| r.severity == Severity::Warning)
+    }
+
     pub fn counts(&self) -> (usize, usize, usize, usize) {
         let mut f = 0;
         let mut e = 0;
@@ -519,6 +531,8 @@ impl ReportCollector {
         (f, e, w, i)
     }
 
+    /// Get an appropriate exit code based on the reports collected
+    /// 0 = no issues, 1 = warnings, 2 = errors/fatals
     pub fn exit_code(&self) -> i32 {
         let (f, e, _, _) = self.counts();
         if f > 0 {

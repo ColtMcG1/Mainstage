@@ -4,13 +4,13 @@
 /// description: This library provides core functionalities for the Mainstage application,
 /// including script parsing, error reporting, and utility functions.
 /// license: TBD
-
 pub mod reports;
 
-pub use reports::{Report, ReportCollector, Severity, ErrorCode, Location, Span, SpanType};
+pub use reports::{ErrorCode, Location, Report, ReportCollector, Severity, Span, SpanType};
 
-use crate::reports::E_IO;
+use crate::reports::*;
 
+/// Represents a script with its path and content
 #[derive(Clone)]
 pub struct Script {
     path: String,
@@ -21,17 +21,20 @@ impl Script {
     pub fn new(path: &str, collector: &mut ReportCollector) -> Self {
         let content = std::fs::read_to_string(path).unwrap_or_default();
         if content.is_empty() {
-            collector.push(Report::new(
+            collector.push(Report::fatal(
                 "Failed to read script content",
-                Severity::Warning,
                 Some(Location {
                     file: path.to_string(),
                     line: 1,
                     column: 1,
-                    span: Span { start: 0, end: 0, span_type: SpanType::File },
+                    span: Span {
+                        start: 0,
+                        end: 0,
+                        span_type: SpanType::File,
+                    },
                 }),
-                None,
-                None,
+                Some(E_IO),
+                Some("Check that your file exists and is readable.".to_string()),
                 None,
             ));
         }
@@ -48,26 +51,70 @@ impl Script {
     }
 }
 
-pub fn parse_script(script: &Script, collector: &mut ReportCollector) -> Result<Script, ReportCollector> {
-    // Placeholder for script parsing logic
+/// Expand a script by resolving includes and macros
+pub fn expand_script(
+    script: &Script,
+    collector: &mut ReportCollector
+) -> Result<Script, ReportCollector> {
 
-    std::thread::sleep(std::time::Duration::from_secs(1));
+    Ok(script.clone())
+}
 
-    if true {
-        let report = Report::fatal(
-            "Parsing failed due to syntax error",
-            Some(Location {
-                file: script.get_path().to_string(),
-                line: 10,
-                column: 5,
-                span: Span { start: 100, end: 105, span_type: SpanType::Line },
-            }),
-            Some(E_IO),
-            None,
-            None,
-        );
-        collector.push(report.clone());
-    }
+/// Parse a script into an AST
+pub fn parse_script(
+    script: &Script,
+    collector: &mut ReportCollector,
+) -> Result<Script, ReportCollector> {
+
+    Ok(script.clone())
+}
+
+/// Analyze the AST for semantic correctness and type checking
+/// Returns an Intermediate Representation (IR) of the script
+pub fn analyze_script(
+    script: &Script,
+    collector: &mut ReportCollector,
+) -> Result<Script, ReportCollector> {
+
+    Ok(script.clone())
+}
+
+/// Resolve dependencies and references in the script
+/// Returns a resolved script with all dependencies included
+pub fn resolve_script(
+    script: &Script,
+    collector: &mut ReportCollector,
+) -> Result<Script, ReportCollector> {
+
+    Ok(script.clone())
+}
+
+/// Create a Directed Acyclic Graph (DAG) of script tasks for execution
+/// Returns a DAG representation of the script
+pub fn make_script_dag(
+    script: &Script,
+    collector: &mut ReportCollector,
+) -> Result<Script, ReportCollector> {
+
+    Ok(script.clone())
+}
+
+/// Plan the execution of the script based on the DAG
+/// Returns a planned script ready for execution
+pub fn plan_script(
+    script: &Script,
+    collector: &mut ReportCollector,
+) -> Result<Script, ReportCollector> {
+
+    Ok(script.clone())
+}
+
+/// Execute the script and return the results
+/// Returns the executed script with results
+pub fn execute_script(
+    script: &Script,
+    collector: &mut ReportCollector,
+) -> Result<Script, ReportCollector> {
 
     Ok(script.clone())
 }
