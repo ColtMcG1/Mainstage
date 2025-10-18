@@ -1,0 +1,100 @@
+AstNode {
+    kind: Script,
+    span: Some(
+        Span {
+            start: 0,
+            end: 195,
+        },
+    ),
+    location: Some(
+        Location {
+            file: "./samples/sample1/1.ms",
+            line: 1,
+            column: 1,
+        },
+    ),
+    children: [
+        AstNode {
+            kind: Include {
+                path: "./2.ms",
+            },
+            span: Some(
+                Span {
+                    start: 0,
+                    end: 16,
+                },
+            ),
+            location: Some(
+                Location {
+                    file: "./samples/sample1/1.ms",
+                    line: 1,
+                    column: 1,
+                },
+            ),
+            children: [],
+        },
+        AstNode {
+            kind: Project {
+                name: "mainstage_core",
+            },
+            span: Some(
+                Span {
+                    start: 20,
+                    end: 69,
+                },
+            ),
+            location: Some(
+                Location {
+                    file: "./samples/sample1/1.ms",
+                    line: 3,
+                    column: 1,
+                },
+            ),
+            children: [],
+        },
+        AstNode {
+            kind: Project {
+                name: "mainstage_cli",
+            },
+            span: Some(
+                Span {
+                    start: 73,
+                    end: 120,
+                },
+            ),
+            location: Some(
+                Location {
+                    file: "./samples/sample1/1.ms",
+                    line: 7,
+                    column: 1,
+                },
+            ),
+            children: [],
+        },
+        AstNode {
+            kind: Workspace {
+                name: "mainstage",
+            },
+            span: Some(
+                Span {
+                    start: 124,
+                    end: 195,
+                },
+            ),
+            location: Some(
+                Location {
+                    file: "./samples/sample1/1.ms",
+                    line: 11,
+                    column: 1,
+                },
+            ),
+            children: [],
+        },
+        AstNode {
+            kind: Null,
+            span: None,
+            location: None,
+            children: [],
+        },
+    ],
+}

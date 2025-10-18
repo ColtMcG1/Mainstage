@@ -1,0 +1,21 @@
+# Rust-specific ignores
+/target/                 # Build output directory
+**/*.rs.bk               # Backup files
+**/*.rs.swp             # Swap files (e.g., from editors like Vim)
+
+# IDE-specific ignores
+.idea/                   # IntelliJ IDEA project files
+.vscode/                 # VS Code settings
+*.code-workspace         # VS Code workspace files
+
+# OS-specific ignores
+.DS_Store                # macOS Finder metadata
+Thumbs.db                # Windows thumbnail cache
+
+# Logs and temporary files
+*.log                    # Log files
+*.tmp                    # Temporary files
+*.bak                    # Backup files
+
+# Dependency lock files
+Cargo.lock               # Cargo.lock file

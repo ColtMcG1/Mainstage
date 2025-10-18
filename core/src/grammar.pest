@@ -1,0 +1,49 @@
+// --- Utility Rules ---
+WHITESPACE = _{ " " | "\t" | NEWLINE }
+
+// --- Top-Level Rules ---
+script = { SOI ~ (WHITESPACE* ~ (statement | NEWLINE))* ~ EOI }
+
+// --- Statements ---
+statement = { include | import | declaration | assignment | expression_statement }
+
+include = { "include" ~ string }
+import = { "import" ~ string ~ "as" ~ identifier }
+
+// --- Declarations ---
+declaration = { workspace_decl | project_decl | stage_decl | task_decl }
+
+workspace_decl = { "workspace" ~ identifier ~ "{" ~ workspace_body ~ "}" }
+workspace_body = { (WHITESPACE* ~ statement ~ WHITESPACE* ~ NEWLINE?)* }
+
+project_decl = { "project" ~ identifier ~ "{" ~ project_body ~ "}" }
+project_body = { (WHITESPACE* ~ statement ~ WHITESPACE* ~ NEWLINE?)* }
+
+stage_decl = { "stage" ~ identifier ~ "(" ~ arguments? ~ ")" ~ "{" ~ stage_body ~ "}" }
+stage_body = { (WHITESPACE* ~ statement ~ WHITESPACE* ~ NEWLINE?)* }
+
+task_decl = { "task" ~ identifier ~ "(" ~ arguments? ~ ")" ~ "{" ~ task_body ~ "}" }
+task_body = { (WHITESPACE* ~ statement ~ WHITESPACE* ~ NEWLINE?)* }
+
+// --- Assignments ---
+assignment = { identifier ~ "=" ~ expression }
+
+// --- Expressions ---
+expression = { value | identifier | shell_string }
+expression_statement = { expression }
+
+// --- Values ---
+value = { boolean | number | string | shell_string | array }
+
+array = { "[" ~ (arguments)* ~ "]" }
+boolean = { "true" | "false" }
+number = { ASCII_DIGIT+ }
+string = { "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
+shell_string = { shell_prefix ~ string }
+shell_prefix = { "sh" | "bash" | "zsh" | "pwsh" | "cmd" }
+
+// --- Identifiers ---
+identifier = { (ASCII_ALPHANUMERIC | "_" | "-" | ".")+ }
+
+// --- Arguments ---
+arguments = { (identifier | value) ~ ("," ~ (identifier | value))* }
