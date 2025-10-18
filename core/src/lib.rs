@@ -1,6 +1,10 @@
-//! This module implements the core pipeline for processing scripts and generating reports.
+//! ./lib.rs
+//! 
+//! Core library for the Mainstage project.
+//! This library provides the core functionality for the Mainstage project, including report management and script handling.
+//!
 //! author: Colton McGraw <https://github.com/ColtMcG1>
-//! date: 2025-10-14
+//! date: 2025-10-18
 
 use crate::reports::*;
 use crate::scripts::*;
@@ -54,10 +58,9 @@ impl<'a> Pipeline<'a> {
 
     /// Runs the pipeline on the provided script path.
     /// This function processes the script, analyzes it, and generates reports.
-    ///
     /// # Arguments
     /// * `path` - The path to the script file to be processed.
-    ///
+    /// * `dump` - An optional `Dump` struct specifying at which stage to dump output.
     /// # Examples
     /// ```
     /// let mut pipeline = Pipeline::new();
@@ -83,10 +86,12 @@ impl<'a> Pipeline<'a> {
 
     /// Loads a script from the given path and stores it in the pipeline.
     /// If loading fails, a critical report is generated.
-    ///
     /// # Arguments
     /// * `path` - The path to the script file to be loaded.
-    ///
+    /// * `dump` - A boolean indicating whether to dump the loaded script to a file.
+    /// # Returns
+    /// * `Ok(())` if the script is successfully loaded.
+    /// * `Err(std::io::Error)` if there is an error loading the script
     /// # Examples
     /// ```
     /// let mut pipeline = Pipeline::new();
@@ -117,6 +122,19 @@ impl<'a> Pipeline<'a> {
         }
     }
 
+    /// Processes the loaded script using the AST parser.
+    /// If processing fails, an error report is generated.
+    /// # Arguments
+    /// * `dump` - A boolean indicating whether to dump the parser output to a file.
+    /// # Returns
+    /// * `Ok(())` if processing is successful.
+    /// * `Err(())` if there is an error during processing.
+    /// # Examples
+    /// ```
+    /// let mut pipeline = Pipeline::new();
+    /// pipeline.load_script(std::path::Path::new("example.js")).unwrap();
+    /// pipeline.process_script(false).unwrap();
+    /// ```
     fn process_script(&mut self, dump: bool) -> Result<(), ()> {
         if let Some(script) = &self.script {
             parser::AstParser::new(&script)

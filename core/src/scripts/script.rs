@@ -283,6 +283,7 @@ impl Script {
     }
 }
 
+/// Implements the `Debug` trait for `Script` for easier debugging and logging.
 impl fmt::Debug for Script {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Script")

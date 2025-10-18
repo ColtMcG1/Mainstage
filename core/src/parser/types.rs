@@ -1,8 +1,9 @@
 //! ./parser/types.rs
 //! 
 //! Defines types used in the parsing module, including AST node types.
+//! This module provides the `AstType` enum which represents various kinds of AST nodes.
 //!
-//! author: Colton McGraw <github.com/ColtMcG1>
+//! author: Colton McGraw <https://github.com/ColtMcG1>
 //! date: 2025-10-18
 
 use std::borrow::Cow;
@@ -99,8 +100,7 @@ impl<'a> AstType<'a> {
     /// This is useful for adapting the AST to different lifetime requirements.
     /// # Returns
     /// * An `AstType` instance with the specified lifetime.
-    pub fn into_lifetime(self) -> AstType<'static>
-    {
+    pub fn into_lifetime(self) -> AstType<'static> {
         match self {
             AstType::Script => AstType::Script,
             AstType::Include { path } => AstType::Include { path: Cow::Owned(path.into_owned()) },

@@ -1,3 +1,11 @@
+//! ./reports/report.rs
+//!
+//! Defines the `Report` struct and related functionality for creating and managing reports.
+//! This module provides structures and functionality for creating, accumulating, and displaying reports.
+//!
+//! author: Colton McGraw <https://github.com/ColtMcG1>
+//! date: 2025-10-18
+
 use crate::reports::locations;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;

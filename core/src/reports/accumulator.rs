@@ -4,7 +4,7 @@
 //! This module provides a thread-safe singleton that accumulates and manages multiple reports.
 //! It is designed to collect reports from various parts of the system and provide methods to retrieve, filter, and summarize them.
 //! 
-//! author: Colton McGraw <github.com/ColtMcG1>
+//! author: Colton McGraw <https://github.com/ColtMcG1>
 //! date: 2025-10-18
 
 use crate::reports::{Level, Report};

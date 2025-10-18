@@ -164,6 +164,10 @@ impl<'a> Location<'a> {
         }
     }
 
+    /// Converts the `Location` instance to have a different lifetime.
+    /// This is useful for adapting the location to different lifetime requirements.
+    /// # Returns
+    /// * A `Location` instance with the specified lifetime.
     pub fn into_lifetime<'b>(self) -> Location<'b> 
     where
         'a: 'b,
@@ -175,6 +179,10 @@ impl<'a> Location<'a> {
         }
     }
 
+    /// Converts the `Location` instance into one with a `'static` lifetime.
+    /// This is useful for storing the location in contexts that require a static lifetime.
+    /// # Returns
+    /// * A `Location<'static>` instance.
     pub fn into_owned(self) -> Location<'static> {
         Location {
             file: Cow::Owned(self.file.into_owned()),
@@ -182,6 +190,7 @@ impl<'a> Location<'a> {
             column: self.column,
         }
     }
+
 }
 
 /// Provides a default implementation for the `Location`.

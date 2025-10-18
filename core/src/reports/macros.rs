@@ -1,3 +1,11 @@
+//! ./reports/macros.rs
+//! 
+//! Macros for reporting issues within the system.
+//! This module provides macros to facilitate the creation and accumulation of reports.
+//! 
+//! author: Colton McGraw <https://github.com/ColtMcG1>
+//! date: 2025-10-18
+
 #[macro_export]
 macro_rules! report {
     // Full report with all fields

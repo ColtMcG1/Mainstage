@@ -3,7 +3,7 @@
 //! Module for handling the Abstract Syntax Tree (AST) nodes and parsing logic.
 //! This module provides the `AstNode` struct and related functionality.
 //! 
-//! author: Colton McGraw <github.com/ColtMcG1>
+//! author: Colton McGraw <https://github.com/ColtMcG1>
 //! date: 2025-10-18
 
 pub use crate::parser::types::AstType;
@@ -27,9 +27,13 @@ pub struct MainstageParser;
 /// ```
 #[derive(Debug, Clone)]
 pub struct AstNode<'a> {
+    /// The type of the AST node.
     pub kind: AstType<'a>,
+    /// The span of the AST node in the source script.
     pub span: Option<locations::Span>,
+    /// The location of the AST node in the source script.
     pub location: Option<locations::Location<'a>>,
+    /// The child nodes of the AST node.
     pub children: Vec<AstNode<'a>>,
 }
 
@@ -458,7 +462,10 @@ impl<'a> AstNode<'a> {
         }
     }
 
-
+    /// Converts the `AstNode` instance to have a different lifetime.
+    /// This is useful for adapting the AST to different lifetime requirements.
+    /// # Returns
+    /// * An `AstNode` instance with the specified lifetime.
     pub fn into_lifetime(self) -> AstNode<'static> {
         AstNode {
             kind: self.kind.into_lifetime(),
@@ -468,6 +475,10 @@ impl<'a> AstNode<'a> {
         }
     }
 
+    /// Converts the `AstNode` instance into an owned version.
+    /// This is useful for ensuring that the AST node owns its data.
+    /// # Returns
+    /// * An `AstNode` instance with owned data.
     pub fn into_owned(self) -> AstNode<'static> {
         AstNode {
             kind: self.kind.into_owned(),
