@@ -1,9 +1,17 @@
-use std::borrow::Cow;
+//! ./parser/node.rs
+//! 
+//! Module for handling the Abstract Syntax Tree (AST) nodes and parsing logic.
+//! This module provides the `AstNode` struct and related functionality.
+//! 
+//! author: Colton McGraw <github.com/ColtMcG1>
+//! date: 2025-10-18
 
 pub use crate::parser::types::AstType;
 use crate::report;
 use crate::reports::*;
 use crate::scripts::script::Script;
+
+use std::borrow::Cow;
 
 #[derive(pest_derive::Parser)]
 #[grammar = "grammar.pest"] // Path to the grammar file
@@ -18,14 +26,14 @@ pub struct MainstageParser;
 /// let node = Node::new(Type::Script, vec![]);
 /// ```
 #[derive(Debug, Clone)]
-pub struct AstNode {
-    pub kind: AstType,
+pub struct AstNode<'a> {
+    pub kind: AstType<'a>,
     pub span: Option<locations::Span>,
-    pub location: Option<locations::Location<'static>>,
-    pub children: Vec<AstNode>,
+    pub location: Option<locations::Location<'a>>,
+    pub children: Vec<AstNode<'a>>,
 }
 
-impl AstNode {
+impl<'a> AstNode<'a> {
     /// Creates a new `AstNode` from the given parsing pairs.
     /// This function processes the pairs and constructs the AST recursively.
     /// # Arguments
@@ -33,7 +41,7 @@ impl AstNode {
     /// # Returns
     /// * `Ok(AstNode)` if the AST is successfully created.
     /// * `Err(Report)` if there is an error during AST creation.
-    pub fn new(pairs: pest::iterators::Pairs<Rule>, script: &Script) -> Result<Self, ()> {
+    pub fn new(pairs: pest::iterators::Pairs<'a, Rule>, script: &Script) -> Result<Self, ()> {
         if pairs.clone().count() == 0 {
             return Err(());
         } else {
@@ -83,7 +91,7 @@ impl AstNode {
     /// * `pair` - The parsing pair to be processed.
     /// # Returns
     /// * An `AstNode` representing the parsed structure.
-    fn process_node(pair: pest::iterators::Pair<Rule>, script: &Script) -> Self {
+    fn process_node(pair: pest::iterators::Pair<'a, Rule>, script: &Script) -> Self {
         // Extract span and location before moving `pair`
         let span = Self::convert_pest_span_to_span(pair.as_span());
         let location = Self::convert_pest_span_to_location(pair.as_span(), script);
@@ -133,7 +141,7 @@ impl AstNode {
     /// * `script` - The script being processed.
     /// # Returns
     /// * An `AstNode` representing the script.
-    fn process_script_rule(pair: pest::iterators::Pair<Rule>, script: &Script) -> Self {
+    fn process_script_rule(pair: pest::iterators::Pair<'a, Rule>, script: &Script) -> Self {
         // Extract span and location before moving `pair`
         let span = Self::convert_pest_span_to_span(pair.as_span());
         let location = Self::convert_pest_span_to_location(pair.as_span(), script);
@@ -158,7 +166,7 @@ impl AstNode {
     /// * `script` - The script being processed.
     /// # Returns
     /// * An `AstNode` representing the statement.
-    fn process_statement_rule(pair: pest::iterators::Pair<Rule>, script: &Script) -> Self {
+    fn process_statement_rule(pair: pest::iterators::Pair<'a, Rule>, script: &Script) -> Self {
         let span = Self::convert_pest_span_to_span(pair.as_span());
         let location = Self::convert_pest_span_to_location(pair.as_span(), script);
         let inner_pair = pair.into_inner().next().unwrap();
@@ -186,12 +194,12 @@ impl AstNode {
     /// * `script` - The script being processed.
     /// # Returns
     /// * An `AstNode` representing the include statement.
-    fn process_include_rule(pair: pest::iterators::Pair<Rule>, script: &Script) -> Self {
+    fn process_include_rule(pair: pest::iterators::Pair<'a, Rule>, script: &Script) -> Self {
         let span = Self::convert_pest_span_to_span(pair.as_span());
         let location = Self::convert_pest_span_to_location(pair.as_span(), script);
         let mut inner_rules = pair.into_inner();
         let path_pair = inner_rules.next().unwrap(); // Get the string pair
-        let path = path_pair.as_str().trim_matches('"').to_string(); // Remove quotes
+        let path = Cow::from(path_pair.as_str().trim_matches('"')); // Remove quotes
         AstNode {
             kind: AstType::Include { path },
             span: Some(span),
@@ -207,14 +215,14 @@ impl AstNode {
     /// * `script` - The script being processed.
     /// # Returns
     /// * An `AstNode` representing the import statement.
-    fn process_import_rule(pair: pest::iterators::Pair<Rule>, script: &Script) -> Self {
+    fn process_import_rule(pair: pest::iterators::Pair<'a, Rule>, script: &Script) -> Self {
         let span = Self::convert_pest_span_to_span(pair.as_span());
         let location = Self::convert_pest_span_to_location(pair.as_span(), script);
         let mut inner_rules = pair.into_inner();
         let path_pair = inner_rules.next().unwrap(); // Get the string pair
         let alias_pair = inner_rules.next().unwrap(); // Get the identifier pair
-        let path = path_pair.as_str().trim_matches('"').to_string(); // Remove quotes
-        let alias = alias_pair.as_str().to_string();
+        let path = Cow::from(path_pair.as_str().trim_matches('"')); // Remove quotes
+        let alias = Cow::from(alias_pair.as_str());
         AstNode {
             kind: AstType::Import { path, alias },
             span: Some(span),
@@ -230,7 +238,7 @@ impl AstNode {
     /// * `script` - The script being processed.
     /// # Returns
     /// * An `AstNode` representing the declaration.
-    fn process_declaration_rule(pair: pest::iterators::Pair<Rule>, script: &Script) -> Self {
+    fn process_declaration_rule(pair: pest::iterators::Pair<'a, Rule>, script: &Script) -> Self {
         let span = Self::convert_pest_span_to_span(pair.as_span());
         let location = Self::convert_pest_span_to_location(pair.as_span(), script);
         let inner_pair = pair.into_inner().next().unwrap();
@@ -255,14 +263,14 @@ impl AstNode {
     /// * `script` - The script being processed.
     /// # Returns
     /// * An `AstNode` representing the assignment.
-    fn process_assignment_rule(pair: pest::iterators::Pair<Rule>, script: &Script) -> Self {
+    fn process_assignment_rule(pair: pest::iterators::Pair<'a, Rule>, script: &Script) -> Self {
         let span = Self::convert_pest_span_to_span(pair.as_span());
         let location = Self::convert_pest_span_to_location(pair.as_span(), script);
         let mut inner_rules = pair.into_inner();
         let left_pair = inner_rules.next().unwrap(); // Get the identifier pair
         let right_pair = inner_rules.next().unwrap(); // Get the value or identifier pair
-        let left = left_pair.as_str().to_string();
-        let right = right_pair.as_str().to_string();
+        let left = Cow::from(left_pair.as_str());
+        let right = Cow::from(right_pair.as_str());
         AstNode {
             kind: AstType::Assignment { left, right },
             span: Some(span),
@@ -279,7 +287,7 @@ impl AstNode {
     /// # Returns
     /// * An `AstNode` representing the expression statement.
     fn process_expression_statement_rule(
-        pair: pest::iterators::Pair<Rule>,
+        pair: pest::iterators::Pair<'a, Rule>,
         script: &Script,
     ) -> Self {
         let span = Self::convert_pest_span_to_span(pair.as_span());
@@ -303,13 +311,13 @@ impl AstNode {
     /// * `script` - The script being processed.
     /// # Returns
     /// * An `AstNode` representing the expression.
-    fn process_expression_rule(pair: pest::iterators::Pair<Rule>, script: &Script) -> Self {
+    fn process_expression_rule(pair: pest::iterators::Pair<'a, Rule>, script: &Script) -> Self {
         let span = Self::convert_pest_span_to_span(pair.as_span());
         let location = Self::convert_pest_span_to_location(pair.as_span(), script);
         let inner_pair = pair.into_inner().next().unwrap();
         match inner_pair.as_rule() {
             Rule::identifier => {
-                let name = inner_pair.as_str().to_string();
+                let name = Cow::from(inner_pair.as_str());
                 AstNode {
                     kind: AstType::Identifier { name },
                     span: Some(span),
@@ -321,8 +329,8 @@ impl AstNode {
                 let mut inner_rules = inner_pair.into_inner();
                 let shell_pair = inner_rules.next().unwrap(); // Get the shell part
                 let command_pair = inner_rules.next().unwrap(); // Get the command part
-                let shell = shell_pair.as_str().to_string();
-                let command = command_pair.as_str().to_string();
+                let shell = Cow::from(shell_pair.as_str());
+                let command = Cow::from(command_pair.as_str());
                 AstNode {
                     kind: AstType::ShellCommand { shell, command },
                     span: Some(span),
@@ -331,7 +339,7 @@ impl AstNode {
                 }
             }
             Rule::string => {
-                let value = inner_pair.as_str().trim_matches('"').to_string(); // Remove quotes
+                let value = Cow::from(inner_pair.as_str().trim_matches('"')); // Remove quotes
                 AstNode {
                     kind: AstType::String { value },
                     span: Some(span),
@@ -373,12 +381,12 @@ impl AstNode {
     /// * `script` - The script being processed.
     /// # Returns
     /// * An `AstNode` representing the workspace declaration.
-    fn process_workspace_decl_rule(pair: pest::iterators::Pair<Rule>, script: &Script) -> Self {
+    fn process_workspace_decl_rule(pair: pest::iterators::Pair<'a, Rule>, script: &Script) -> Self {
         let span = Self::convert_pest_span_to_span(pair.as_span());
         let location = Self::convert_pest_span_to_location(pair.as_span(), script);
         let mut inner_rules = pair.into_inner();
         let name_pair = inner_rules.next().unwrap(); // Get the identifier pair
-        let name = name_pair.as_str().to_string();
+        let name = Cow::from(name_pair.as_str());
         AstNode {
             kind: AstType::Workspace { name },
             span: Some(span),
@@ -394,12 +402,12 @@ impl AstNode {
     /// * `script` - The script being processed.
     /// # Returns
     /// * An `AstNode` representing the project declaration.
-    fn process_project_decl_rule(pair: pest::iterators::Pair<Rule>, script: &Script) -> Self {
+    fn process_project_decl_rule(pair: pest::iterators::Pair<'a, Rule>, script: &Script) -> Self {
         let span = Self::convert_pest_span_to_span(pair.as_span());
         let location = Self::convert_pest_span_to_location(pair.as_span(), script);
         let mut inner_rules = pair.into_inner();
         let name_pair = inner_rules.next().unwrap(); // Get the identifier pair
-        let name = name_pair.as_str().to_string();
+        let name = Cow::from(name_pair.as_str());
         AstNode {
             kind: AstType::Project { name },
             span: Some(span),
@@ -415,12 +423,12 @@ impl AstNode {
     /// * `script` - The script being processed.
     /// # Returns
     /// * An `AstNode` representing the stage declaration.
-    fn process_stage_decl_rule(pair: pest::iterators::Pair<Rule>, script: &Script) -> Self {
+    fn process_stage_decl_rule(pair: pest::iterators::Pair<'a, Rule>, script: &Script) -> Self {
         let span = Self::convert_pest_span_to_span(pair.as_span());
         let location = Self::convert_pest_span_to_location(pair.as_span(), script);
         let mut inner_rules = pair.into_inner();
         let name_pair = inner_rules.next().unwrap(); // Get the identifier pair
-        let name = name_pair.as_str().to_string();
+        let name = Cow::from(name_pair.as_str());
         AstNode {
             kind: AstType::Stage { name },
             span: Some(span),
@@ -436,17 +444,36 @@ impl AstNode {
     /// * `script` - The script being processed.
     /// # Returns
     /// * An `AstNode` representing the task declaration.
-    fn process_task_decl_rule(pair: pest::iterators::Pair<Rule>, script: &Script) -> Self {
+    fn process_task_decl_rule(pair: pest::iterators::Pair<'a, Rule>, script: &Script) -> Self {
         let span = Self::convert_pest_span_to_span(pair.as_span());
         let location = Self::convert_pest_span_to_location(pair.as_span(), script);
         let mut inner_rules = pair.into_inner();
         let name_pair = inner_rules.next().unwrap(); // Get the identifier pair
-        let name = name_pair.as_str().to_string();
+        let name = Cow::from(name_pair.as_str());
         AstNode {
             kind: AstType::Task { name },
             span: Some(span),
             location: Some(location),
             children: vec![],
+        }
+    }
+
+
+    pub fn into_lifetime(self) -> AstNode<'static> {
+        AstNode {
+            kind: self.kind.into_lifetime(),
+            span: self.span,
+            location: self.location.map(|loc| loc.into_owned()), // Convert location to owned
+            children: self.children.into_iter().map(|child| child.into_lifetime()).collect(),
+        }
+    }
+
+    pub fn into_owned(self) -> AstNode<'static> {
+        AstNode {
+            kind: self.kind.into_owned(),
+            span: self.span,
+            location: self.location.map(|loc| loc.into_owned()),
+            children: self.children.into_iter().map(|child| child.into_owned()).collect(),
         }
     }
 }

@@ -164,6 +164,17 @@ impl<'a> Location<'a> {
         }
     }
 
+    pub fn into_lifetime<'b>(self) -> Location<'b> 
+    where
+        'a: 'b,
+    {
+        Location {
+            file: Cow::Owned(self.file.into_owned()),
+            line: self.line,
+            column: self.column,
+        }
+    }
+
     pub fn into_owned(self) -> Location<'static> {
         Location {
             file: Cow::Owned(self.file.into_owned()),

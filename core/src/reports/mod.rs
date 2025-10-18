@@ -5,5 +5,6 @@ pub mod locations;
 pub mod report;
 pub mod macros;
 
-pub use accumulator::Accumulator;
-pub use report::{Report, Level};
+pub use accumulator::*;
+pub use report::*;
+pub use locations::*;

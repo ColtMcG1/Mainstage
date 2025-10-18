@@ -30,14 +30,14 @@ pub struct Dump {
 /// pipeline.run(std::path::Path::new("example.ms"));
 /// let reports = pipeline.get_reports();
 /// ```
-pub struct Pipeline {
+pub struct Pipeline<'a> {
     /// The script being processed in the pipeline.
     script: Option<script::Script>,
     /// The AST parser used for parsing scripts.
-    parser: Option<parser::AstParser>,
+    parser: Option<parser::AstParser<'a>>,
 }
 
-impl Pipeline {
+impl<'a> Pipeline<'a> {
 
     /// Creates a new `Pipeline` instance.
     /// This initializes the report accumulator and sets the script to `None`.
@@ -121,7 +121,7 @@ impl Pipeline {
         if let Some(script) = &self.script {
             parser::AstParser::new(&script)
                 .map(|parser| {
-                    self.parser = Some(parser);
+                    self.parser = Some(parser.into_lifetime()); // Ensure the method is implemented in AstParser
                     if dump {
                         if let Some(parser) = &self.parser {
                             std::fs::write("dump_parser.txt", format!("{:#?}", parser.root)).unwrap();

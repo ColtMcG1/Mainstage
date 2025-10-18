@@ -9,3 +9,6 @@
 
 pub mod map;
 pub mod script;
+
+pub use map::*;
+pub use script::*;
