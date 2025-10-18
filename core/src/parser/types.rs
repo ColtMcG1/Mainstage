@@ -33,7 +33,7 @@ pub enum AstType<'a> {
 
     // --- Expressions ---
     /// Represents an assignment expression (e.g., `x = 5`).
-    Assignment { left: Cow<'a, str>, right: Cow<'a, str> },
+    Assignment,
 
     // --- Declarations ---
     /// Represents a variable declaration (e.g., `let x = 5`).
@@ -50,6 +50,8 @@ pub enum AstType<'a> {
     Number { value: f64 },
     /// Represents a boolean value (`true` or `false`).
     Boolean { value: bool },
+    /// Represents an array value.
+    Array,
     /// Represents a `null` value.
     Null,
 }
@@ -112,10 +114,7 @@ impl<'a> AstType<'a> {
             AstType::Project { name } => AstType::Project { name: Cow::Owned(name.into_owned()) },
             AstType::Stage { name } => AstType::Stage { name: Cow::Owned(name.into_owned()) },
             AstType::Task { name } => AstType::Task { name: Cow::Owned(name.into_owned()) },
-            AstType::Assignment { left, right } => AstType::Assignment {
-                left: Cow::Owned(left.into_owned()),
-                right: Cow::Owned(right.into_owned()),
-            },
+            AstType::Assignment => AstType::Assignment,
             AstType::VariableDeclaration { name, value } => AstType::VariableDeclaration {
                 name: Cow::Owned(name.into_owned()),
                 value: value.map(|v| Cow::Owned(v.into_owned())),
@@ -128,6 +127,7 @@ impl<'a> AstType<'a> {
             AstType::String { value } => AstType::String { value: Cow::Owned(value.into_owned()) },
             AstType::Number { value } => AstType::Number { value },
             AstType::Boolean { value } => AstType::Boolean { value },
+            AstType::Array => AstType::Array,
             AstType::Null => AstType::Null,
         }
     }
@@ -148,10 +148,7 @@ impl<'a> AstType<'a> {
             AstType::Project { name } => AstType::Project { name: Cow::Owned(name.into_owned()) },
             AstType::Stage { name } => AstType::Stage { name: Cow::Owned(name.into_owned()) },
             AstType::Task { name } => AstType::Task { name: Cow::Owned(name.into_owned()) },
-            AstType::Assignment { left, right } => AstType::Assignment {
-                left: Cow::Owned(left.into_owned()),
-                right: Cow::Owned(right.into_owned()),
-            },
+            AstType::Assignment => AstType::Assignment,
             AstType::VariableDeclaration { name, value } => AstType::VariableDeclaration {
                 name: Cow::Owned(name.into_owned()),
                 value: value.map(|v| Cow::Owned(v.into_owned())),
@@ -164,6 +161,7 @@ impl<'a> AstType<'a> {
             AstType::String { value } => AstType::String { value: Cow::Owned(value.into_owned()) },
             AstType::Number { value } => AstType::Number { value },
             AstType::Boolean { value } => AstType::Boolean { value },
+            AstType::Array => AstType::Array,
             AstType::Null => AstType::Null,
         }
     }

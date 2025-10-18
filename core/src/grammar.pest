@@ -5,7 +5,7 @@ WHITESPACE = _{ " " | "\t" | NEWLINE }
 script = { SOI ~ (WHITESPACE* ~ (statement | NEWLINE))* ~ EOI }
 
 // --- Statements ---
-statement = { include | import | declaration | assignment | expression_statement }
+statement = { include | import | declaration | assignment | expression }
 
 include = { "include" ~ string }
 import = { "import" ~ string ~ "as" ~ identifier }
@@ -29,13 +29,12 @@ task_body = { (WHITESPACE* ~ statement ~ WHITESPACE* ~ NEWLINE?)* }
 assignment = { identifier ~ "=" ~ expression }
 
 // --- Expressions ---
-expression = { value | identifier | shell_string }
-expression_statement = { expression }
+expression = { value | identifier }
 
 // --- Values ---
 value = { boolean | number | string | shell_string | array }
 
-array = { "[" ~ (arguments)* ~ "]" }
+array = { "[" ~ (expression ~ ("," ~ expression)*) ~ "]" }
 boolean = { "true" | "false" }
 number = { ASCII_DIGIT+ }
 string = { "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
@@ -46,4 +45,4 @@ shell_prefix = { "sh" | "bash" | "zsh" | "pwsh" | "cmd" }
 identifier = { (ASCII_ALPHANUMERIC | "_" | "-" | ".")+ }
 
 // --- Arguments ---
-arguments = { (identifier | value) ~ ("," ~ (identifier | value))* }
+arguments = { (expression) ~ ("," ~ (expression))* }

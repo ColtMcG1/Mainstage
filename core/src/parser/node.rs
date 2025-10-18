@@ -1,8 +1,8 @@
 //! ./parser/node.rs
-//! 
+//!
 //! Module for handling the Abstract Syntax Tree (AST) nodes and parsing logic.
 //! This module provides the `AstNode` struct and related functionality.
-//! 
+//!
 //! author: Colton McGraw <https://github.com/ColtMcG1>
 //! date: 2025-10-18
 
@@ -117,8 +117,8 @@ impl<'a> AstNode<'a> {
                 // Log a warning for unhandled rules
                 report!(
                     Level::Warning,
-                    "Unhandled rule".to_string(),
-                    Some("Parser".to_string()),
+                    format!("Unhandled rule: {:?}", pair.as_rule()),
+                    Some("mainstage.parser.processor.node".to_string()),
                     Some(span.clone()),
                     Some(location.clone())
                 );
@@ -171,23 +171,30 @@ impl<'a> AstNode<'a> {
     /// # Returns
     /// * An `AstNode` representing the statement.
     fn process_statement_rule(pair: pest::iterators::Pair<'a, Rule>, script: &Script) -> Self {
-        let span = Self::convert_pest_span_to_span(pair.as_span());
-        let location = Self::convert_pest_span_to_location(pair.as_span(), script);
         let inner_pair = pair.into_inner().next().unwrap();
+        let span = Self::convert_pest_span_to_span(inner_pair.as_span());
+        let location = Self::convert_pest_span_to_location(inner_pair.as_span(), script);
         match inner_pair.as_rule() {
             Rule::declaration => AstNode::process_declaration_rule(inner_pair, script),
             Rule::assignment => AstNode::process_assignment_rule(inner_pair, script),
-            Rule::expression_statement => {
-                AstNode::process_expression_statement_rule(inner_pair, script)
-            }
+            Rule::expression => AstNode::process_expression_rule(inner_pair, script),
             Rule::include => AstNode::process_include_rule(inner_pair, script),
             Rule::import => AstNode::process_import_rule(inner_pair, script),
-            _ => AstNode {
-                kind: AstType::Null,
-                span: Some(span.clone()),
-                location: Some(location.clone()),
-                children: vec![],
-            },
+            _ => {
+                report!(
+                    Level::Warning,
+                    format!("Unhandled statement rule: {:?}", inner_pair.as_rule()),
+                    Some("mainstage.parser.processor.statement".to_string()),
+                    Some(span.clone()),
+                    Some(location.clone())
+                );
+                AstNode {
+                    kind: AstType::Null,
+                    span: Some(span.clone()),
+                    location: Some(location.clone()),
+                    children: vec![],
+                }
+            }
         }
     }
 
@@ -243,20 +250,29 @@ impl<'a> AstNode<'a> {
     /// # Returns
     /// * An `AstNode` representing the declaration.
     fn process_declaration_rule(pair: pest::iterators::Pair<'a, Rule>, script: &Script) -> Self {
-        let span = Self::convert_pest_span_to_span(pair.as_span());
-        let location = Self::convert_pest_span_to_location(pair.as_span(), script);
         let inner_pair = pair.into_inner().next().unwrap();
+        let span = Self::convert_pest_span_to_span(inner_pair.as_span());
+        let location = Self::convert_pest_span_to_location(inner_pair.as_span(), script);
         match inner_pair.as_rule() {
             Rule::workspace_decl => AstNode::process_workspace_decl_rule(inner_pair, script),
             Rule::project_decl => AstNode::process_project_decl_rule(inner_pair, script),
             Rule::stage_decl => AstNode::process_stage_decl_rule(inner_pair, script),
             Rule::task_decl => AstNode::process_task_decl_rule(inner_pair, script),
-            _ => AstNode {
-                kind: AstType::Null,
-                span: Some(span),
-                location: Some(location),
-                children: vec![],
-            },
+            _ => {
+                report!(
+                    Level::Warning,
+                    format!("Unhandled declaration rule: {:?}", inner_pair.as_rule()),
+                    Some("mainstage.parser.processor.declaration".to_string()),
+                    Some(span.clone()),
+                    Some(location.clone())
+                );
+                AstNode {
+                    kind: AstType::Null,
+                    span: Some(span),
+                    location: Some(location),
+                    children: vec![],
+                }
+            }
         }
     }
 
@@ -270,41 +286,15 @@ impl<'a> AstNode<'a> {
     fn process_assignment_rule(pair: pest::iterators::Pair<'a, Rule>, script: &Script) -> Self {
         let span = Self::convert_pest_span_to_span(pair.as_span());
         let location = Self::convert_pest_span_to_location(pair.as_span(), script);
-        let mut inner_rules = pair.into_inner();
-        let left_pair = inner_rules.next().unwrap(); // Get the identifier pair
-        let right_pair = inner_rules.next().unwrap(); // Get the value or identifier pair
-        let left = Cow::from(left_pair.as_str());
-        let right = Cow::from(right_pair.as_str());
+        let inner_rules = pair.into_inner();
         AstNode {
-            kind: AstType::Assignment { left, right },
+            kind: AstType::Assignment,
             span: Some(span),
             location: Some(location),
-            children: vec![],
-        }
-    }
-
-    /// Processes an `expression_statement` rule to create an `AstNode`.
-    /// This function delegates to the appropriate expression processing function based on the inner rule.
-    /// # Arguments
-    /// * `pair` - The parsing pair representing the expression statement.
-    /// * `script` - The script being processed.
-    /// # Returns
-    /// * An `AstNode` representing the expression statement.
-    fn process_expression_statement_rule(
-        pair: pest::iterators::Pair<'a, Rule>,
-        script: &Script,
-    ) -> Self {
-        let span = Self::convert_pest_span_to_span(pair.as_span());
-        let location = Self::convert_pest_span_to_location(pair.as_span(), script);
-        let inner_pair = pair.into_inner().next().unwrap();
-        match inner_pair.as_rule() {
-            Rule::expression => AstNode::process_expression_rule(inner_pair, script),
-            _ => AstNode {
-                kind: AstType::Null,
-                span: Some(span),
-                location: Some(location),
-                children: vec![],
-            },
+            children: vec![
+                Self::process_identifier_rule(inner_rules.clone().nth(0).unwrap(), script),
+                Self::process_expression_rule(inner_rules.clone().nth(1).unwrap(), script),
+            ],
         }
     }
 
@@ -316,19 +306,73 @@ impl<'a> AstNode<'a> {
     /// # Returns
     /// * An `AstNode` representing the expression.
     fn process_expression_rule(pair: pest::iterators::Pair<'a, Rule>, script: &Script) -> Self {
-        let span = Self::convert_pest_span_to_span(pair.as_span());
-        let location = Self::convert_pest_span_to_location(pair.as_span(), script);
         let inner_pair = pair.into_inner().next().unwrap();
+        let span = Self::convert_pest_span_to_span(inner_pair.as_span());
+        let location = Self::convert_pest_span_to_location(inner_pair.as_span(), script);
         match inner_pair.as_rule() {
-            Rule::identifier => {
-                let name = Cow::from(inner_pair.as_str());
+            Rule::identifier => Self::process_identifier_rule(inner_pair, script),
+            Rule::value => Self::process_value_rule(inner_pair, script),
+            _ => {
+                report!(
+                    Level::Warning,
+                    format!("Unhandled expression rule: {:?}", inner_pair.as_rule()),
+                    Some("mainstage.parser.processor.expression".to_string()),
+                    Some(span.clone()),
+                    Some(location.clone())
+                );
                 AstNode {
-                    kind: AstType::Identifier { name },
+                    kind: AstType::Null,
                     span: Some(span),
                     location: Some(location),
                     children: vec![],
                 }
             }
+        }
+    }
+
+    /// Processes an `identifier` rule to create an `AstNode`.
+    /// This function extracts the name from the identifier and constructs the AST node.
+    /// # Arguments
+    /// * `pair` - The parsing pair representing the identifier.
+    /// * `script` - The script being processed.
+    /// # Returns
+    /// * An `AstNode` representing the identifier.
+    fn process_identifier_rule(
+        pair: pest::iterators::Pair<'a, Rule>,
+        script: &Script,
+    ) -> AstNode<'a> {
+        let span = Self::convert_pest_span_to_span(pair.as_span());
+        let location = Self::convert_pest_span_to_location(pair.as_span(), script);
+        let name = Cow::from(pair.as_str());
+        AstNode {
+            kind: AstType::Identifier { name },
+            span: Some(span),
+            location: Some(location),
+            children: vec![],
+        }
+    }
+
+    /// Processes a `value` rule to create an `AstNode`.
+    /// This function matches the specific type of value and constructs the corresponding AST node.
+    /// # Arguments
+    /// * `pair` - The parsing pair representing the value.
+    /// * `script` - The script being processed.
+    /// # Returns
+    /// * An `AstNode` representing the value.
+    fn process_value_rule(pair: pest::iterators::Pair<'a, Rule>, script: &Script) -> AstNode<'a> {
+        let inner_pair = pair.into_inner().next().unwrap();
+        let span = Self::convert_pest_span_to_span(inner_pair.as_span());
+        let location = Self::convert_pest_span_to_location(inner_pair.as_span(), script);
+        match inner_pair.as_rule() {
+            Rule::array => AstNode {
+                kind: AstType::Array,
+                span: Some(span),
+                location: Some(location),
+                children: inner_pair
+                    .into_inner()
+                    .map(|p| Self::process_expression_rule(p, script))
+                    .collect::<Vec<AstNode>>(),
+            },
             Rule::shell_string => {
                 let mut inner_rules = inner_pair.into_inner();
                 let shell_pair = inner_rules.next().unwrap(); // Get the shell part
@@ -369,13 +413,40 @@ impl<'a> AstNode<'a> {
                     children: vec![],
                 }
             }
-            _ => AstNode {
-                kind: AstType::Null,
-                span: Some(span),
-                location: Some(location),
-                children: vec![],
-            },
+            _ => {
+                report!(
+                    Level::Warning,
+                    format!("Unhandled value rule: {:?}", inner_pair.as_rule()),
+                    Some("mainstage.parser.processor.value".to_string()),
+                    Some(span.clone()),
+                    Some(location.clone())
+                );
+                AstNode {
+                    kind: AstType::Null,
+                    span: Some(span),
+                    location: Some(location),
+                    children: vec![],
+                }
+            }
         }
+    }
+
+    /// Processes a `workspace` declaration rule to create an `AstNode`.
+    /// This function extracts the name from the workspace declaration and constructs the AST node.
+    /// # Arguments
+    /// * `pair` - The parsing pair representing the workspace declaration.
+    /// * `script` - The script being processed.
+    /// # Returns
+    /// * An `AstNode` representing the workspace declaration.
+    fn process_body(pairs: pest::iterators::Pairs<'a, Rule>, script: &Script) -> Vec<AstNode<'a>> {
+        pairs
+            .filter_map(|p| {
+                Some(Self::process_statement_rule(
+                    p.clone().into_inner().next().unwrap(),
+                    script,
+                ))
+            })
+            .collect()
     }
 
     /// Processes a `workspace` declaration rule to create an `AstNode`.
@@ -395,7 +466,7 @@ impl<'a> AstNode<'a> {
             kind: AstType::Workspace { name },
             span: Some(span),
             location: Some(location),
-            children: vec![],
+            children: Self::process_body(inner_rules, script),
         }
     }
 
@@ -416,7 +487,7 @@ impl<'a> AstNode<'a> {
             kind: AstType::Project { name },
             span: Some(span),
             location: Some(location),
-            children: vec![],
+            children: Self::process_body(inner_rules, script),
         }
     }
 
@@ -437,7 +508,7 @@ impl<'a> AstNode<'a> {
             kind: AstType::Stage { name },
             span: Some(span),
             location: Some(location),
-            children: vec![],
+            children: Self::process_body(inner_rules, script),
         }
     }
 
@@ -458,7 +529,7 @@ impl<'a> AstNode<'a> {
             kind: AstType::Task { name },
             span: Some(span),
             location: Some(location),
-            children: vec![],
+            children: Self::process_body(inner_rules, script),
         }
     }
 
@@ -471,7 +542,11 @@ impl<'a> AstNode<'a> {
             kind: self.kind.into_lifetime(),
             span: self.span,
             location: self.location.map(|loc| loc.into_owned()), // Convert location to owned
-            children: self.children.into_iter().map(|child| child.into_lifetime()).collect(),
+            children: self
+                .children
+                .into_iter()
+                .map(|child| child.into_lifetime())
+                .collect(),
         }
     }
 
@@ -484,7 +559,11 @@ impl<'a> AstNode<'a> {
             kind: self.kind.into_owned(),
             span: self.span,
             location: self.location.map(|loc| loc.into_owned()),
-            children: self.children.into_iter().map(|child| child.into_owned()).collect(),
+            children: self
+                .children
+                .into_iter()
+                .map(|child| child.into_owned())
+                .collect(),
         }
     }
 }
