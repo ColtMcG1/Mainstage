@@ -440,13 +440,8 @@ impl<'a> AstNode<'a> {
     /// * An `AstNode` representing the workspace declaration.
     fn process_body(pairs: pest::iterators::Pairs<'a, Rule>, script: &Script) -> Vec<AstNode<'a>> {
         pairs
-            .filter_map(|p| {
-                Some(Self::process_statement_rule(
-                    p.clone().into_inner().next().unwrap(),
-                    script,
-                ))
-            })
-            .collect()
+            .map(|p| AstNode::process_node(p, script))
+            .collect::<Vec<AstNode>>()
     }
 
     /// Processes a `workspace` declaration rule to create an `AstNode`.
@@ -466,7 +461,7 @@ impl<'a> AstNode<'a> {
             kind: AstType::Workspace { name },
             span: Some(span),
             location: Some(location),
-            children: Self::process_body(inner_rules, script),
+            children: Self::process_body(inner_rules.next().unwrap().into_inner(), script),
         }
     }
 
@@ -487,7 +482,7 @@ impl<'a> AstNode<'a> {
             kind: AstType::Project { name },
             span: Some(span),
             location: Some(location),
-            children: Self::process_body(inner_rules, script),
+            children: Self::process_body(inner_rules.next().unwrap().into_inner(), script),
         }
     }
 
@@ -508,7 +503,7 @@ impl<'a> AstNode<'a> {
             kind: AstType::Stage { name },
             span: Some(span),
             location: Some(location),
-            children: Self::process_body(inner_rules, script),
+            children: Self::process_body(inner_rules.next().unwrap().into_inner(), script),
         }
     }
 
@@ -529,7 +524,7 @@ impl<'a> AstNode<'a> {
             kind: AstType::Task { name },
             span: Some(span),
             location: Some(location),
-            children: Self::process_body(inner_rules, script),
+            children: Self::process_body(inner_rules.next().unwrap().into_inner(), script),
         }
     }
 

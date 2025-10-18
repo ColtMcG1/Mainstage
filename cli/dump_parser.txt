@@ -3,7 +3,7 @@ AstNode {
     span: Some(
         Span {
             start: 0,
-            end: 195,
+            end: 348,
         },
     ),
     location: Some(
@@ -116,7 +116,7 @@ AstNode {
             span: Some(
                 Span {
                     start: 73,
-                    end: 120,
+                    end: 273,
                 },
             ),
             location: Some(
@@ -183,32 +183,180 @@ AstNode {
                         },
                     ],
                 },
-            ],
-        },
-        AstNode {
-            kind: Workspace {
-                name: "mainstage",
-            },
-            span: Some(
-                Span {
-                    start: 124,
-                    end: 195,
-                },
-            ),
-            location: Some(
-                Location {
-                    file: "./samples/sample1/1.ms",
-                    line: 11,
-                    column: 1,
-                },
-            ),
-            children: [
                 AstNode {
                     kind: Assignment,
                     span: Some(
                         Span {
-                            start: 151,
-                            end: 192,
+                            start: 123,
+                            end: 139,
+                        },
+                    ),
+                    location: Some(
+                        Location {
+                            file: "./samples/sample1/1.ms",
+                            line: 9,
+                            column: 5,
+                        },
+                    ),
+                    children: [
+                        AstNode {
+                            kind: Identifier {
+                                name: "test_bool",
+                            },
+                            span: Some(
+                                Span {
+                                    start: 123,
+                                    end: 132,
+                                },
+                            ),
+                            location: Some(
+                                Location {
+                                    file: "./samples/sample1/1.ms",
+                                    line: 9,
+                                    column: 5,
+                                },
+                            ),
+                            children: [],
+                        },
+                        AstNode {
+                            kind: Boolean {
+                                value: true,
+                            },
+                            span: Some(
+                                Span {
+                                    start: 135,
+                                    end: 139,
+                                },
+                            ),
+                            location: Some(
+                                Location {
+                                    file: "./samples/sample1/1.ms",
+                                    line: 9,
+                                    column: 17,
+                                },
+                            ),
+                            children: [],
+                        },
+                    ],
+                },
+                AstNode {
+                    kind: Assignment,
+                    span: Some(
+                        Span {
+                            start: 145,
+                            end: 166,
+                        },
+                    ),
+                    location: Some(
+                        Location {
+                            file: "./samples/sample1/1.ms",
+                            line: 10,
+                            column: 5,
+                        },
+                    ),
+                    children: [
+                        AstNode {
+                            kind: Identifier {
+                                name: "test_string",
+                            },
+                            span: Some(
+                                Span {
+                                    start: 145,
+                                    end: 156,
+                                },
+                            ),
+                            location: Some(
+                                Location {
+                                    file: "./samples/sample1/1.ms",
+                                    line: 10,
+                                    column: 5,
+                                },
+                            ),
+                            children: [],
+                        },
+                        AstNode {
+                            kind: String {
+                                value: "hello",
+                            },
+                            span: Some(
+                                Span {
+                                    start: 159,
+                                    end: 166,
+                                },
+                            ),
+                            location: Some(
+                                Location {
+                                    file: "./samples/sample1/1.ms",
+                                    line: 10,
+                                    column: 19,
+                                },
+                            ),
+                            children: [],
+                        },
+                    ],
+                },
+                AstNode {
+                    kind: Assignment,
+                    span: Some(
+                        Span {
+                            start: 172,
+                            end: 188,
+                        },
+                    ),
+                    location: Some(
+                        Location {
+                            file: "./samples/sample1/1.ms",
+                            line: 11,
+                            column: 5,
+                        },
+                    ),
+                    children: [
+                        AstNode {
+                            kind: Identifier {
+                                name: "test_number",
+                            },
+                            span: Some(
+                                Span {
+                                    start: 172,
+                                    end: 183,
+                                },
+                            ),
+                            location: Some(
+                                Location {
+                                    file: "./samples/sample1/1.ms",
+                                    line: 11,
+                                    column: 5,
+                                },
+                            ),
+                            children: [],
+                        },
+                        AstNode {
+                            kind: Number {
+                                value: 42.0,
+                            },
+                            span: Some(
+                                Span {
+                                    start: 186,
+                                    end: 188,
+                                },
+                            ),
+                            location: Some(
+                                Location {
+                                    file: "./samples/sample1/1.ms",
+                                    line: 11,
+                                    column: 19,
+                                },
+                            ),
+                            children: [],
+                        },
+                    ],
+                },
+                AstNode {
+                    kind: Assignment,
+                    span: Some(
+                        Span {
+                            start: 194,
+                            end: 216,
                         },
                     ),
                     location: Some(
@@ -221,12 +369,12 @@ AstNode {
                     children: [
                         AstNode {
                             kind: Identifier {
-                                name: "members",
+                                name: "test_array",
                             },
                             span: Some(
                                 Span {
-                                    start: 151,
-                                    end: 158,
+                                    start: 194,
+                                    end: 204,
                                 },
                             ),
                             location: Some(
@@ -242,14 +390,203 @@ AstNode {
                             kind: Array,
                             span: Some(
                                 Span {
-                                    start: 161,
-                                    end: 192,
+                                    start: 207,
+                                    end: 216,
                                 },
                             ),
                             location: Some(
                                 Location {
                                     file: "./samples/sample1/1.ms",
                                     line: 12,
+                                    column: 18,
+                                },
+                            ),
+                            children: [
+                                AstNode {
+                                    kind: Number {
+                                        value: 1.0,
+                                    },
+                                    span: Some(
+                                        Span {
+                                            start: 208,
+                                            end: 209,
+                                        },
+                                    ),
+                                    location: Some(
+                                        Location {
+                                            file: "./samples/sample1/1.ms",
+                                            line: 12,
+                                            column: 19,
+                                        },
+                                    ),
+                                    children: [],
+                                },
+                                AstNode {
+                                    kind: Number {
+                                        value: 2.0,
+                                    },
+                                    span: Some(
+                                        Span {
+                                            start: 211,
+                                            end: 212,
+                                        },
+                                    ),
+                                    location: Some(
+                                        Location {
+                                            file: "./samples/sample1/1.ms",
+                                            line: 12,
+                                            column: 22,
+                                        },
+                                    ),
+                                    children: [],
+                                },
+                                AstNode {
+                                    kind: Number {
+                                        value: 3.0,
+                                    },
+                                    span: Some(
+                                        Span {
+                                            start: 214,
+                                            end: 215,
+                                        },
+                                    ),
+                                    location: Some(
+                                        Location {
+                                            file: "./samples/sample1/1.ms",
+                                            line: 12,
+                                            column: 25,
+                                        },
+                                    ),
+                                    children: [],
+                                },
+                            ],
+                        },
+                    ],
+                },
+                AstNode {
+                    kind: Assignment,
+                    span: Some(
+                        Span {
+                            start: 222,
+                            end: 270,
+                        },
+                    ),
+                    location: Some(
+                        Location {
+                            file: "./samples/sample1/1.ms",
+                            line: 13,
+                            column: 5,
+                        },
+                    ),
+                    children: [
+                        AstNode {
+                            kind: Identifier {
+                                name: "test_shell",
+                            },
+                            span: Some(
+                                Span {
+                                    start: 222,
+                                    end: 232,
+                                },
+                            ),
+                            location: Some(
+                                Location {
+                                    file: "./samples/sample1/1.ms",
+                                    line: 13,
+                                    column: 5,
+                                },
+                            ),
+                            children: [],
+                        },
+                        AstNode {
+                            kind: ShellCommand {
+                                shell: "zsh",
+                                command: "\"echo 'This is a shell command'\"",
+                            },
+                            span: Some(
+                                Span {
+                                    start: 235,
+                                    end: 270,
+                                },
+                            ),
+                            location: Some(
+                                Location {
+                                    file: "./samples/sample1/1.ms",
+                                    line: 13,
+                                    column: 18,
+                                },
+                            ),
+                            children: [],
+                        },
+                    ],
+                },
+            ],
+        },
+        AstNode {
+            kind: Workspace {
+                name: "mainstage",
+            },
+            span: Some(
+                Span {
+                    start: 277,
+                    end: 348,
+                },
+            ),
+            location: Some(
+                Location {
+                    file: "./samples/sample1/1.ms",
+                    line: 16,
+                    column: 1,
+                },
+            ),
+            children: [
+                AstNode {
+                    kind: Assignment,
+                    span: Some(
+                        Span {
+                            start: 304,
+                            end: 345,
+                        },
+                    ),
+                    location: Some(
+                        Location {
+                            file: "./samples/sample1/1.ms",
+                            line: 17,
+                            column: 5,
+                        },
+                    ),
+                    children: [
+                        AstNode {
+                            kind: Identifier {
+                                name: "members",
+                            },
+                            span: Some(
+                                Span {
+                                    start: 304,
+                                    end: 311,
+                                },
+                            ),
+                            location: Some(
+                                Location {
+                                    file: "./samples/sample1/1.ms",
+                                    line: 17,
+                                    column: 5,
+                                },
+                            ),
+                            children: [],
+                        },
+                        AstNode {
+                            kind: Array,
+                            span: Some(
+                                Span {
+                                    start: 314,
+                                    end: 345,
+                                },
+                            ),
+                            location: Some(
+                                Location {
+                                    file: "./samples/sample1/1.ms",
+                                    line: 17,
                                     column: 15,
                                 },
                             ),
@@ -260,14 +597,14 @@ AstNode {
                                     },
                                     span: Some(
                                         Span {
-                                            start: 162,
-                                            end: 176,
+                                            start: 315,
+                                            end: 329,
                                         },
                                     ),
                                     location: Some(
                                         Location {
                                             file: "./samples/sample1/1.ms",
-                                            line: 12,
+                                            line: 17,
                                             column: 16,
                                         },
                                     ),
@@ -279,14 +616,14 @@ AstNode {
                                     },
                                     span: Some(
                                         Span {
-                                            start: 178,
-                                            end: 191,
+                                            start: 331,
+                                            end: 344,
                                         },
                                     ),
                                     location: Some(
                                         Location {
                                             file: "./samples/sample1/1.ms",
-                                            line: 12,
+                                            line: 17,
                                             column: 32,
                                         },
                                     ),
