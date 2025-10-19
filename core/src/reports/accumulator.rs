@@ -6,6 +6,7 @@
 //! 
 //! author: Colton McGraw <https://github.com/ColtMcG1>
 //! date: 2025-10-18
+//! license: See LICENSE file in the root directory
 
 use crate::reports::{Level, Report};
 use std::sync::OnceLock;

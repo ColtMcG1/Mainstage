@@ -5,6 +5,7 @@
 //!
 //! author: Colton McGraw <https://github.com/ColtMcG1>
 //! date: 2025-10-18
+//! license: See LICENSE file in the root directory
 
 use crate::parser;
 use crate::report;

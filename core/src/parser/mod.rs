@@ -5,6 +5,7 @@
 //! 
 //! author: Colton McGraw <https://github.com/ColtMcG1>
 //! date: 2025-10-14
+//! license: See LICENSE file in the root directory
 
 pub mod types;
 pub mod node;
