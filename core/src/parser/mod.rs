@@ -10,6 +10,7 @@
 pub mod types;
 pub mod node;
 pub mod parser;
+pub mod expander;
 
 pub use types::*;
 pub use node::*;

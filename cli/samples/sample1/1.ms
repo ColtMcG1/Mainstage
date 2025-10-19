@@ -1,3 +1,8 @@
+stage sample_app () {
+    name = "MainStage CLI Sample App"
+    description = "A sample application demonstrating MainStage CLI features."
+}
+
 include "./2.ms"
 
 project mainstage_core {

@@ -33,12 +33,12 @@ pub enum ParserError {
 /// let parser = AstParser::new(&script);
 /// ```
 #[derive(Debug, Clone)]
-pub struct AstParser<'a> {
-    pub root: parser::AstNode<'a>,
+pub struct AstParser {
+    pub root: parser::AstNode<'static>,
     pub script: scripts::Script,
 }
 
-impl<'a> AstParser<'a> {
+impl AstParser {
 
     /// Parses the given script and returns a `pest::iterators::Pairs` instance or a `ParserError` on failure.
     /// This function uses the Pest parser to parse the script content.
@@ -46,7 +46,7 @@ impl<'a> AstParser<'a> {
     /// * `script` - The script to be parsed.
     /// # Returns
     /// * `Ok(pest::iterators::Pairs)` if parsing is successful.
-    fn parse_script(script: &'a scripts::Script) -> Result<pest::iterators::Pairs<'a, parser::Rule>, ParserError> {
+    fn parse_script<'a>(script: &'a scripts::Script) -> Result<pest::iterators::Pairs<'a, parser::Rule>, ParserError> {
         parser::MainstageParser::parse(parser::Rule::script, &script.content)
             .map_err(|e| {
                 report!(
@@ -69,11 +69,12 @@ impl<'a> AstParser<'a> {
     /// * `Ok(parser::AstNode)` if AST construction is successful.
     /// * `Err(ParserError)` if AST construction fails.
     fn construct_ast(
-        rules: pest::iterators::Pairs<'a, parser::Rule>,
+        rules: pest::iterators::Pairs<parser::Rule>,
         script: &scripts::Script,
-    ) -> Result<parser::AstNode<'a>, ParserError> {
+    ) -> Result<parser::AstNode<'static>, ParserError> {
         parser::AstNode::new(rules, script)
             .map_err(|_| ParserError::AstNodeError("Failed to create AST node".to_string()))
+            .map(|node| node.into_owned())
     }
 
     /// Creates a new `AstParser` instance by parsing the given script.
@@ -82,16 +83,19 @@ impl<'a> AstParser<'a> {
     /// * `script` - The script to be parsed.
     /// # Returns
     /// * `Ok(AstParser)` if parsing and AST construction are successful.
-    pub fn new(script: &'a scripts::Script) -> Result<Self, ParserError> {
-        let rules = Self::parse_script(script)?;
-        let root = Self::construct_ast(rules, script)?;
-        Ok(AstParser { root, script: script.clone() })
-    }
+    pub fn new(script: &scripts::Script) -> Result<Self, ParserError> {
+            let rules = Self::parse_script(script)?;
+            let root = Self::construct_ast(rules, script)?;
+            Ok(AstParser {
+                root,
+                script: script.clone(),
+            })
+        }
 
     /// Returns a reference to the root AST node.
     /// # Returns
     /// * A reference to the root `AstNode`.
-    pub fn root(&self) -> &parser::AstNode<'a> {
+    pub fn root(&self) -> &parser::AstNode<'static> {
         &self.root
     }
 
@@ -100,21 +104,5 @@ impl<'a> AstParser<'a> {
     /// * A reference to the script being parsed.
     pub fn script(&self) -> &scripts::Script {
         &self.script
-    }
-
-    /// Converts the `AstParser` instance to have a different lifetime.
-    /// This is useful for adapting the parser to different lifetime requirements.
-    pub fn into_lifetime(self) -> AstParser<'static> {
-        AstParser {
-            root: self.root.into_lifetime(),
-            script: self.script,
-        }
-    }
-
-    pub fn into_owned(self) -> AstParser<'static> {
-        AstParser {
-            root: self.root.into_owned(),
-            script: self.script,
-        }
     }
 }

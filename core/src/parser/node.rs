@@ -500,8 +500,17 @@ impl<'a> AstNode<'a> {
         let mut inner_rules = pair.into_inner();
         let name_pair = inner_rules.next().unwrap(); // Get the identifier pair
         let name = Cow::from(name_pair.as_str());
+
+        // Process arguments if present
+        let params = match inner_rules.peek() {
+            Some(next_pair) if next_pair.as_rule() == Rule::arguments => {
+                Self::process_arguments_rule(inner_rules.next().unwrap(), script)
+            }
+            _ => Vec::new(),
+        };
+
         AstNode {
-            kind: AstType::Stage { name },
+            kind: AstType::Stage { name, params },
             span: Some(span),
             location: Some(location),
             children: Self::process_body(inner_rules.next().unwrap().into_inner(), script),
@@ -521,12 +530,48 @@ impl<'a> AstNode<'a> {
         let mut inner_rules = pair.into_inner();
         let name_pair = inner_rules.next().unwrap(); // Get the identifier pair
         let name = Cow::from(name_pair.as_str());
+
+        // Process arguments if present
+        let params = match inner_rules.peek() {
+            Some(next_pair) if next_pair.as_rule() == Rule::arguments => {
+                Self::process_arguments_rule(inner_rules.next().unwrap(), script)
+            }
+            _ => Vec::new(),
+        };
+
         AstNode {
-            kind: AstType::Task { name },
+            kind: AstType::Task { name, params },
             span: Some(span),
             location: Some(location),
             children: Self::process_body(inner_rules.next().unwrap().into_inner(), script),
         }
+    }
+
+    /// Processes an `arguments` rule to create an `AstNode`.
+    /// This function extracts the parameters from the arguments declaration and constructs the AST node.
+    /// # Arguments
+    /// * `pair` - The parsing pair representing the arguments.
+    /// * `script` - The script being processed.
+    /// # Returns
+    /// * An `AstNode` representing the arguments.
+    fn process_arguments_rule(
+        pair: pest::iterators::Pair<'a, Rule>,
+        script: &Script,
+    ) -> Vec<AstNode<'a>> {
+        pair.into_inner()
+            .map(|param_pair| Self::process_param_rule(param_pair, script))
+            .collect()
+    }
+
+    /// Processes a `parameter` rule to create an `AstNode`.
+    /// This function extracts the name from the parameter and constructs the AST node.
+    /// # Arguments
+    /// * `pair` - The parsing pair representing the parameter.
+    /// * `script` - The script being processed.
+    /// # Returns
+    /// * An `AstNode` representing the parameter.
+    fn process_param_rule(pair: pest::iterators::Pair<'a, Rule>, script: &Script) -> AstNode<'a> {
+        Self::process_identifier_rule(pair, script)
     }
 
     /// Converts the `AstNode` instance to have a different lifetime.
@@ -553,7 +598,7 @@ impl<'a> AstNode<'a> {
     pub fn into_owned(self) -> AstNode<'static> {
         AstNode {
             kind: self.kind.into_owned(),
-            span: self.span,
+            span: self.span.clone(),
             location: self.location.map(|loc| loc.into_owned()),
             children: self
                 .children
@@ -561,5 +606,11 @@ impl<'a> AstNode<'a> {
                 .map(|child| child.into_owned())
                 .collect(),
         }
+    }
+}
+
+impl<'a> PartialEq for AstNode<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        self.kind == other.kind && self.span == other.span && self.location == other.location
     }
 }

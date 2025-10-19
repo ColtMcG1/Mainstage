@@ -281,6 +281,15 @@ impl Script {
             println!("{:4} | {}", i + 1, line);
         }
     }
+
+    pub fn into_owned(self) -> Self {
+        Self {
+            name: self.name.clone(),
+            path: self.path.clone(),
+            content: self.content.clone(),
+            map: self.map.clone(),
+        }
+    }
 }
 
 /// Implements the `Debug` trait for `Script` for easier debugging and logging.

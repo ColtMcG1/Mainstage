@@ -1,4 +1,3 @@
-stage sample_stage {
-    name = "Sample Stage"
-    description = "A sample stage for demonstration purposes."
+stage sample_stage (name, description) {
+    name = name
 }
