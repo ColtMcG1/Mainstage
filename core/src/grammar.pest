@@ -5,7 +5,7 @@ WHITESPACE = _{ " " | "\t" | NEWLINE }
 script = { SOI ~ (WHITESPACE* ~ (statement | NEWLINE))* ~ EOI }
 
 // --- Statements ---
-statement = { include | import | declaration | assignment | expression }
+statement = { (include | import | declaration | assignment | expression) }
 
 include = { "include" ~ string }
 import = { "import" ~ string ~ "as" ~ identifier }
@@ -14,25 +14,25 @@ import = { "import" ~ string ~ "as" ~ identifier }
 declaration = { workspace_decl | project_decl | stage_decl | task_decl }
 
 workspace_decl = { "workspace" ~ identifier ~ "{" ~ workspace_body ~ "}" }
-workspace_body = { (WHITESPACE* ~ statement ~ WHITESPACE* ~ NEWLINE?)* }
+workspace_body = { (WHITESPACE* ~ statement ~ WHITESPACE* ~ NEWLINE)* }
 
 project_decl = { "project" ~ identifier ~ "{" ~ project_body ~ "}" }
-project_body = { (WHITESPACE* ~ statement ~ WHITESPACE* ~ NEWLINE?)* }
+project_body = { (WHITESPACE* ~ statement ~ WHITESPACE* ~ NEWLINE)* }
 
 stage_decl = { "stage" ~ identifier ~ "(" ~ arguments? ~ ")" ~ "{" ~ stage_body ~ "}" }
-stage_body = { (WHITESPACE* ~ statement ~ WHITESPACE* ~ NEWLINE?)* }
+stage_body = { (WHITESPACE* ~ statement ~ WHITESPACE* ~ NEWLINE)* }
 
 task_decl = { "task" ~ identifier ~ "(" ~ arguments? ~ ")" ~ "{" ~ task_body ~ "}" }
-task_body = { (WHITESPACE* ~ statement ~ WHITESPACE* ~ NEWLINE?)* }
+task_body = { (WHITESPACE* ~ statement ~ WHITESPACE* ~ NEWLINE)* }
 
 // --- Assignments ---
-assignment = { identifier ~ "=" ~ expression }
+assignment = { identifier ~ WHITESPACE* ~ "=" ~ WHITESPACE* ~ expression }
 
 // --- Expressions ---
 expression = { value | identifier }
 
 // --- Values ---
-value = { boolean | number | string | shell_string | array }
+value = { string | boolean | number | shell_string | array }
 
 array = { "[" ~ (expression ~ ("," ~ expression)*) ~ "]" }
 boolean = { "true" | "false" }

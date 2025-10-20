@@ -202,7 +202,16 @@ impl Pipeline {
                         .unwrap();
                     }
                 })
-                .map_err(|_| {})?;
+                .map_err(|_| {
+                    let report = reports::Report::new(
+                        reports::Level::Error,
+                        "Semantic analysis failed.".into(),
+                        Some("Pipeline".into()),
+                        None,
+                        None,
+                    );
+                    report!(report);
+                })?;
         }
         Ok(())
     }

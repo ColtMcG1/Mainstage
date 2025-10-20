@@ -54,6 +54,10 @@ pub enum SymbolType {
     Float,
     /// A string type.
     String,
+    /// An array type.
+    Array,
+    /// A shell command type.
+    ShellCommand,
     /// A boolean type.
     Boolean,
     /// A void type.
@@ -72,6 +76,12 @@ pub struct Symbol<'a> {
     symbol_type: SymbolType,
     /// The scope of the symbol.
     scope: SymbolScope,
+    /// Parameter types for functions (if applicable).
+    parameters: Vec<SymbolType>,
+    /// Return type for functions (if applicable).
+    return_type: SymbolType,
+    /// Parent symbol for nested scopes (if applicable).
+    parent: Option<Box<Symbol<'a>>>,
 }
 
 impl<'a> Symbol<'a> {
@@ -94,6 +104,9 @@ impl<'a> Symbol<'a> {
             kind: symbol_kind,
             symbol_type,
             scope,
+            parameters: Vec::new(),
+            return_type: SymbolType::None,
+            parent: None,
         }
     }
 
@@ -195,9 +208,16 @@ impl<'a> std::fmt::Debug for Symbol<'a> {
     }
 }
 
+/// Type used to represent the symbol table.
+type Scope<'a> = HashMap<String, Vec<Symbol<'a>>>;
+
+/// The symbol table used in semantic analysis.
+/// This struct maintains a mapping of symbol names to their corresponding symbols,
+/// allowing for scoping by using a stack of symbol tables and overriding.
+#[derive(Clone)]
 pub struct SymbolTable<'a> {
-    /// Mapping of symbol names to their corresponding symbols. Allows for scoping by using a stack of symbol tables and overriding.
-    scopes: Vec<HashMap<String, Vec<Symbol<'a>>>>,
+    /// The symbol table. Each scope is represented as a HashMap.
+    pub scopes: Vec<Scope<'a>>,
 }
 
 impl<'a> SymbolTable<'a> {
@@ -209,7 +229,7 @@ impl<'a> SymbolTable<'a> {
     /// ```
     pub fn new() -> Self {
         Self {
-            scopes: vec![HashMap::new()], // Start with a global scope
+            scopes: vec![Scope::new()], // No scopes initially
         }
     }
 
@@ -260,7 +280,7 @@ impl<'a> SymbolTable<'a> {
 
     /// Enters a new scope by pushing an empty symbol table onto the stack.
     pub fn enter_scope(&mut self) {
-        self.scopes.push(HashMap::new());
+        self.scopes.push(Scope::new());
     }
 
     /// Exits the current scope by popping the top symbol table off the stack.
@@ -273,23 +293,45 @@ impl<'a> SymbolTable<'a> {
     /// * `symbol` - The `Symbol` instance to insert.
     pub fn insert(&mut self, symbol: Symbol<'a>) {
         if let Some(current_scope) = self.scopes.last_mut() {
-            if let Some(symbols) = current_scope.get_mut(symbol.name()) {
-                if symbol.kind == SymbolKind::Function {
-                    symbols.push(symbol); // Allow overloading for functions
-                } else {
-                    report!(
-                        report::Level::Error,
-                        format!(
-                            "Symbol '{}' is already defined in this scope",
-                            symbol.name()
-                        ),
-                        Some("mainstage.semantic.symbol.insert".to_string()),
-                        None,
-                        None
-                    );
+            let name = symbol.name().to_string();
+            let entry = current_scope.entry(name.clone()).or_insert_with(Vec::new);
+
+            match symbol.kind {
+                SymbolKind::Function => {
+                    if entry.iter().any(|existing| {
+                        existing.kind == SymbolKind::Function
+                            && existing.parameters == symbol.parameters
+                    }) {
+                        report!(
+                            report::Level::Error,
+                            format!(
+                                "Function '{}' is already defined with the same signature.",
+                                name
+                            ),
+                            Some("SemanticAnalyzer".into()),
+                            None,
+                            None
+                        );
+                        return;
+                    }
+                    entry.push(symbol);
                 }
-            } else {
-                current_scope.insert(symbol.name().to_string(), vec![symbol]);
+                _ => {
+                    if entry
+                        .iter()
+                        .any(|existing| existing.kind != SymbolKind::Function)
+                    {
+                        report!(
+                            report::Level::Error,
+                            format!("Symbol '{}' is already defined in this scope.", name),
+                            Some("SemanticAnalyzer".into()),
+                            None,
+                            None
+                        );
+                        return;
+                    }
+                    entry.push(symbol);
+                }
             }
         }
     }
@@ -308,6 +350,21 @@ impl<'a> SymbolTable<'a> {
         None
     }
 
+    /// Creates a `SymbolKind` from an AST node kind.
+    /// # Arguments
+    /// * `ast_kind` - The AST node kind to convert.
+    /// # Returns
+    /// * `Option<SymbolKind>` - The corresponding `SymbolKind` if found, or `None` if not found.
+    pub fn from_ast_kind(ast_kind: &crate::parser::node::AstType) -> Option<SymbolKind> {
+        match ast_kind {
+            crate::parser::node::AstType::Workspace { .. } => Some(SymbolKind::Workspace),
+            crate::parser::node::AstType::Project { .. } => Some(SymbolKind::Project),
+            crate::parser::node::AstType::Stage { .. } => Some(SymbolKind::Stage),
+            crate::parser::node::AstType::Task { .. } => Some(SymbolKind::Task),
+            _ => None,
+        }
+    }
+
     /// Pretty prints the symbol table for debugging purposes.
     pub fn pretty_print(&self) {
         for (i, scope) in self.scopes.iter().enumerate() {
@@ -320,9 +377,14 @@ impl<'a> SymbolTable<'a> {
 }
 
 /// Implements the `Debug` trait for the `SymbolTable` struct.
-impl<'a> std::fmt::Debug for SymbolTable<'a> {
-    fn fmt(&self, _: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.pretty_print();
+impl std::fmt::Debug for SymbolTable<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (i, scope) in self.scopes.iter().enumerate() {
+            writeln!(f, "Scope {}:", i)?;
+            for (name, symbols) in scope {
+                writeln!(f, "  {}: {:?}", name, symbols)?;
+            }
+        }
         Ok(())
     }
 }

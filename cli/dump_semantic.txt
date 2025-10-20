@@ -1,0 +1,6 @@
+Scope 0:
+  sample_stage: [Symbol { name: sample_stage, kind: Stage, type: None, scope: Global }]
+  mainstage_cli: [Symbol { name: mainstage_cli, kind: Project, type: None, scope: Global }]
+  mainstage: [Symbol { name: mainstage, kind: Workspace, type: None, scope: Global }]
+  mainstage_core: [Symbol { name: mainstage_core, kind: Project, type: None, scope: Global }]
+  sample_app: [Symbol { name: sample_app, kind: Stage, type: None, scope: Global }]

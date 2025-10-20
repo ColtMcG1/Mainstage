@@ -1,3 +1,4 @@
 stage sample_stage (name, description) {
-    name = name
+    name1 = name
+    description1 = description
 }

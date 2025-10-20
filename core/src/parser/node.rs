@@ -33,7 +33,7 @@ pub struct AstNode<'a> {
     /// The span of the AST node in the source script.
     pub span: Option<locations::Span>,
     /// The location of the AST node in the source script.
-    pub location: Option<locations::Location<'a>>,
+    pub location: Option<locations::Location<'static>>,
     /// The child nodes of the AST node.
     pub children: Vec<AstNode<'a>>,
 }
