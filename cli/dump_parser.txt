@@ -148,125 +148,41 @@ AstNode {
             ],
         },
         AstNode {
-            kind: Stage {
-                name: "sample_stage",
-                params: [
-                    AstNode {
-                        kind: Identifier {
-                            name: "name",
-                        },
-                        span: Some(
-                            Span {
-                                start: 20,
-                                end: 24,
-                            },
-                        ),
-                        location: Some(
-                            Location {
-                                file: "./samples/sample1\\./2.ms",
-                                line: 1,
-                                column: 21,
-                            },
-                        ),
-                        children: [],
-                    },
-                    AstNode {
-                        kind: Identifier {
-                            name: "description",
-                        },
-                        span: Some(
-                            Span {
-                                start: 26,
-                                end: 37,
-                            },
-                        ),
-                        location: Some(
-                            Location {
-                                file: "./samples/sample1\\./2.ms",
-                                line: 1,
-                                column: 27,
-                            },
-                        ),
-                        children: [],
-                    },
-                ],
+            kind: Identifier {
+                name: "include",
             },
             span: Some(
                 Span {
-                    start: 0,
-                    end: 60,
+                    start: 147,
+                    end: 154,
                 },
             ),
             location: Some(
                 Location {
-                    file: "./samples/sample1\\./2.ms",
-                    line: 1,
+                    file: "./samples/sample1/1.ms",
+                    line: 6,
                     column: 1,
                 },
             ),
-            children: [
-                AstNode {
-                    kind: Assignment,
-                    span: Some(
-                        Span {
-                            start: 46,
-                            end: 57,
-                        },
-                    ),
-                    location: Some(
-                        Location {
-                            file: "./samples/sample1\\./2.ms",
-                            line: 2,
-                            column: 5,
-                        },
-                    ),
-                    children: [
-                        AstNode {
-                            kind: Identifier {
-                                name: "name",
-                            },
-                            span: Some(
-                                Span {
-                                    start: 46,
-                                    end: 50,
-                                },
-                            ),
-                            location: Some(
-                                Location {
-                                    file: "./samples/sample1\\./2.ms",
-                                    line: 2,
-                                    column: 5,
-                                },
-                            ),
-                            children: [],
-                        },
-                        AstNode {
-                            kind: Identifier {
-                                name: "name",
-                            },
-                            span: Some(
-                                Span {
-                                    start: 53,
-                                    end: 57,
-                                },
-                            ),
-                            location: Some(
-                                Location {
-                                    file: "./samples/sample1\\./2.ms",
-                                    line: 2,
-                                    column: 12,
-                                },
-                            ),
-                            children: [],
-                        },
-                    ],
-                },
-            ],
+            children: [],
         },
         AstNode {
-            kind: Null,
-            span: None,
-            location: None,
+            kind: String {
+                value: "./2.ms",
+            },
+            span: Some(
+                Span {
+                    start: 155,
+                    end: 163,
+                },
+            ),
+            location: Some(
+                Location {
+                    file: "./samples/sample1/1.ms",
+                    line: 6,
+                    column: 9,
+                },
+            ),
             children: [],
         },
         AstNode {

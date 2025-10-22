@@ -12,6 +12,10 @@ use std::collections::HashMap;
 
 use crate::report;
 
+const HOT_PATH_THRESHOLD: usize = 5; // You can make this configurable
+
+// ===== Symbol =====
+
 /// The kind of symbol.
 /// Indicates whether the symbol is a variable, function, workspace, project, stage, or task.
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -82,6 +86,8 @@ pub struct Symbol<'a> {
     return_type: SymbolType,
     /// Parent symbol for nested scopes (if applicable).
     parent: Option<Box<Symbol<'a>>>,
+    // How many references exist to this symbol (for optimization)
+    reference_count: usize,
 }
 
 impl<'a> Symbol<'a> {
@@ -107,6 +113,7 @@ impl<'a> Symbol<'a> {
             parameters: Vec::new(),
             return_type: SymbolType::None,
             parent: None,
+            reference_count: 0,
         }
     }
 
@@ -195,6 +202,16 @@ impl<'a> Symbol<'a> {
     pub fn scope(&self) -> &SymbolScope {
         &self.scope
     }
+    /// Increments the reference count of the symbol.
+    pub fn increment_reference_count(&mut self) {
+        self.reference_count += 1;
+    }
+    /// Retrieves the reference count of the symbol.
+    /// # Returns
+    /// * The reference count of the symbol.
+    pub fn reference_count(&self) -> usize {
+        self.reference_count
+    }
 }
 
 /// Implements the `Debug` trait for the `Symbol` struct.
@@ -208,6 +225,8 @@ impl<'a> std::fmt::Debug for Symbol<'a> {
     }
 }
 
+// ===== Symbol Table =====
+
 /// Type used to represent the symbol table.
 type Scope<'a> = HashMap<String, Vec<Symbol<'a>>>;
 
@@ -216,8 +235,8 @@ type Scope<'a> = HashMap<String, Vec<Symbol<'a>>>;
 /// allowing for scoping by using a stack of symbol tables and overriding.
 #[derive(Clone)]
 pub struct SymbolTable<'a> {
-    /// The symbol table. Each scope is represented as a HashMap.
-    pub scopes: Vec<Scope<'a>>,
+    pub scopes: Vec<Scope<'a>>,        // Active scopes stack
+    pub scope_history: Vec<Scope<'a>>, // All scopes ever entered (for debugging)
 }
 
 impl<'a> SymbolTable<'a> {
@@ -228,8 +247,69 @@ impl<'a> SymbolTable<'a> {
     /// let mut symbol_table = SymbolTable::new();
     /// ```
     pub fn new() -> Self {
+        let global = Scope::new();
         Self {
-            scopes: vec![Scope::new()], // No scopes initially
+            scopes: vec![global.clone()],
+            scope_history: vec![global],
+        }
+    }
+
+    /// Emits warnings for symbols with no references.
+    /// This helps identify unused symbols in the code.
+    /// # Examples
+    /// ```
+    /// use core::semantic::symbol::{SymbolTable, Symbol};
+    /// let mut symbol_table = SymbolTable::new();
+    /// ```
+    pub fn warn_unused_symbols(&self) {
+        for (scope_idx, scope) in self.scopes.iter().enumerate() {
+            for symbols in scope.values() {
+                for symbol in symbols {
+                    if symbol.reference_count() == 0 {
+                        report!(
+                            report::Level::Warning,
+                            format!(
+                                "Symbol '{}' in scope {} is never referenced.",
+                                symbol.name(),
+                                scope_idx
+                            ),
+                            Some("SemanticAnalyzer".into()),
+                            None,
+                            None
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// Emits warnings for symbols with high reference counts (hot paths).
+    /// This helps identify performance-critical symbols in the code.
+    /// # Examples
+    /// ```
+    /// use core::semantic::symbol::{SymbolTable, Symbol};
+    /// let mut symbol_table = SymbolTable::new();
+    /// ```
+    pub fn warn_hot_paths(&self) {
+        for (scope_idx, scope) in self.scopes.iter().enumerate() {
+            for symbols in scope.values() {
+                for symbol in symbols {
+                    if symbol.reference_count() >= HOT_PATH_THRESHOLD {
+                        report!(
+                            report::Level::Warning,
+                            format!(
+                                "Symbol '{}' in scope {} is a hot path ({} references).",
+                                symbol.name(),
+                                scope_idx,
+                                symbol.reference_count()
+                            ),
+                            Some("SemanticAnalyzer".into()),
+                            None,
+                            None
+                        );
+                    }
+                }
+            }
         }
     }
 
@@ -280,21 +360,39 @@ impl<'a> SymbolTable<'a> {
 
     /// Enters a new scope by pushing an empty symbol table onto the stack.
     pub fn enter_scope(&mut self) {
-        self.scopes.push(Scope::new());
+        let new_scope = Scope::new();
+        self.scopes.push(new_scope.clone());
+        self.scope_history.push(new_scope);
     }
 
     /// Exits the current scope by popping the top symbol table off the stack.
     pub fn exit_scope(&mut self) {
         self.scopes.pop();
+        // Do NOT remove from scope_history
     }
 
     /// Inserts a symbol into the current scope.
     /// # Arguments
     /// * `symbol` - The `Symbol` instance to insert.
-    pub fn insert(&mut self, symbol: Symbol<'a>) {
+    pub fn insert(&mut self, symbol: Symbol<'a>) -> Result<(), ()> {
         if let Some(current_scope) = self.scopes.last_mut() {
             let name = symbol.name().to_string();
             let entry = current_scope.entry(name.clone()).or_insert_with(Vec::new);
+
+            let banned_words = vec!["if", "else", "while", "for", "return", "function", "workspace", "project", "stage", "task"];
+            if banned_words.contains(&name.as_str()) {
+                report!(
+                    report::Level::Error,
+                    format!(
+                        "'{}' is a reserved keyword and cannot be used as a symbol name.",
+                        name
+                    ),
+                    Some("SemanticAnalyzer".into()),
+                    None,
+                    None
+                );
+                return Err(());
+            }
 
             match symbol.kind {
                 SymbolKind::Function => {
@@ -312,7 +410,7 @@ impl<'a> SymbolTable<'a> {
                             None,
                             None
                         );
-                        return;
+                        return Err(());
                     }
                     entry.push(symbol);
                 }
@@ -328,11 +426,22 @@ impl<'a> SymbolTable<'a> {
                             None,
                             None
                         );
-                        return;
+                        return Err(());
                     }
                     entry.push(symbol);
                 }
             }
+
+            Ok(())
+        } else {
+            report!(
+                report::Level::Critical,
+                "No active scope to insert symbol into.".to_string(),
+                Some("SemanticAnalyzer".into()),
+                None,
+                None
+            );
+            Err(())
         }
     }
 
@@ -344,6 +453,20 @@ impl<'a> SymbolTable<'a> {
     pub fn get(&self, name: &str) -> Option<&Vec<Symbol<'a>>> {
         for scope in self.scopes.iter().rev() {
             if let Some(symbols) = scope.get(name) {
+                return Some(symbols);
+            }
+        }
+        None
+    }
+
+    /// Retrieves a mutable reference to a symbol by name, searching from the innermost scope outward.
+    /// # Arguments
+    /// * `name` - The name of the symbol to retrieve.
+    /// # Returns
+    /// * `Option<&mut Vec<Symbol>>` - A mutable reference to a vector of `Symbol` instances if found, or `None` if not found.
+    pub fn get_mut(&mut self, name: &str) -> Option<&mut Vec<Symbol<'a>>> {
+        for scope in self.scopes.iter_mut().rev() {
+            if let Some(symbols) = scope.get_mut(name) {
                 return Some(symbols);
             }
         }
@@ -364,22 +487,12 @@ impl<'a> SymbolTable<'a> {
             _ => None,
         }
     }
-
-    /// Pretty prints the symbol table for debugging purposes.
-    pub fn pretty_print(&self) {
-        for (i, scope) in self.scopes.iter().enumerate() {
-            println!("Scope {}:", i);
-            for (name, symbols) in scope {
-                println!("  {}: {:?}", name, symbols);
-            }
-        }
-    }
 }
 
 /// Implements the `Debug` trait for the `SymbolTable` struct.
 impl std::fmt::Debug for SymbolTable<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (i, scope) in self.scopes.iter().enumerate() {
+        for (i, scope) in self.scope_history.iter().enumerate() {
             writeln!(f, "Scope {}:", i)?;
             for (name, symbols) in scope {
                 writeln!(f, "  {}: {:?}", name, symbols)?;

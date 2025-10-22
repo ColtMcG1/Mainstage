@@ -1,11 +1,11 @@
 // --- Utility Rules ---
-WHITESPACE = _{ " " | "\t" | NEWLINE }
+WHITESPACE = _{ " " | "\t" | "\r\n" | "\n" }
 
 // --- Top-Level Rules ---
-script = { SOI ~ (WHITESPACE* ~ (statement | NEWLINE))* ~ EOI }
+script = { SOI ~ statement* ~ EOI }
 
 // --- Statements ---
-statement = { (include | import | declaration | assignment | expression) }
+statement = { declaration | assignment | expression | include | import }
 
 include = { "include" ~ string }
 import = { "import" ~ string ~ "as" ~ identifier }
@@ -14,19 +14,19 @@ import = { "import" ~ string ~ "as" ~ identifier }
 declaration = { workspace_decl | project_decl | stage_decl | task_decl }
 
 workspace_decl = { "workspace" ~ identifier ~ "{" ~ workspace_body ~ "}" }
-workspace_body = { (WHITESPACE* ~ statement ~ WHITESPACE* ~ NEWLINE)* }
+workspace_body = { statement* }
 
 project_decl = { "project" ~ identifier ~ "{" ~ project_body ~ "}" }
-project_body = { (WHITESPACE* ~ statement ~ WHITESPACE* ~ NEWLINE)* }
+project_body = { statement* }
 
 stage_decl = { "stage" ~ identifier ~ "(" ~ arguments? ~ ")" ~ "{" ~ stage_body ~ "}" }
-stage_body = { (WHITESPACE* ~ statement ~ WHITESPACE* ~ NEWLINE)* }
+stage_body = { statement* }
 
 task_decl = { "task" ~ identifier ~ "(" ~ arguments? ~ ")" ~ "{" ~ task_body ~ "}" }
-task_body = { (WHITESPACE* ~ statement ~ WHITESPACE* ~ NEWLINE)* }
+task_body = { statement* }
 
 // --- Assignments ---
-assignment = { identifier ~ WHITESPACE* ~ "=" ~ WHITESPACE* ~ expression }
+assignment = { identifier ~ "=" ~ expression }
 
 // --- Expressions ---
 expression = { value | identifier }
@@ -34,7 +34,7 @@ expression = { value | identifier }
 // --- Values ---
 value = { string | boolean | number | shell_string | array }
 
-array = { "[" ~ (expression ~ ("," ~ expression)*) ~ "]" }
+array = { "[" ~ (expression ~ ("," ~ expression)*)? ~ "]" }
 boolean = { "true" | "false" }
 number = { ASCII_DIGIT+ }
 string = { "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
@@ -46,4 +46,4 @@ identifier = { (ASCII_ALPHANUMERIC | "_" | "-" | ".")+ }
 
 // --- Arguments ---
 parameter = { identifier }
-arguments = { (parameter) ~ ("," ~ (parameter))* }
+arguments = { parameter ~ ("," ~ parameter)* }

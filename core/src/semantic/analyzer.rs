@@ -7,12 +7,9 @@
 //! date: 2025-10-18
 //! license: See LICENSE file in the root directory
 
-use std::fmt::format;
-
 use crate::parser::*;
 use crate::report;
 use crate::reports::*;
-use crate::scripts::script;
 use crate::semantic::symbol::*;
 
 pub struct SemanticAnalyzer<'a> {
@@ -43,9 +40,24 @@ impl<'a> SemanticAnalyzer<'a> {
     /// * `Err(())` if there is an error during analysis.
     fn analyze(&mut self) -> Result<(), ()> {
         let children = self.ast.root.children.clone();
+
+        if children.is_empty() {
+            report!(
+                Level::Error,
+                "The AST is empty. Nothing to analyze.".into(),
+                Some("SemanticAnalyzer".into()),
+                None,
+                None
+            );
+            return Err(());
+        }
+
         for mut node in children {
             self.analyze_node(&mut node)?;
         }
+        self.symbol_table.warn_unused_symbols();
+        self.symbol_table.warn_hot_paths();
+
         Ok(())
     }
 
@@ -58,16 +70,16 @@ impl<'a> SemanticAnalyzer<'a> {
         match &node.kind {
             AstType::Workspace { name } => {
                 let symbol = Symbol::new_workspace(name.to_string().into(), SymbolScope::Global);
-                self.symbol_table.insert(symbol.clone());
+                self.symbol_table.insert(symbol.clone())?;
             }
             AstType::Project { name } => {
                 let symbol = Symbol::new_project(name.to_string().into(), SymbolScope::Global);
-                self.symbol_table.insert(symbol.clone());
+                self.symbol_table.insert(symbol.clone())?;
                 self.process_scope(node)?;
             }
             AstType::Stage { name, params } => {
                 let symbol = Symbol::new_stage(name.to_string().into(), SymbolScope::Global);
-                self.symbol_table.insert(symbol.clone());
+                self.symbol_table.insert(symbol.clone())?;
 
                 self.symbol_table.enter_scope();
 
@@ -79,7 +91,19 @@ impl<'a> SemanticAnalyzer<'a> {
                             SymbolType::String, // or infer type if possible
                             SymbolScope::Local,
                         );
-                        self.symbol_table.insert(param_symbol);
+
+                        if self.symbol_table.exists(param_name) {
+                            report!(
+                                Level::Error,
+                                format!("Parameter name '{}' already exists in scope.", param_name),
+                                Some("SemanticAnalyzer".into()),
+                                node.span.clone(),
+                                node.location.clone()
+                            );
+                            return Err(());
+                        } else {
+                            self.symbol_table.insert(param_symbol)?;
+                        }
                     }
                 }
 
@@ -88,11 +112,50 @@ impl<'a> SemanticAnalyzer<'a> {
                     self.analyze_node(child)?;
                 }
 
+                // Warn if the stage body is empty
+                if self
+                    .symbol_table
+                    .get_current_scope_symbols()
+                    .ok_or(())?
+                    .len()
+                    == 0
+                {
+                    report!(
+                        Level::Warning,
+                        format!("Stage '{}' has an empty body.", name),
+                        Some("SemanticAnalyzer".into()),
+                        node.span.clone(),
+                        node.location.clone()
+                    );
+                }
+
+                // Check for unused parameters
+                for param in params {
+                    if let AstType::Identifier { name: param_name } = &param.kind {
+                        if let Some(symbols) = self.symbol_table.get(param_name) {
+                            let symbol = &symbols[0];
+                            if symbol.reference_count() == 1 {
+                                report!(
+                                    Level::Warning,
+                                    format!(
+                                        "Parameter '{}' is declared but never used in stage '{}'.",
+                                        param_name, name
+                                    ),
+                                    Some("SemanticAnalyzer".into()),
+                                    node.span.clone(),
+                                    node.location.clone()
+                                );
+                            }
+                        }
+                    }
+                }
+
+                // Exit the stage scope
                 self.symbol_table.exit_scope();
             }
             AstType::Task { name, params } => {
                 let symbol = Symbol::new_stage(name.to_string().into(), SymbolScope::Local);
-                self.symbol_table.insert(symbol.clone());
+                self.symbol_table.insert(symbol.clone())?;
 
                 self.symbol_table.enter_scope();
 
@@ -104,7 +167,19 @@ impl<'a> SemanticAnalyzer<'a> {
                             SymbolType::String, // or infer type if possible
                             SymbolScope::Local,
                         );
-                        self.symbol_table.insert(param_symbol);
+
+                        if self.symbol_table.exists(param_name) {
+                            report!(
+                                Level::Error,
+                                format!("Parameter name '{}' already exists in scope.", param_name),
+                                Some("SemanticAnalyzer".into()),
+                                node.span.clone(),
+                                node.location.clone()
+                            );
+                            return Err(());
+                        } else {
+                            self.symbol_table.insert(param_symbol)?;
+                        }
                     }
                 }
 
@@ -113,6 +188,45 @@ impl<'a> SemanticAnalyzer<'a> {
                     self.analyze_node(child)?;
                 }
 
+                // Warn if the task body is empty
+                if self
+                    .symbol_table
+                    .get_current_scope_symbols()
+                    .ok_or(())?
+                    .len()
+                    == 0
+                {
+                    report!(
+                        Level::Warning,
+                        format!("Task '{}' has an empty body.", name),
+                        Some("SemanticAnalyzer".into()),
+                        node.span.clone(),
+                        node.location.clone()
+                    );
+                }
+
+                // Check for unused parameters
+                for param in params {
+                    if let AstType::Identifier { name: param_name } = &param.kind {
+                        if let Some(symbols) = self.symbol_table.get(param_name) {
+                            let symbol = &symbols[0];
+                            if symbol.reference_count() == 1 {
+                                report!(
+                                    Level::Warning,
+                                    format!(
+                                        "Parameter '{}' is declared but never used in task '{}'.",
+                                        param_name, name
+                                    ),
+                                    Some("SemanticAnalyzer".into()),
+                                    node.span.clone(),
+                                    node.location.clone()
+                                );
+                            }
+                        }
+                    }
+                }
+
+                // Exit the task scope
                 self.symbol_table.exit_scope();
             }
 
@@ -145,9 +259,21 @@ impl<'a> SemanticAnalyzer<'a> {
     /// # Returns
     /// * `Ok(())` if the analysis is successful.
     fn analyze_assignment(&mut self, node: &AstNode) -> Result<(), ()> {
+        if node.children.len() != 2 {
+            report!(
+                Level::Error,
+                "Invalid assignment node: must have exactly two children.".into(),
+                Some("SemanticAnalyzer".into()),
+                node.span.clone(),
+                node.location.clone()
+            );
+            return Err(());
+        }
+
         let lhs = &node.children[0];
         let rhs = &node.children[1];
 
+        // Ensure LHS is an identifier
         if let AstType::Identifier { name } = &lhs.kind {
             let inferred_type = self.infer_type(rhs)?;
 
@@ -157,9 +283,10 @@ impl<'a> SemanticAnalyzer<'a> {
                     inferred_type,
                     SymbolScope::Local,
                 );
-                self.symbol_table.insert(symbol);
+                self.symbol_table.insert(symbol)?;
             } else {
-                let existing_type = self.symbol_table.get(name).unwrap()[0].symbol_type();
+                let mut existing_symbol = self.symbol_table.get_mut(name).unwrap()[0].clone();
+                let existing_type = existing_symbol.symbol_type();
                 if existing_type != &inferred_type {
                     report!(
                         Level::Error,
@@ -168,15 +295,44 @@ impl<'a> SemanticAnalyzer<'a> {
                             inferred_type, existing_type
                         ),
                         Some("SemanticAnalyzer".into()),
-                        None,
-                        None
+                        node.span.clone(),
+                        node.location.clone()
                     );
                     return Err(());
+                } else {
+                    existing_symbol.increment_reference_count();
+                }
+            }
+        }
+        else {
+            report!(
+                Level::Critical,
+                "Left-hand side of assignment must be an identifier.".into(),
+                Some("SemanticAnalyzer".into()),
+                node.span.clone(),
+                node.location.clone()
+            );
+            return Err(());
+        }
+
+        self.analyze_expression(rhs)?;
+
+        // If we reach here, the assignment is valid
+        // Next check if the assignment is recursive (i.e., assigning a variable to itself)
+        if let AstType::Identifier { name: rhs_name } = &rhs.kind {
+            if let AstType::Identifier { name: lhs_name } = &lhs.kind {
+                if rhs_name == lhs_name {
+                    report!(
+                        Level::Warning,
+                        format!("Recursive assignment detected for variable: {}", lhs_name),
+                        Some("SemanticAnalyzer".into()),
+                        node.span.clone(),
+                        node.location.clone()
+                    );
                 }
             }
         }
 
-        self.analyze_expression(rhs)?;
         Ok(())
     }
 
@@ -194,8 +350,8 @@ impl<'a> SemanticAnalyzer<'a> {
                         Level::Error,
                         format!("Undefined identifier: {}", name),
                         Some("SemanticAnalyzer".into()),
-                        None,
-                        None
+                        node.span.clone(),
+                        node.location.clone()
                     );
                     return Err(());
                 }
@@ -212,8 +368,8 @@ impl<'a> SemanticAnalyzer<'a> {
                         Level::Error,
                         "Shell command must have both shell and command specified.".into(),
                         Some("SemanticAnalyzer".into()),
-                        None,
-                        None
+                        node.span.clone(),
+                        node.location.clone()
                     );
                     return Err(());
                 }
@@ -224,21 +380,61 @@ impl<'a> SemanticAnalyzer<'a> {
                         Level::Error,
                         format!("Invalid shell: {}", shell),
                         Some("SemanticAnalyzer".into()),
-                        None,
-                        None
+                        node.span.clone(),
+                        node.location.clone()
                     );
                     return Err(());
                 }
             }
-            AstType::Boolean { value } => {}
+            AstType::Boolean { value } => {
+                if *value != true && *value != false {
+                    report!(
+                        Level::Error,
+                        format!("Invalid boolean literal: {}", value),
+                        Some("SemanticAnalyzer".into()),
+                        node.span.clone(),
+                        node.location.clone()
+                    );
+                    return Err(());
+                }
+            }
             AstType::String { value } => {
-                // Handle string literals
+                if value.is_empty() {
+                    report!(
+                        Level::Error,
+                        "String literal cannot be empty.".into(),
+                        Some("SemanticAnalyzer".into()),
+                        node.span.clone(),
+                        node.location.clone()
+                    );
+                    return Err(());
+                }
+
+                if value.len() > 1000 {
+                    report!(
+                        Level::Warning,
+                        "String literal exceeds length of 1000 characters. Is this intentional?"
+                            .into(),
+                        Some("SemanticAnalyzer".into()),
+                        node.span.clone(),
+                        node.location.clone()
+                    );
+                }
             }
             AstType::Number { value } => {
-                // Handle number literals
+                if !value.is_finite() {
+                    report!(
+                        Level::Error,
+                        format!("Invalid number literal: {}", value),
+                        Some("SemanticAnalyzer".into()),
+                        node.span.clone(),
+                        node.location.clone()
+                    );
+                    return Err(());
+                }
             }
             AstType::Null => {
-                // Handle null literals
+                // Null type is valid, no further analysis needed
             }
             //AstType::BinaryOp { left, right, .. } => {
             //    // Analyze left and right expressions
@@ -246,7 +442,14 @@ impl<'a> SemanticAnalyzer<'a> {
             //    self.analyze_expression(right);
             //}
             _ => {
-                // Handle other expression types as needed
+                report!(
+                    Level::Error,
+                    format!("Unsupported expression type: {:?}", node.kind).into(),
+                    Some("SemanticAnalyzer".into()),
+                    node.span.clone(),
+                    node.location.clone()
+                );
+                return Err(());
             }
         }
         Ok(())
@@ -266,8 +469,8 @@ impl<'a> SemanticAnalyzer<'a> {
                         Level::Error,
                         "String literal cannot be empty.".into(),
                         Some("SemanticAnalyzer".into()),
-                        None,
-                        None
+                        node.span.clone(),
+                        node.location.clone()
                     );
                     return Err(());
                 }
@@ -291,8 +494,8 @@ impl<'a> SemanticAnalyzer<'a> {
                         Level::Error,
                         "Shell command must have both shell and command specified.".into(),
                         Some("SemanticAnalyzer".into()),
-                        None,
-                        None
+                        node.span.clone(),
+                        node.location.clone()
                     );
                     return Err(());
                 }
@@ -303,8 +506,8 @@ impl<'a> SemanticAnalyzer<'a> {
                         Level::Error,
                         format!("Invalid shell: {}", shell),
                         Some("SemanticAnalyzer".into()),
-                        None,
-                        None
+                        node.span.clone(),
+                        node.location.clone()
                     );
                     return Err(());
                 }
@@ -327,8 +530,8 @@ impl<'a> SemanticAnalyzer<'a> {
                             Level::Error,
                             format!("Dangerous command detected: {}", pattern).into(),
                             Some("SemanticAnalyzer".into()),
-                            None,
-                            None
+                            node.span.clone(),
+                            node.location.clone()
                         );
                         return Err(());
                     }
@@ -354,8 +557,8 @@ impl<'a> SemanticAnalyzer<'a> {
                             Level::Error,
                             "Array elements must have the same type.".into(),
                             Some("SemanticAnalyzer".into()),
-                            None,
-                            None
+                            node.span.clone(),
+                            node.location.clone()
                         );
                         return Err(());
                     }
@@ -371,8 +574,8 @@ impl<'a> SemanticAnalyzer<'a> {
                         Level::Error,
                         format!("Undefined identifier: {}", name),
                         Some("SemanticAnalyzer".into()),
-                        None,
-                        None
+                        node.span.clone(),
+                        node.location.clone()
                     );
                     Err(())
                 }
@@ -402,8 +605,8 @@ impl<'a> SemanticAnalyzer<'a> {
                     Level::Error,
                     format!("Unable to infer type for node: {:?}", node.kind).into(),
                     Some("SemanticAnalyzer".into()),
-                    None,
-                    None
+                    node.span.clone(),
+                    node.location.clone()
                 );
                 Err(())
             }
