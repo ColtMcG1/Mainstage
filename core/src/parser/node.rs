@@ -11,6 +11,7 @@ pub use crate::parser::types::AstType;
 use crate::report;
 use crate::reports::*;
 use crate::scripts::script::Script;
+use crate::parser::attributes::Attribute;
 
 use std::borrow::Cow;
 
@@ -26,8 +27,10 @@ pub struct MainstageParser;
 ///
 /// let node = Node::new(Type::Script, vec![]);
 /// ```
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct AstNode<'a> {
+    /// The unique identifier of the AST node.
+    pub id: String,
     /// The type of the AST node.
     pub kind: AstType<'a>,
     /// The span of the AST node in the source script.
@@ -36,6 +39,8 @@ pub struct AstNode<'a> {
     pub location: Option<locations::Location<'static>>,
     /// The child nodes of the AST node.
     pub children: Vec<AstNode<'a>>,
+    /// Attributes associated with the AST node.
+    pub attributes: Vec<Attribute>,
 }
 
 impl<'a> AstNode<'a> {
@@ -55,6 +60,16 @@ impl<'a> AstNode<'a> {
                 script,
             ));
         }
+    }
+
+    /// Generates a unique ID for the AST node.
+    /// # Returns
+    /// * A unique string identifier for the AST node.
+    fn generate_id() -> String {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static COUNTER: AtomicUsize = AtomicUsize::new(0);
+        let id = COUNTER.fetch_add(1, Ordering::Relaxed);
+        format!("node_{}", id)
     }
 
     /// Converts a `pest::Span` to a `locations::Span`.
@@ -108,10 +123,12 @@ impl<'a> AstNode<'a> {
             // --- Specific Statement Handlers ---
             // Ignore empty lines and end of input
             Rule::EOI => AstNode {
+                id: AstNode::generate_id(),
                 kind: AstType::Null,
                 span: None,
                 location: None,
                 children: vec![],
+                attributes: vec![],
             },
             // --- Fallback for Unhandled Rules ---
             _ => {
@@ -130,10 +147,12 @@ impl<'a> AstNode<'a> {
                     .collect::<Vec<AstNode>>();
                 // Generate a null node
                 AstNode {
+                    id: AstNode::generate_id(),
                     kind: AstType::Null,
                     span: Some(span.clone()),
                     location: Some(location.clone()),
                     children,
+                    attributes: vec![],
                 }
             }
         }
@@ -157,10 +176,12 @@ impl<'a> AstNode<'a> {
             .collect::<Vec<AstNode>>();
         // Generate the script node
         AstNode {
+            id: AstNode::generate_id(),
             kind: AstType::Script,
             span: Some(span),
             location: Some(location),
             children,
+            attributes: vec![],
         }
     }
 
@@ -190,10 +211,12 @@ impl<'a> AstNode<'a> {
                     Some(location.clone())
                 );
                 AstNode {
+                    id: AstNode::generate_id(),
                     kind: AstType::Null,
                     span: Some(span.clone()),
                     location: Some(location.clone()),
                     children: vec![],
+                    attributes: vec![],
                 }
             }
         }
@@ -213,10 +236,12 @@ impl<'a> AstNode<'a> {
         let path_pair = inner_rules.next().unwrap(); // Get the string pair
         let path = Cow::from(path_pair.as_str().trim_matches('"')); // Remove quotes
         AstNode {
-            kind: AstType::Include { path },
+            id: AstNode::generate_id(),
+            kind: AstType::Include { path: path.clone() },
             span: Some(span),
             location: Some(location),
             children: vec![],
+            attributes: vec![Attribute::new("path".to_string(), path.to_string())],
         }
     }
 
@@ -236,10 +261,12 @@ impl<'a> AstNode<'a> {
         let path = Cow::from(path_pair.as_str().trim_matches('"')); // Remove quotes
         let alias = Cow::from(alias_pair.as_str());
         AstNode {
-            kind: AstType::Import { path, alias },
+            id: AstNode::generate_id(),
+            kind: AstType::Import { path: path.clone(), alias: alias.clone() },
             span: Some(span),
             location: Some(location),
             children: vec![],
+            attributes: vec![Attribute::new("path".to_string(), path.to_string()), Attribute::new("alias".to_string(), alias.to_string())],
         }
     }
 
@@ -268,10 +295,12 @@ impl<'a> AstNode<'a> {
                     Some(location.clone())
                 );
                 AstNode {
+                    id: AstNode::generate_id(),
                     kind: AstType::Null,
                     span: Some(span),
                     location: Some(location),
                     children: vec![],
+                    attributes: vec![],
                 }
             }
         }
@@ -289,6 +318,7 @@ impl<'a> AstNode<'a> {
         let location = Self::convert_pest_span_to_location(pair.as_span(), script);
         let inner_rules = pair.into_inner();
         AstNode {
+            id: AstNode::generate_id(),
             kind: AstType::Assignment,
             span: Some(span),
             location: Some(location),
@@ -296,6 +326,7 @@ impl<'a> AstNode<'a> {
                 Self::process_identifier_rule(inner_rules.clone().nth(0).unwrap(), script),
                 Self::process_expression_rule(inner_rules.clone().nth(1).unwrap(), script),
             ],
+            attributes: vec![],
         }
     }
 
@@ -322,10 +353,12 @@ impl<'a> AstNode<'a> {
                     Some(location.clone())
                 );
                 AstNode {
+                    id: AstNode::generate_id(),
                     kind: AstType::Null,
                     span: Some(span),
                     location: Some(location),
                     children: vec![],
+                    attributes: vec![],
                 }
             }
         }
@@ -346,10 +379,12 @@ impl<'a> AstNode<'a> {
         let location = Self::convert_pest_span_to_location(pair.as_span(), script);
         let name = Cow::from(pair.as_str());
         AstNode {
+            id: AstNode::generate_id(),
             kind: AstType::Identifier { name },
             span: Some(span),
             location: Some(location),
             children: vec![],
+            attributes: vec![],
         }
     }
 
@@ -366,6 +401,7 @@ impl<'a> AstNode<'a> {
         let location = Self::convert_pest_span_to_location(inner_pair.as_span(), script);
         match inner_pair.as_rule() {
             Rule::array => AstNode {
+                id: AstNode::generate_id(),
                 kind: AstType::Array,
                 span: Some(span),
                 location: Some(location),
@@ -373,6 +409,7 @@ impl<'a> AstNode<'a> {
                     .into_inner()
                     .map(|p| Self::process_expression_rule(p, script))
                     .collect::<Vec<AstNode>>(),
+                attributes: vec![],
             },
             Rule::shell_string => {
                 let mut inner_rules = inner_pair.into_inner();
@@ -381,37 +418,45 @@ impl<'a> AstNode<'a> {
                 let shell = Cow::from(shell_pair.as_str());
                 let command = Cow::from(command_pair.as_str());
                 AstNode {
-                    kind: AstType::ShellCommand { shell, command },
+                    id: AstNode::generate_id(),
+                    kind: AstType::ShellCommand { shell: shell.clone(), command: command.clone() },
                     span: Some(span),
                     location: Some(location),
                     children: vec![],
+                    attributes: vec![Attribute::new("shell".to_string(), shell.to_string()), Attribute::new("command".to_string(), command.to_string())],
                 }
             }
             Rule::string => {
                 let value = Cow::from(inner_pair.as_str().trim_matches('"')); // Remove quotes
                 AstNode {
-                    kind: AstType::String { value },
+                    id: AstNode::generate_id(),
+                    kind: AstType::String { value: value.clone() },
                     span: Some(span),
                     location: Some(location),
                     children: vec![],
+                    attributes: vec![Attribute::new("value".to_string(), value.to_string())],
                 }
             }
             Rule::number => {
                 let value = inner_pair.as_str().parse::<f64>().unwrap_or(0.0);
                 AstNode {
+                    id: AstNode::generate_id(),
                     kind: AstType::Number { value },
                     span: Some(span),
                     location: Some(location),
                     children: vec![],
+                    attributes: vec![Attribute::new("value".to_string(), value.to_string())],
                 }
             }
             Rule::boolean => {
                 let value = inner_pair.as_str() == "true";
                 AstNode {
+                    id: AstNode::generate_id(),
                     kind: AstType::Boolean { value },
                     span: Some(span),
                     location: Some(location),
                     children: vec![],
+                    attributes: vec![Attribute::new("value".to_string(), value.to_string())],
                 }
             }
             _ => {
@@ -423,10 +468,12 @@ impl<'a> AstNode<'a> {
                     Some(location.clone())
                 );
                 AstNode {
+                    id: AstNode::generate_id(),
                     kind: AstType::Null,
                     span: Some(span),
                     location: Some(location),
                     children: vec![],
+                    attributes: vec![],
                 }
             }
         }
@@ -459,10 +506,12 @@ impl<'a> AstNode<'a> {
         let name_pair = inner_rules.next().unwrap(); // Get the identifier pair
         let name = Cow::from(name_pair.as_str());
         AstNode {
-            kind: AstType::Workspace { name },
+            id: AstNode::generate_id(),
+            kind: AstType::Workspace { name: name.clone() },
             span: Some(span),
             location: Some(location),
             children: Self::process_body(inner_rules.next().unwrap().into_inner(), script),
+            attributes: vec![Attribute::new("name".to_string(), name.to_string())],
         }
     }
 
@@ -477,13 +526,25 @@ impl<'a> AstNode<'a> {
         let span = Self::convert_pest_span_to_span(pair.as_span());
         let location = Self::convert_pest_span_to_location(pair.as_span(), script);
         let mut inner_rules = pair.into_inner();
+
+        // Process attributes if present
+        let attributes = match inner_rules.peek() {
+            Some(next_pair) if next_pair.as_rule() == Rule::attributes => {
+                Self::process_attributes_rule(inner_rules.next().unwrap(), script)
+            }
+            _ => Vec::new(),
+        };
+
         let name_pair = inner_rules.next().unwrap(); // Get the identifier pair
         let name = Cow::from(name_pair.as_str());
+
         AstNode {
-            kind: AstType::Project { name },
+            id: AstNode::generate_id(),
+            kind: AstType::Project { name: name.clone() },
             span: Some(span),
             location: Some(location),
             children: Self::process_body(inner_rules.next().unwrap().into_inner(), script),
+            attributes,
         }
     }
 
@@ -498,6 +559,15 @@ impl<'a> AstNode<'a> {
         let span = Self::convert_pest_span_to_span(pair.as_span());
         let location = Self::convert_pest_span_to_location(pair.as_span(), script);
         let mut inner_rules = pair.into_inner();
+
+        // Process attributes if present
+        let attributes = match inner_rules.peek() {
+            Some(next_pair) if next_pair.as_rule() == Rule::attributes => {
+                Self::process_attributes_rule(inner_rules.next().unwrap(), script)
+            }
+            _ => Vec::new(),
+        };
+
         let name_pair = inner_rules.next().unwrap(); // Get the identifier pair
         let name = Cow::from(name_pair.as_str());
 
@@ -510,10 +580,12 @@ impl<'a> AstNode<'a> {
         };
 
         AstNode {
-            kind: AstType::Stage { name, params },
+            id: AstNode::generate_id(),
+            kind: AstType::Stage { name: name.clone(), params: params.clone() },
             span: Some(span),
             location: Some(location),
             children: Self::process_body(inner_rules.next().unwrap().into_inner(), script),
+            attributes,
         }
     }
 
@@ -540,11 +612,43 @@ impl<'a> AstNode<'a> {
         };
 
         AstNode {
-            kind: AstType::Task { name, params },
+            id: AstNode::generate_id(),
+            kind: AstType::Task { name: name.clone(), params: params.clone() },
             span: Some(span),
             location: Some(location),
             children: Self::process_body(inner_rules.next().unwrap().into_inner(), script),
+            attributes: vec![Attribute::new("name".to_string(), name.to_string())],
         }
+    }
+
+    /// Processes an `attributes` rule to create a vector of `Attribute` instances.
+    /// This function extracts the attributes from the attributes declaration and constructs the AST node.
+    /// # Arguments
+    /// * `pair` - The parsing pair representing the attributes.
+    /// * `script` - The script being processed.
+    /// # Returns
+    /// * A vector of `Attribute` instances representing the attributes.
+    fn process_attributes_rule(
+        pair: pest::iterators::Pair<'a, Rule>,
+        script: &Script,
+    ) -> Vec<Attribute> {
+        pair.into_inner()
+            .map(|attr_pair| Self::process_attribute_rule(attr_pair, script))
+            .collect()
+    }
+
+    /// Processes a single `attribute` rule to create an `Attribute` instance.
+    /// This function extracts the key and value from the attribute declaration and constructs the attribute.
+    fn process_attribute_rule(
+        pair: pest::iterators::Pair<'a, Rule>,
+        _script: &Script,
+    ) -> Attribute {
+        let mut inner_rules = pair.into_inner();
+        let key_pair = inner_rules.next().unwrap(); // Identifier
+        Attribute::new(
+            key_pair.as_str().to_string(),
+            "".to_string(), // Default value
+        )
     }
 
     /// Processes an `arguments` rule to create an `AstNode`.
@@ -580,6 +684,7 @@ impl<'a> AstNode<'a> {
     /// * An `AstNode` instance with the specified lifetime.
     pub fn into_lifetime(self) -> AstNode<'static> {
         AstNode {
+            id: self.id,
             kind: self.kind.into_lifetime(),
             span: self.span,
             location: self.location.map(|loc| loc.into_owned()), // Convert location to owned
@@ -587,6 +692,11 @@ impl<'a> AstNode<'a> {
                 .children
                 .into_iter()
                 .map(|child| child.into_lifetime())
+                .collect(),
+            attributes: self
+                .attributes
+                .into_iter()
+                .map(|attr| attr.clone())
                 .collect(),
         }
     }
@@ -597,6 +707,7 @@ impl<'a> AstNode<'a> {
     /// * An `AstNode` instance with owned data.
     pub fn into_owned(self) -> AstNode<'static> {
         AstNode {
+            id: self.id,
             kind: self.kind.into_owned(),
             span: self.span.clone(),
             location: self.location.map(|loc| loc.into_owned()),
@@ -605,12 +716,38 @@ impl<'a> AstNode<'a> {
                 .into_iter()
                 .map(|child| child.into_owned())
                 .collect(),
+            attributes: self
+                .attributes
+                .into_iter()
+                .map(|attr| attr.clone())
+                .collect(),
         }
     }
 }
 
 impl<'a> PartialEq for AstNode<'a> {
     fn eq(&self, other: &Self) -> bool {
-        self.kind == other.kind && self.span == other.span && self.location == other.location
+        // Typically, PartialEq should compare all fields that define "semantic equality".
+        // The ID is just a unique identifier (not part of the semantic meaning of the node),
+        // it should NOT be included in PartialEq. This allows comparison of nodes for
+        // structural/content equality, regardless of their unique IDs.
+        self.kind == other.kind
+            && self.span == other.span
+            && self.location == other.location
+            && self.children == other.children
+    }
+}
+
+use std::fmt;
+impl<'a> fmt::Debug for AstNode<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AstNode")
+            .field("id", &self.id)
+            .field("kind", &self.kind)
+            .field("span", &self.span)
+            .field("location", &self.location)
+            .field("children", &self.children)
+            .field("attributes", &self.attributes)
+            .finish()
     }
 }

@@ -40,6 +40,15 @@ pub fn expand_includes(ast: &mut AstParser, script: Rc<script::Script>) -> Resul
     Ok(())
 }
 
+/// Processes a single `#include` directive node.
+/// # Arguments
+/// * `node` - The AST node representing the include directive.
+/// * `path` - The path to the file to include.
+/// * `ast` - The AST parser to use for parsing the included file.
+/// * `script` - The script containing the include directive.
+/// # Returns
+/// * `Ok(())` if successful
+/// * `Err(String)` with an error message if failed.
 fn process_include(
     node: &crate::parser::node::AstNode,
     path: &str,
@@ -63,7 +72,8 @@ fn process_include(
     let mut include_ast = parse_include_ast(&include_script)?;
 
     // Recursively expand includes in the included AST
-    let _ = expand_includes(&mut include_ast, include_script);
+    expand_includes(&mut include_ast, include_script)
+        .map_err(| _ | format!("Failed to expand include : {}", path))?;
 
     // Replace the include node with the children of the included AST
     replace_include_node(ast, node, include_ast.root.children);
@@ -71,6 +81,13 @@ fn process_include(
     Ok(())
 }
 
+/// Resolves the include file path relative to the script's directory.
+/// # Arguments
+/// * `path` - The path to the file to include.
+/// * `script` - The script containing the include directive.
+/// # Returns
+/// * `Ok(std::path::PathBuf)` with the resolved path if successful.
+/// * `Err(String)` with an error message if failed.
 fn resolve_include_path(path: &str, script: &script::Script) -> Result<std::path::PathBuf, String> {
     let path = std::path::Path::new(path);
 
@@ -85,16 +102,36 @@ fn resolve_include_path(path: &str, script: &script::Script) -> Result<std::path
         .ok_or_else(|| format!("Failed to resolve include path: {}", path.display()))
 }
 
+/// Reads the content of the include file.
+/// # Arguments
+/// * `path` - The path to the include file.
+/// # Returns
+/// * `Ok(String)` with the content of the include file if successful.
+/// * `Err(String)` with an error message if failed.
 fn read_include_file(path: &std::path::Path) -> Result<String, String> {
     std::fs::read_to_string(path)
         .map_err(|_| format!("Failed to read include file: {}", path.display()))
 }
 
+/// Parses the included script into an AST.
+/// # Arguments
+/// * `script` - The script to parse.
+/// # Returns
+/// * `Ok(AstParser)` with the parsed AST if successful.
+/// * `Err(String)` with an error message if failed.
 fn parse_include_ast(script: &script::Script) -> Result<AstParser, String> {
     AstParser::new(script)
         .map_err(|_| format!("Failed to parse include file: {}", script.path.display()))
 }
 
+/// Replaces the include node in the AST with the children of the included AST.
+/// # Arguments
+/// * `ast` - The AST parser to modify.
+/// * `include_node` - The AST node representing the include directive.
+/// * `new_children` - The children of the included AST.
+/// # Returns
+/// * `Ok(())` if successful
+/// * `Err(String)` with an error message if failed.
 fn replace_include_node(
     ast: &mut AstParser,
     include_node: &crate::parser::node::AstNode,

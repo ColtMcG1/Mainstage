@@ -1,28 +1,33 @@
 // --- Utility Rules ---
 WHITESPACE = _{ " " | "\t" | "\r\n" | "\n" }
+COMMENT = _{ "//" ~ (!"\n" ~ ANY)* ~ ("\n" | EOI) }
 
 // --- Top-Level Rules ---
 script = { SOI ~ statement* ~ EOI }
 
 // --- Statements ---
-statement = { declaration | assignment | expression | include | import }
+statement = { declaration | assignment | expression | include | import | COMMENT }
 
 include = { "include" ~ string }
 import = { "import" ~ string ~ "as" ~ identifier }
 
+// --- Attributes ---
+attribute = { identifier }
+attributes = { "[" ~ attribute ~ ("," ~ attribute)* ~ "]" }
+
 // --- Declarations ---
 declaration = { workspace_decl | project_decl | stage_decl | task_decl }
 
-workspace_decl = { "workspace" ~ identifier ~ "{" ~ workspace_body ~ "}" }
+workspace_decl = { attributes? ~ "workspace" ~ identifier ~ "{" ~ workspace_body ~ "}" }
 workspace_body = { statement* }
 
-project_decl = { "project" ~ identifier ~ "{" ~ project_body ~ "}" }
+project_decl = { attributes? ~ "project" ~ identifier ~ "{" ~ project_body ~ "}" }
 project_body = { statement* }
 
-stage_decl = { "stage" ~ identifier ~ "(" ~ arguments? ~ ")" ~ "{" ~ stage_body ~ "}" }
+stage_decl = { attributes? ~ "stage" ~ identifier ~ "(" ~ arguments? ~ ")" ~ "{" ~ stage_body ~ "}" }
 stage_body = { statement* }
 
-task_decl = { "task" ~ identifier ~ "(" ~ arguments? ~ ")" ~ "{" ~ task_body ~ "}" }
+task_decl = { attributes? ~ "task" ~ identifier ~ "(" ~ arguments? ~ ")" ~ "{" ~ task_body ~ "}" }
 task_body = { statement* }
 
 // --- Assignments ---

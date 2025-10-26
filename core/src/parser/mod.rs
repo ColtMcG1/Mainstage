@@ -11,7 +11,9 @@ pub mod types;
 pub mod node;
 pub mod parser;
 pub mod expander;
+pub mod attributes;
 
 pub use types::*;
 pub use node::*;
 pub use parser::*;
+pub use attributes::*;

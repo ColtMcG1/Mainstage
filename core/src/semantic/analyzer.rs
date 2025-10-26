@@ -17,6 +17,8 @@ pub struct SemanticAnalyzer<'a> {
     ast: AstParser,
     /// The symbol table for the current scope.
     pub symbol_table: SymbolTable<'a>,
+    /// Entry point for analysis. Node id of the entry point stage/task.
+    pub entry_point: AstNode<'a>,
 }
 
 impl<'a> SemanticAnalyzer<'a> {
@@ -27,10 +29,12 @@ impl<'a> SemanticAnalyzer<'a> {
     /// * A new `SemanticAnalyzer` instance.
     pub fn new(ast: AstParser) -> Result<Self, ()> {
         let mut analyzer = Self {
-            ast,
+            ast: ast.clone(),
             symbol_table: SymbolTable::new(),
+            entry_point: ast.root().clone(),
         };
         analyzer.analyze()?;
+        // If we reach here, analysis was successful
         Ok(analyzer)
     }
 
@@ -45,6 +49,54 @@ impl<'a> SemanticAnalyzer<'a> {
             report!(
                 Level::Error,
                 "The AST is empty. Nothing to analyze.".into(),
+                Some("SemanticAnalyzer".into()),
+                None,
+                None
+            );
+            return Err(());
+        }
+
+        let mut entrypoint_ids = Vec::new();
+        let mut workspace_id = None;
+
+        fn has_entrypoint_attr(node: &AstNode) -> bool {
+            node.attributes.iter().any(|attr| attr.name == "entrypoint")
+        }
+
+        for node in &children {
+            match &node.kind {
+                AstType::Workspace { name: _ } => {
+                    workspace_id = Some(node.clone());
+                }
+                AstType::Project { .. } | AstType::Stage { .. } => {
+                    if has_entrypoint_attr(node) {
+                        entrypoint_ids.push(node.clone());
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        if entrypoint_ids.len() > 1 {
+            report!(
+                Level::Critical,
+                format!(
+                    "Multiple entrypoints specified: {:?}. Only one entrypoint is allowed.",
+                    entrypoint_ids
+                ),
+                Some("SemanticAnalyzer".into()),
+                None,
+                None
+            );
+            return Err(());
+        } else if entrypoint_ids.len() == 1 {
+            self.entry_point = entrypoint_ids[0].clone();
+        } else if let Some(ws_id) = workspace_id {
+            self.entry_point = ws_id;
+        } else {
+            report!(
+                Level::Critical,
+                "No entrypoint or workspace found in the AST.".into(),
                 Some("SemanticAnalyzer".into()),
                 None,
                 None
@@ -303,8 +355,7 @@ impl<'a> SemanticAnalyzer<'a> {
                     existing_symbol.increment_reference_count();
                 }
             }
-        }
-        else {
+        } else {
             report!(
                 Level::Critical,
                 "Left-hand side of assignment must be an identifier.".into(),
@@ -354,6 +405,11 @@ impl<'a> SemanticAnalyzer<'a> {
                         node.location.clone()
                     );
                     return Err(());
+                } else {
+                    // Increment reference count for the symbol
+                    if let Some(symbols) = self.symbol_table.get_mut(name) {
+                        symbols[0].increment_reference_count();
+                    }
                 }
             }
             AstType::Array => {

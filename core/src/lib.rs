@@ -6,6 +6,7 @@
 //! author: Colton McGraw <https://github.com/ColtMcG1>
 //! date: 2025-10-18
 
+use crate::acyclic::*;
 use crate::reports::*;
 use crate::scripts::*;
 use crate::semantic::*;
@@ -13,6 +14,7 @@ use crate::semantic::*;
 #[macro_use]
 pub mod reports;
 
+pub mod acyclic;
 pub mod parser;
 pub mod scripts;
 pub mod semantic;
@@ -43,6 +45,10 @@ pub struct Pipeline {
     script: Option<script::Script>,
     /// The AST parser used for parsing scripts.
     parser: Option<parser::AstParser>,
+    /// The semantic analyzer used for semantic analysis.
+    semantic: Option<SemanticAnalyzer<'static>>,
+    /// The acyclic analyzer used for acyclic analysis.
+    acyclic: Option<DirectedAcyclicGraphAnalyzer>,
 }
 
 impl Pipeline {
@@ -56,6 +62,8 @@ impl Pipeline {
         Self {
             script: None,
             parser: None,
+            semantic: None,
+            acyclic: None,
         }
     }
 
@@ -85,6 +93,11 @@ impl Pipeline {
 
         let is_semantic = dump.as_ref().map_or(false, |d| d.stage == "semantic");
         if let Err(_) = self.semantic_analysis(is_semantic) {
+            return;
+        }
+
+        let is_acyclic = dump.as_ref().map_or(false, |d| d.stage == "dag");
+        if let Err(_) = self.acyclic_analysis(is_acyclic) {
             return;
         }
         // TODO: Further processing stages would go here, each potentially generating reports.
@@ -179,7 +192,7 @@ impl Pipeline {
     /// Performs semantic analysis on the processed script.
     /// If analysis fails, an error report is generated.
     /// # Arguments
-    /// * `dump` - A boolean indicating whether to dump the semantic analysis output to a file.
+    /// * `dump` - A boolean indicating whether to dump the semantic analysis output to a file. This is currently unused since the semantic analyzer does not produce dumpable output.
     /// # Returns
     /// * `Ok(())` if analysis is successful.
     /// * `Err(())` if there is an error during analysis.
@@ -190,17 +203,11 @@ impl Pipeline {
     /// pipeline.process_script(false).unwrap();
     /// pipeline.semantic_analysis(false).unwrap();
     /// ```
-    fn semantic_analysis(&mut self, dump: bool) -> Result<(), ()> {
+    fn semantic_analysis(&mut self, _dump: bool) -> Result<(), ()> {
         if let Some(parser) = &self.parser {
             SemanticAnalyzer::new(parser.clone())
                 .map(|analyzer| {
-                    if dump {
-                        std::fs::write(
-                            "dump_semantic.txt",
-                            format!("{:#?}", analyzer.symbol_table),
-                        )
-                        .unwrap();
-                    }
+                    self.semantic = Some(analyzer);
                 })
                 .map_err(|_| {
                     let report = reports::Report::new(
@@ -214,5 +221,57 @@ impl Pipeline {
                 })?;
         }
         Ok(())
+    }
+
+    /// Performs acyclic analysis on the processed script.
+    /// If analysis fails, an error report is generated.
+    /// # Arguments
+    /// * `dump` - A boolean indicating whether to dump the acyclic analysis output to a file.
+    /// # Returns
+    /// * `Ok(())` if analysis is successful.
+    /// * `Err(())` if there is an error during analysis.
+    /// # Examples
+    /// ```
+    /// let mut pipeline = Pipeline::new();
+    /// pipeline.load_script(std::path::Path::new("example.js")).unwrap();
+    /// pipeline.process_script(false).unwrap();
+    /// pipeline.acyclic_analysis(false).unwrap();
+    /// ```
+    fn acyclic_analysis(&mut self, dump: bool) -> Result<(), ()> {
+        if let Some(parser) = &self.parser
+            && let Some(semantic) = &self.semantic
+        {
+            DirectedAcyclicGraphAnalyzer::new(parser.clone(), Some(semantic.entry_point.clone()))
+                .map(|analyzer| {
+                    self.acyclic = Some(analyzer);
+                })
+                .map_err(|_| {
+                    let report = reports::Report::new(
+                        reports::Level::Error,
+                        "Acyclic analysis failed.".into(),
+                        Some("Pipeline".into()),
+                        None,
+                        None,
+                    );
+                    report!(report);
+                })?;
+
+            if dump {
+                std::fs::write("dump_acyclic.txt", format!("{:#?}", self.acyclic)).unwrap();
+            }
+
+            Ok(())
+        }
+        else {
+            let report = reports::Report::new(
+                reports::Level::Error,
+                "No parser or semantic analyzer available for acyclic analysis.".into(),
+                Some("Pipeline".into()),
+                None,
+                None,
+            );
+            report!(report);
+            return Err(());
+        }
     }
 }

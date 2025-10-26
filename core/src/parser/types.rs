@@ -179,6 +179,7 @@ impl<'a> AstType<'a> {
     }
 }
 
+/// Implements equality comparison for `AstType`.
 impl<'a> PartialEq for AstType<'a> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
