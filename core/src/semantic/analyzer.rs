@@ -65,7 +65,7 @@ impl<'a> SemanticAnalyzer<'a> {
 
         for node in &children {
             match &node.kind {
-                AstType::Workspace { name: _ } => {
+                AstType::Workspace { .. } => {
                     workspace_id = Some(node.clone());
                 }
                 AstType::Project { .. } | AstType::Stage { .. } => {
@@ -91,7 +91,7 @@ impl<'a> SemanticAnalyzer<'a> {
             return Err(());
         } else if entrypoint_ids.len() == 1 {
             self.entry_point = entrypoint_ids[0].clone();
-        } else if let Some(ws_id) = workspace_id {
+        } else if let Some(ws_id) = workspace_id.clone() {
             self.entry_point = ws_id;
         } else {
             report!(
@@ -104,13 +104,84 @@ impl<'a> SemanticAnalyzer<'a> {
             return Err(());
         }
 
+        // First pass: build symbol table
         for mut node in children {
             self.analyze_node(&mut node)?;
         }
+
+        // Second pass: infer references (workspace & its member projects; implicit workspace entrypoint)
+        let has_project_entrypoint = !entrypoint_ids.is_empty();
+        if let Some(ws_node) = workspace_id {
+            if !has_project_entrypoint {
+                // Workspace is implicit entrypoint -> mark referenced
+                self.mark_symbol(&ws_node, |sym| sym.kind() == &SymbolKind::Workspace);
+            }
+            // Members array: mark listed projects referenced
+            self.mark_workspace_members(&ws_node);
+        }
+
+        // Finally emit warnings
         self.symbol_table.warn_unused_symbols();
         self.symbol_table.warn_hot_paths();
 
         Ok(())
+    }
+
+    // Mark all symbols matching predicate for the given AST node's name
+    fn mark_symbol<F>(&mut self, node: &AstNode<'a>, pred: F)
+    where
+        F: Fn(&Symbol<'a>) -> bool,
+    {
+        let name = match &node.kind {
+            AstType::Workspace { name }
+            | AstType::Project { name }
+            | AstType::Stage { name, .. }
+            | AstType::Task { name, .. } => name.as_ref(),
+            _ => return,
+        };
+        if let Some(vec) = self.symbol_table.get_mut(name) {
+            for sym in vec.iter_mut() {
+                if pred(sym) {
+                    sym.increment_reference_count();
+                }
+            }
+        }
+    }
+
+    // Scan a workspace node for members = [project_ids...] and mark those project symbols referenced
+    fn mark_workspace_members(&mut self, workspace_node: &AstNode<'a>) {
+        for child in &workspace_node.children {
+            if let AstType::Assignment = child.kind {
+                if child.children.len() == 2 {
+                    if let AstType::Identifier { name: lhs_name } = &child.children[0].kind {
+                        if lhs_name == "members" {
+                            // RHS should be an array
+                            self.collect_member_projects(&child.children[1]);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn collect_member_projects(&mut self, node: &AstNode<'a>) {
+        match &node.kind {
+            AstType::Identifier { name } => {
+                // If this identifier is a project symbol, mark it referenced
+                if let Some(vec) = self.symbol_table.get_mut(name) {
+                    for sym in vec.iter_mut() {
+                        if sym.kind() == &SymbolKind::Project {
+                            sym.increment_reference_count();
+                        }
+                    }
+                }
+            }
+            _ => {
+                for c in &node.children {
+                    self.collect_member_projects(c);
+                }
+            }
+        }
     }
 
     /// Analyzes a single AST node.
