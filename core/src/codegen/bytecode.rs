@@ -2,11 +2,13 @@ use std::collections::HashMap;
 use crate::codegen::ir::{IRConst, IRFunction, IROpKind, ModuleIR};
 use crate::runtime::opcode::Op;
 
+// Preserve function name for VM dispatch.
 #[derive(Debug)]
 pub struct BytecodeFunction {
+    pub name: String,
     pub code: Vec<u8>,
     pub label_map: HashMap<u32, usize>,
-    pub patch_sites: Vec<(usize, u32)>, // (offset_of_u32, target_label)
+    pub patch_sites: Vec<(usize, u32)>,
 }
 
 #[derive(Debug)]
@@ -19,7 +21,7 @@ fn push_u8(buf: &mut Vec<u8>, v: u8) { buf.push(v); }
 fn push_u32(buf: &mut Vec<u8>, v: u32) { buf.extend_from_slice(&v.to_le_bytes()); }
 
 fn encode_func(f: &IRFunction) -> BytecodeFunction {
-    let mut bf = BytecodeFunction { code: Vec::new(), label_map: HashMap::new(), patch_sites: Vec::new() };
+    let mut bf = BytecodeFunction { name: f.name.clone(), code: Vec::new(), label_map: HashMap::new(), patch_sites: Vec::new() };
 
     // First pass: assign labels to offsets
     for block in &f.blocks {
@@ -66,6 +68,9 @@ fn encode_func(f: &IRFunction) -> BytecodeFunction {
                     push_u8(&mut bf.code, argc);
                 }
                 IROpKind::Return => push_u8(&mut bf.code, Op::Return as u8),
+                IROpKind::Say => push_u8(&mut bf.code, Op::Say as u8),
+                IROpKind::Read => push_u8(&mut bf.code, Op::Read as u8),
+                IROpKind::Write => push_u8(&mut bf.code, Op::Write as u8),
                 IROpKind::NoOp => push_u8(&mut bf.code, Op::NoOp as u8),
             }
         }

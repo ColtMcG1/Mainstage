@@ -11,16 +11,42 @@ use crate::parser::*;
 use crate::report;
 use crate::reports::*;
 use crate::semantic::symbol::*;
+use std::collections::HashMap;
+use std::collections::HashSet;
 
-pub struct SemanticAnalyzer<'a> {
-    /// The AST to analyze.
-    ast: AstParser,
-    /// The symbol table for the current scope.
-    pub symbol_table: SymbolTable<'a>,
-    /// Entry point for analysis. Node id of the entry point stage/task.
-    pub entry_point: AstNode<'a>,
+// Simple internal inference enum
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum InferredType {
+    Int,
+    Bool,
+    Str,
+    Array,
+    Unit,
+    Unknown,
 }
 
+impl InferredType {
+    fn to_symbol_type(self) -> SymbolType {
+        match self {
+            InferredType::Int => SymbolType::Integer,
+            InferredType::Bool => SymbolType::Boolean,
+            InferredType::Str => SymbolType::String,
+            InferredType::Array => SymbolType::Array,
+            InferredType::Unit => SymbolType::None,
+            InferredType::Unknown => SymbolType::None,
+        }
+    }
+}
+
+pub struct SemanticAnalyzer<'a> {
+    ast: AstParser,
+    pub symbol_table: SymbolTable<'a>,
+    pub entry_point: AstNode<'a>,
+    task_returns: HashMap<String, InferredType>,
+    builtin_funcs: HashSet<&'static str>,
+}
+
+// --- Analyze ---
 impl<'a> SemanticAnalyzer<'a> {
     /// Creates a new `SemanticAnalyzer` instance.
     /// # Arguments
@@ -32,10 +58,16 @@ impl<'a> SemanticAnalyzer<'a> {
             ast: ast.clone(),
             symbol_table: SymbolTable::new(),
             entry_point: ast.root().clone(),
+            task_returns: HashMap::new(),
+            builtin_funcs: ["say", "read", "write"].into_iter().collect(),
         };
         analyzer.analyze()?;
         // If we reach here, analysis was successful
         Ok(analyzer)
+    }
+
+    fn is_builtin(&self, name: &str) -> bool {
+        self.builtin_funcs.contains(name)
     }
 
     /// Analyzes the AST and populates the symbol table.
@@ -43,21 +75,16 @@ impl<'a> SemanticAnalyzer<'a> {
     /// * `Ok(())` if the analysis is successful.
     /// * `Err(())` if there is an error during analysis.
     fn analyze(&mut self) -> Result<(), ()> {
-        let children = self.ast.root.children.clone();
+        let root_clone = self.ast.root.clone();
+        let mut children = root_clone.children.clone();
 
         if children.is_empty() {
-            report!(
-                Level::Error,
-                "The AST is empty. Nothing to analyze.".into(),
-                Some("SemanticAnalyzer".into()),
-                None,
-                None
-            );
+            report!(Level::Error, "The AST is empty. Nothing to analyze.".into(), Some("SemanticAnalyzer".into()), None, None);
             return Err(());
         }
 
         let mut entrypoint_ids = Vec::new();
-        let mut workspace_id = None;
+        let mut workspace_id: Option<AstNode<'a>> = None;
 
         fn has_entrypoint_attr(node: &AstNode) -> bool {
             node.attributes.iter().any(|attr| attr.name == "entrypoint")
@@ -65,9 +92,7 @@ impl<'a> SemanticAnalyzer<'a> {
 
         for node in &children {
             match &node.kind {
-                AstType::Workspace { .. } => {
-                    workspace_id = Some(node.clone());
-                }
+                AstType::Workspace { .. } => workspace_id = Some(node.clone()),
                 AstType::Project { .. } | AstType::Stage { .. } => {
                     if has_entrypoint_attr(node) {
                         entrypoint_ids.push(node.clone());
@@ -78,395 +103,163 @@ impl<'a> SemanticAnalyzer<'a> {
         }
 
         if entrypoint_ids.len() > 1 {
-            report!(
-                Level::Critical,
-                format!(
-                    "Multiple entrypoints specified: {:?}. Only one entrypoint is allowed.",
-                    entrypoint_ids
-                ),
-                Some("SemanticAnalyzer".into()),
-                None,
-                None
-            );
+            report!(Level::Critical, format!("Multiple entrypoints specified: {:?}. Only one entrypoint is allowed.", entrypoint_ids), Some("SemanticAnalyzer".into()), None, None);
             return Err(());
         } else if entrypoint_ids.len() == 1 {
             self.entry_point = entrypoint_ids[0].clone();
         } else if let Some(ws_id) = workspace_id.clone() {
             self.entry_point = ws_id;
         } else {
-            report!(
-                Level::Critical,
-                "No entrypoint or workspace found in the AST.".into(),
-                Some("SemanticAnalyzer".into()),
-                None,
-                None
-            );
+            report!(Level::Critical, "No entrypoint or workspace found in the AST.".into(), Some("SemanticAnalyzer".into()), None, None);
             return Err(());
         }
 
-        // First pass: build symbol table
-        for mut node in children {
-            self.analyze_node(&mut node)?;
+        self.task_returns.clear();
+        self.infer_task_return_types(&root_clone);
+
+        for node in &mut children {
+            self.analyze_node(node)?;
         }
 
-        // Second pass: infer references (workspace & its member projects; implicit workspace entrypoint)
         let has_project_entrypoint = !entrypoint_ids.is_empty();
         if let Some(ws_node) = workspace_id {
             if !has_project_entrypoint {
-                // Workspace is implicit entrypoint -> mark referenced
                 self.mark_symbol(&ws_node, |sym| sym.kind() == &SymbolKind::Workspace);
             }
-            // Members array: mark listed projects referenced
             self.mark_workspace_members(&ws_node);
         }
 
-        // Finally emit warnings
         self.symbol_table.warn_unused_symbols();
         self.symbol_table.warn_hot_paths();
-
         Ok(())
     }
 
-    // Mark all symbols matching predicate for the given AST node's name
-    fn mark_symbol<F>(&mut self, node: &AstNode<'a>, pred: F)
-    where
-        F: Fn(&Symbol<'a>) -> bool,
-    {
-        let name = match &node.kind {
-            AstType::Workspace { name }
-            | AstType::Project { name }
-            | AstType::Stage { name, .. }
-            | AstType::Task { name, .. } => name.as_ref(),
-            _ => return,
-        };
-        if let Some(vec) = self.symbol_table.get_mut(name) {
-            for sym in vec.iter_mut() {
-                if pred(sym) {
-                    sym.increment_reference_count();
-                }
-            }
-        }
-    }
-
-    // Scan a workspace node for members = [project_ids...] and mark those project symbols referenced
-    fn mark_workspace_members(&mut self, workspace_node: &AstNode<'a>) {
-        for child in &workspace_node.children {
-            if let AstType::Assignment = child.kind {
-                if child.children.len() == 2 {
-                    if let AstType::Identifier { name: lhs_name } = &child.children[0].kind {
-                        if lhs_name == "members" {
-                            // RHS should be an array
-                            self.collect_member_projects(&child.children[1]);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    fn collect_member_projects(&mut self, node: &AstNode<'a>) {
+    // -------- Task return inference --------
+    fn infer_task_return_types(&mut self, node: &AstNode<'_>) {
         match &node.kind {
-            AstType::Identifier { name } => {
-                // If this identifier is a project symbol, mark it referenced
-                if let Some(vec) = self.symbol_table.get_mut(name) {
-                    for sym in vec.iter_mut() {
-                        if sym.kind() == &SymbolKind::Project {
-                            sym.increment_reference_count();
-                        }
-                    }
+            AstType::Task { name, .. } => {
+                let ty = self.infer_return_type_in_task(node).unwrap_or(InferredType::Unit);
+                self.task_returns.insert(name.to_string(), ty);
+            }
+            _ => {
+                for c in &node.children {
+                    self.infer_task_return_types(c);
+                }
+            }
+        }
+    }
+
+    fn infer_return_type_in_task(&self, task_node: &AstNode<'_>) -> Option<InferredType> {
+        let mut acc: Option<InferredType> = None;
+        self.walk_returns(task_node, &mut |expr| {
+            let t = self.infer_expr_type(expr);
+            acc = Some(match acc {
+                None => t,
+                Some(prev) => Self::unify(prev, t),
+            });
+        });
+        acc
+    }
+
+    fn walk_returns<F: FnMut(&AstNode<'_>)>(&self, node: &AstNode<'_>, f: &mut F) {
+        match &node.kind {
+            AstType::Return => {
+                if let Some(expr) = node.children.get(0) {
+                    f(expr);
+                } else {
+                    // return; with no value => Unit
                 }
             }
             _ => {
                 for c in &node.children {
-                    self.collect_member_projects(c);
+                    self.walk_returns(c, f);
                 }
             }
         }
     }
 
-    /// Analyzes a single AST node.
-    /// # Arguments
-    /// * `node` - The AST node to analyze.
-    /// # Returns
-    /// * `Ok(())` if the analysis is successful.
-    fn analyze_node(&mut self, node: &AstNode) -> Result<(), ()> {
-        match &node.kind {
-            AstType::Workspace { name } => {
-                let symbol = Symbol::new_workspace(name.to_string().into(), SymbolScope::Global);
-                self.symbol_table.insert(symbol.clone())?;
-            }
-            AstType::Project { name } => {
-                let symbol = Symbol::new_project(name.to_string().into(), SymbolScope::Global);
-                self.symbol_table.insert(symbol.clone())?;
-                self.process_scope(node)?;
-            }
-            AstType::Stage { name, params } => {
-                let symbol = Symbol::new_stage(name.to_string().into(), SymbolScope::Global);
-                self.symbol_table.insert(symbol.clone())?;
-
-                self.symbol_table.enter_scope();
-
-                // Insert parameters as local variables
-                for param in params {
-                    if let AstType::Identifier { name: param_name } = &param.kind {
-                        let param_symbol = Symbol::new_variable(
-                            param_name.to_string().into(),
-                            SymbolType::String, // or infer type if possible
-                            SymbolScope::Local,
-                        );
-
-                        if self.symbol_table.exists(param_name) {
-                            report!(
-                                Level::Error,
-                                format!("Parameter name '{}' already exists in scope.", param_name),
-                                Some("SemanticAnalyzer".into()),
-                                node.span.clone(),
-                                node.location.clone()
-                            );
-                            return Err(());
-                        } else {
-                            self.symbol_table.insert(param_symbol)?;
-                        }
-                    }
-                }
-
-                // Now analyze the body
-                for child in &node.children {
-                    self.analyze_node(child)?;
-                }
-
-                // Warn if the stage body is empty
-                if self
-                    .symbol_table
-                    .get_current_scope_symbols()
-                    .ok_or(())?
-                    .len()
-                    == 0
-                {
-                    report!(
-                        Level::Warning,
-                        format!("Stage '{}' has an empty body.", name),
-                        Some("SemanticAnalyzer".into()),
-                        node.span.clone(),
-                        node.location.clone()
-                    );
-                }
-
-                // Check for unused parameters
-                for param in params {
-                    if let AstType::Identifier { name: param_name } = &param.kind {
-                        if let Some(symbols) = self.symbol_table.get(param_name) {
-                            let symbol = &symbols[0];
-                            if symbol.reference_count() == 1 {
-                                report!(
-                                    Level::Warning,
-                                    format!(
-                                        "Parameter '{}' is declared but never used in stage '{}'.",
-                                        param_name, name
-                                    ),
-                                    Some("SemanticAnalyzer".into()),
-                                    node.span.clone(),
-                                    node.location.clone()
-                                );
-                            }
-                        }
-                    }
-                }
-
-                // Exit the stage scope
-                self.symbol_table.exit_scope();
-            }
-            AstType::Task { name, params } => {
-                let symbol = Symbol::new_stage(name.to_string().into(), SymbolScope::Local);
-                self.symbol_table.insert(symbol.clone())?;
-
-                self.symbol_table.enter_scope();
-
-                // Insert parameters as local variables
-                for param in params {
-                    if let AstType::Identifier { name: param_name } = &param.kind {
-                        let param_symbol = Symbol::new_variable(
-                            param_name.to_string().into(),
-                            SymbolType::String, // or infer type if possible
-                            SymbolScope::Local,
-                        );
-
-                        if self.symbol_table.exists(param_name) {
-                            report!(
-                                Level::Error,
-                                format!("Parameter name '{}' already exists in scope.", param_name),
-                                Some("SemanticAnalyzer".into()),
-                                node.span.clone(),
-                                node.location.clone()
-                            );
-                            return Err(());
-                        } else {
-                            self.symbol_table.insert(param_symbol)?;
-                        }
-                    }
-                }
-
-                // Now analyze the body
-                for child in &node.children {
-                    self.analyze_node(child)?;
-                }
-
-                // Warn if the task body is empty
-                if self
-                    .symbol_table
-                    .get_current_scope_symbols()
-                    .ok_or(())?
-                    .len()
-                    == 0
-                {
-                    report!(
-                        Level::Warning,
-                        format!("Task '{}' has an empty body.", name),
-                        Some("SemanticAnalyzer".into()),
-                        node.span.clone(),
-                        node.location.clone()
-                    );
-                }
-
-                // Check for unused parameters
-                for param in params {
-                    if let AstType::Identifier { name: param_name } = &param.kind {
-                        if let Some(symbols) = self.symbol_table.get(param_name) {
-                            let symbol = &symbols[0];
-                            if symbol.reference_count() == 1 {
-                                report!(
-                                    Level::Warning,
-                                    format!(
-                                        "Parameter '{}' is declared but never used in task '{}'.",
-                                        param_name, name
-                                    ),
-                                    Some("SemanticAnalyzer".into()),
-                                    node.span.clone(),
-                                    node.location.clone()
-                                );
-                            }
-                        }
-                    }
-                }
-
-                // Exit the task scope
-                self.symbol_table.exit_scope();
-            }
-
-            AstType::Assignment => self.analyze_assignment(node)?,
-
-            _ => {
-                // Handle other AST node types as needed
-            }
+    fn unify(a: InferredType, b: InferredType) -> InferredType {
+        use InferredType::*;
+        match (a, b) {
+            (Unknown, t) | (t, Unknown) => t,
+            (Unit, t) | (t, Unit) => t,
+            (Int, Int) => Int,
+            (Bool, Bool) => Bool,
+            (Str, Str) => Str,
+            (Array, Array) => Array,
+            _ => Unknown,
         }
-        Ok(())
     }
 
-    /// Process a scope
-    /// # Arguments
-    /// * `node` - The AST node representing the scope.
-    /// # Returns
-    /// * `Ok(())` if the scope is processed successfully.
-    fn process_scope(&mut self, node: &AstNode) -> Result<(), ()> {
-        self.symbol_table.enter_scope();
-        for mut child in &node.children {
-            self.analyze_node(&mut child)?;
-        }
-        self.symbol_table.exit_scope();
-        Ok(())
-    }
-
-    /// Analyzes an assignment node.
-    /// # Arguments
-    /// * `node` - The assignment AST node to analyze.
-    /// # Returns
-    /// * `Ok(())` if the analysis is successful.
-    fn analyze_assignment(&mut self, node: &AstNode) -> Result<(), ()> {
-        if node.children.len() != 2 {
-            report!(
-                Level::Error,
-                "Invalid assignment node: must have exactly two children.".into(),
-                Some("SemanticAnalyzer".into()),
-                node.span.clone(),
-                node.location.clone()
-            );
-            return Err(());
-        }
-
-        let lhs = &node.children[0];
-        let rhs = &node.children[1];
-
-        // Ensure LHS is an identifier
-        if let AstType::Identifier { name } = &lhs.kind {
-            let inferred_type = self.infer_type(rhs)?;
-
-            if !self.symbol_table.exists(name) {
-                let symbol = Symbol::new_variable(
-                    name.to_string().into(),
-                    inferred_type,
-                    SymbolScope::Local,
-                );
-                self.symbol_table.insert(symbol)?;
-            } else {
-                let mut existing_symbol = self.symbol_table.get_mut(name).unwrap()[0].clone();
-                let existing_type = existing_symbol.symbol_type();
-                if existing_type != &inferred_type {
-                    report!(
-                        Level::Error,
-                        format!(
-                            "Type mismatch: cannot assign {:?} to {:?}",
-                            inferred_type, existing_type
-                        ),
-                        Some("SemanticAnalyzer".into()),
-                        node.span.clone(),
-                        node.location.clone()
-                    );
-                    return Err(());
-                } else {
-                    existing_symbol.increment_reference_count();
-                }
-            }
+    // -------- Expression / Call handling --------
+    fn is_stage_name(&self, name: &str) -> bool {
+        if let Some(syms) = self.symbol_table.get(name) {
+            syms.iter().any(|s| s.kind() == &SymbolKind::Stage)
         } else {
-            report!(
-                Level::Critical,
-                "Left-hand side of assignment must be an identifier.".into(),
-                Some("SemanticAnalyzer".into()),
-                node.span.clone(),
-                node.location.clone()
-            );
-            return Err(());
+            false
         }
-
-        self.analyze_expression(rhs)?;
-
-        // If we reach here, the assignment is valid
-        // Next check if the assignment is recursive (i.e., assigning a variable to itself)
-        if let AstType::Identifier { name: rhs_name } = &rhs.kind {
-            if let AstType::Identifier { name: lhs_name } = &lhs.kind {
-                if rhs_name == lhs_name {
-                    report!(
-                        Level::Warning,
-                        format!("Recursive assignment detected for variable: {}", lhs_name),
-                        Some("SemanticAnalyzer".into()),
-                        node.span.clone(),
-                        node.location.clone()
-                    );
-                }
-            }
+    }
+    fn is_task_name(&self, name: &str) -> bool {
+        if let Some(syms) = self.symbol_table.get(name) {
+            syms.iter().any(|s| s.kind() == &SymbolKind::Task)
+        } else {
+            false
         }
-
-        Ok(())
     }
 
-    /// Analyzes an expression node.
-    /// # Arguments
-    /// * `node` - The expression AST node to analyze.
-    /// # Returns
-    /// * `Ok(())` if the analysis is successful.
-    fn analyze_expression(&mut self, node: &AstNode) -> Result<(), ()> {
+    fn infer_expr_type(&self, node: &AstNode<'_>) -> InferredType {
         match &node.kind {
+            AstType::Number { .. } => InferredType::Int,
+            AstType::Boolean { .. } => InferredType::Bool,
+            AstType::String { .. } => InferredType::Str,
+            AstType::Array => InferredType::Array,
+            AstType::Null => InferredType::Unit,
+            AstType::CallExpression { .. } => self.infer_call_expr_type(node).unwrap_or(InferredType::Unknown),
             AstType::Identifier { name } => {
-                // Check if the identifier exists in the symbol table
+                if let Some(syms) = self.symbol_table.get(name) {
+                    match syms[0].symbol_type() {
+                        SymbolType::Integer => InferredType::Int,
+                        SymbolType::Boolean => InferredType::Bool,
+                        SymbolType::String => InferredType::Str,
+                        SymbolType::Array => InferredType::Array,
+                        SymbolType::None => InferredType::Unit,
+                        _ => InferredType::Unknown,
+                    }
+                } else {
+                    InferredType::Unknown
+                }
+            }
+            _ => InferredType::Unknown,
+        }
+    }
+
+    fn infer_call_expr_type(&self, node: &AstNode<'_>) -> Option<InferredType> {
+        let (callee, _args) = match &node.kind {
+            AstType::CallExpression { callee, args } => (callee, args),
+            _ => return None,
+        };
+        let name = match &callee.kind {
+            AstType::Identifier { name } => name.as_ref(),
+            _ => return Some(InferredType::Unknown),
+        };
+        if self.is_builtin(name) {
+            return Some(InferredType::Unit);
+        }
+        if self.is_stage_name(name) {
+            return Some(InferredType::Unit);
+        }
+        if self.is_task_name(name) {
+            if let Some(rt) = self.task_returns.get(name) {
+                return Some(*rt);
+            }
+        }
+        None
+    }
+
+    fn analyze_expression(&mut self, node: &AstNode<'a>) -> Result<(), ()> {
+        match &node.kind {
+            AstType::CallExpression { .. } => self.analyze_call(node, true),
+            AstType::Identifier { name } => {
                 if !self.symbol_table.exists(name) {
                     report!(
                         Level::Error,
@@ -476,226 +269,92 @@ impl<'a> SemanticAnalyzer<'a> {
                         node.location.clone()
                     );
                     return Err(());
-                } else {
-                    // Increment reference count for the symbol
-                    if let Some(symbols) = self.symbol_table.get_mut(name) {
-                        symbols[0].increment_reference_count();
-                    }
+                } else if let Some(symbols) = self.symbol_table.get_mut(name) {
+                    symbols[0].increment_reference_count();
                 }
+                Ok(())
             }
             AstType::Array => {
-                // Analyze each element in the array literal
-                for element in &node.children {
-                    self.analyze_expression(element)?;
+                for e in &node.children {
+                    self.analyze_expression(e)?;
                 }
+                Ok(())
             }
-            AstType::ShellCommand { shell, command } => {
-                if shell.is_empty() || command.is_empty() {
-                    report!(
-                        Level::Error,
-                        "Shell command must have both shell and command specified.".into(),
-                        Some("SemanticAnalyzer".into()),
-                        node.span.clone(),
-                        node.location.clone()
-                    );
-                    return Err(());
+            AstType::Return => {
+                if let Some(expr) = node.children.get(0) {
+                    self.analyze_expression(expr)?;
                 }
-
-                let valid_shells = vec!["bash", "sh", "zsh", "cmd", "pwsh"];
-                if valid_shells.iter().all(|&valid| valid != shell) {
-                    report!(
-                        Level::Error,
-                        format!("Invalid shell: {}", shell),
-                        Some("SemanticAnalyzer".into()),
-                        node.span.clone(),
-                        node.location.clone()
-                    );
-                    return Err(());
-                }
-            }
-            AstType::Boolean { value } => {
-                if *value != true && *value != false {
-                    report!(
-                        Level::Error,
-                        format!("Invalid boolean literal: {}", value),
-                        Some("SemanticAnalyzer".into()),
-                        node.span.clone(),
-                        node.location.clone()
-                    );
-                    return Err(());
-                }
+                Ok(())
             }
             AstType::String { value } => {
                 if value.is_empty() {
-                    report!(
-                        Level::Error,
-                        "String literal cannot be empty.".into(),
-                        Some("SemanticAnalyzer".into()),
-                        node.span.clone(),
-                        node.location.clone()
-                    );
+                    report!(Level::Error, "String literal cannot be empty.".into(),
+                        Some("SemanticAnalyzer".into()), node.span.clone(), node.location.clone());
                     return Err(());
                 }
-
-                if value.len() > 1000 {
-                    report!(
-                        Level::Warning,
-                        "String literal exceeds length of 1000 characters. Is this intentional?"
-                            .into(),
-                        Some("SemanticAnalyzer".into()),
-                        node.span.clone(),
-                        node.location.clone()
-                    );
-                }
+                Ok(())
             }
             AstType::Number { value } => {
                 if !value.is_finite() {
-                    report!(
-                        Level::Error,
-                        format!("Invalid number literal: {}", value),
-                        Some("SemanticAnalyzer".into()),
-                        node.span.clone(),
-                        node.location.clone()
-                    );
+                    report!(Level::Error, format!("Invalid number: {}", value).into(),
+                        Some("SemanticAnalyzer".into()), node.span.clone(), node.location.clone());
                     return Err(());
                 }
+                Ok(())
             }
-            AstType::Null => {
-                // Null type is valid, no further analysis needed
-            }
-            //AstType::BinaryOp { left, right, .. } => {
-            //    // Analyze left and right expressions
-            //    self.analyze_expression(left);
-            //    self.analyze_expression(right);
-            //}
-            _ => {
-                report!(
-                    Level::Error,
-                    format!("Unsupported expression type: {:?}", node.kind).into(),
-                    Some("SemanticAnalyzer".into()),
-                    node.span.clone(),
-                    node.location.clone()
-                );
-                return Err(());
-            }
+            AstType::Boolean { .. } | AstType::Null | AstType::ShellCommand { .. } => Ok(()),
+            _ => Ok(()),
         }
-        Ok(())
     }
 
-    /// Infers the type of an AST node.
-    /// # Arguments
-    /// * `node` - The AST node to infer the type of.
-    /// # Returns
-    /// * `Ok(SymbolType)` if the type is successfully inferred.
     fn infer_type(&self, node: &AstNode) -> Result<SymbolType, ()> {
         match &node.kind {
+            AstType::CallExpression { .. } => {
+                let it = self.infer_call_expr_type(node).unwrap_or(InferredType::Unknown);
+                match it {
+                    InferredType::Unknown | InferredType::Unit => {
+                        // Defer error: treat as None (procedural) so assignment still parses.
+                        Ok(SymbolType::None)
+                    }
+                    _ => Ok(it.to_symbol_type()),
+                }
+            }
+            AstType::Return => {
+                if let Some(expr) = node.children.get(0) {
+                    self.infer_type(expr)
+                } else {
+                    Ok(SymbolType::None)
+                }
+            }
+            // keep existing branches
+            AstType::Number { .. } => Ok(SymbolType::Integer),
             AstType::Boolean { .. } => Ok(SymbolType::Boolean),
-            AstType::String { value } => {
-                if value.is_empty() {
-                    report!(
-                        Level::Error,
-                        "String literal cannot be empty.".into(),
-                        Some("SemanticAnalyzer".into()),
-                        node.span.clone(),
-                        node.location.clone()
-                    );
-                    return Err(());
-                }
-
-                if value.len() > 1000 {
-                    report!(
-                        Level::Warning,
-                        "String literal exceeds length of 1000 characters. Is this intentional?"
-                            .into(),
-                        Some("SemanticAnalyzer".into()),
-                        node.span.clone(),
-                        node.location.clone()
-                    );
-                }
-
-                Ok(SymbolType::String)
-            }
-            AstType::ShellCommand { shell, command } => {
-                if shell.is_empty() || command.is_empty() {
-                    report!(
-                        Level::Error,
-                        "Shell command must have both shell and command specified.".into(),
-                        Some("SemanticAnalyzer".into()),
-                        node.span.clone(),
-                        node.location.clone()
-                    );
-                    return Err(());
-                }
-
-                let valid_shells = vec!["bash", "sh", "zsh", "cmd", "pwsh"];
-                if valid_shells.iter().all(|&valid| valid != shell) {
-                    report!(
-                        Level::Error,
-                        format!("Invalid shell: {}", shell),
-                        Some("SemanticAnalyzer".into()),
-                        node.span.clone(),
-                        node.location.clone()
-                    );
-                    return Err(());
-                }
-
-                let dangerous_patterns = vec![
-                    "rm -rf /",
-                    "rm -rf /*",
-                    "rm -rf --no-preserve-root /",
-                    ":(){ :|:& };:",
-                    "mkfs.ext4 /dev/sda",
-                    "dd if=/dev/zero of=/dev/sda",
-                    "Delete-Partition -DriveLetter C -Confirm:$false",
-                    "Remove-Item -Path C:\\ -Recurse -Force",
-                    "format C: /Q /Y",
-                    "shutdown /s /f /t 0",
-                ];
-                for pattern in dangerous_patterns {
-                    if command.contains(pattern) {
-                        report!(
-                            Level::Error,
-                            format!("Dangerous command detected: {}", pattern).into(),
-                            Some("SemanticAnalyzer".into()),
-                            node.span.clone(),
-                            node.location.clone()
-                        );
-                        return Err(());
-                    }
-                }
-
-                Ok(SymbolType::ShellCommand)
-            }
-            AstType::Number { .. } => Ok(SymbolType::Float), // Default to Float for numbers
+            AstType::String { .. } => Ok(SymbolType::String),
             AstType::Array => {
-                let elements = &node.children;
-                if elements.is_empty() {
-                    return Ok(SymbolType::None); // Empty arrays have no type
-                }
-
-                // Infer the type of the first element
-                let first_type = self.infer_type(&elements[0])?;
-
-                // Ensure all elements have the same type
-                for element in elements.iter().skip(1) {
-                    let element_type = self.infer_type(element)?;
-                    if element_type != first_type {
-                        report!(
-                            Level::Error,
-                            "Array elements must have the same type.".into(),
-                            Some("SemanticAnalyzer".into()),
-                            node.span.clone(),
-                            node.location.clone()
-                        );
-                        return Err(());
+                // unchanged array element uniformity check
+                if node.children.is_empty() {
+                    Ok(SymbolType::Array)
+                } else {
+                    let first = self.infer_type(&node.children[0])?;
+                    for e in node.children.iter().skip(1) {
+                        let t = self.infer_type(e)?;
+                        if t != first {
+                            report!(
+                                Level::Error,
+                                "Array elements must have the same type.".into(),
+                                Some("SemanticAnalyzer".into()),
+                                node.span.clone(),
+                                node.location.clone()
+                            );
+                            return Err(());
+                        }
                     }
+                    Ok(SymbolType::Array)
                 }
-
-                Ok(first_type) // Return the type of the array elements
             }
             AstType::Identifier { name } => {
-                if let Some(symbols) = self.symbol_table.get(name) {
-                    Ok(symbols[0].symbol_type().clone())
+                if let Some(syms) = self.symbol_table.get(name) {
+                    Ok(syms[0].symbol_type().clone())
                 } else {
                     report!(
                         Level::Error,
@@ -707,35 +366,225 @@ impl<'a> SemanticAnalyzer<'a> {
                     Err(())
                 }
             }
-            //AstType::BinaryOp { left, right, operator } => {
-            //    let left_type = self.infer_type(left)?;
-            //    let right_type = self.infer_type(right)?;
-            //
-            //    if left_type == right_type {
-            //        match operator {
-            //            "+" | "-" | "*" | "/" => Ok(left_type), // Arithmetic operations
-            //            "&&" | "||" => {
-            //                if left_type == SymbolType::Boolean {
-            //                    Ok(SymbolType::Boolean)
-            //                } else {
-            //                    Err(())
-            //                }
-            //            }
-            //            _ => Err(()),
-            //        }
-            //    } else {
-            //        Err(())
-            //    }
-            //}
+            AstType::Null => Ok(SymbolType::None),
             _ => {
+                // existing fallback
                 report!(
                     Level::Error,
-                    format!("Unable to infer type for node: {:?}", node.kind).into(),
+                    format!("Unable to infer type for node: {:?}", node.kind),
                     Some("SemanticAnalyzer".into()),
                     node.span.clone(),
                     node.location.clone()
                 );
                 Err(())
+            }
+        }
+    }
+
+    // Insert / process a top-level or nested node
+    fn analyze_node(&mut self, node: &mut AstNode<'a>) -> Result<(), ()> {
+        match &node.kind {
+            AstType::Workspace { name } => {
+                let sym = Symbol::new_workspace(name.to_string().into(), SymbolScope::Global);
+                self.symbol_table.insert(sym)?;
+                for c in &mut node.children {
+                    self.analyze_node(c)?;
+                }
+            }
+            AstType::Project { name } => {
+                let sym = Symbol::new_project(name.to_string().into(), SymbolScope::Global);
+                self.symbol_table.insert(sym)?;
+                for c in &mut node.children {
+                    self.analyze_node(c)?;
+                }
+            }
+            AstType::Stage { name, .. } => {
+                let sym = Symbol::new_stage(name.to_string().into(), SymbolScope::Global);
+                self.symbol_table.insert(sym)?;
+                for c in &mut node.children {
+                    self.analyze_node(c)?;
+                }
+            }
+            AstType::Task { name, .. } => {
+                let sym = Symbol::new_task(name.to_string().into(), SymbolScope::Global);
+                self.symbol_table.insert(sym)?;
+                for c in &mut node.children {
+                    self.analyze_node(c)?;
+                }
+            }
+            AstType::Assignment => {
+                if node.children.len() >= 2 {
+                    if let AstType::Identifier { name } = &node.children[0].kind {
+                        let ty = self.infer_type(&node.children[1]).unwrap_or(SymbolType::None);
+                        let var_sym = Symbol::new_variable(name.to_string().into(), ty, SymbolScope::Global);
+                        let _ = self.symbol_table.insert(var_sym);
+                        // RHS expression => expression context
+                        self.analyze_expression(&node.children[1])?;
+                    }
+                }
+            }
+            AstType::CallExpression { .. } => {
+                // Statement context
+                self.analyze_call(node, false)?;
+            }
+            AstType::Return => {
+                if let Some(expr) = node.children.get(0) {
+                    self.analyze_expression(expr)?;
+                }
+            }
+            AstType::Identifier { .. }
+            | AstType::String { .. }
+            | AstType::Number { .. }
+            | AstType::Boolean { .. }
+            | AstType::Array
+            | AstType::Null
+            | AstType::ShellCommand { .. } => {
+                self.analyze_expression(node)?;
+            }
+            AstType::Include { .. } | AstType::Import { .. } => {
+                for c in &mut node.children {
+                    self.analyze_node(c)?;
+                }
+            }
+            _ => {
+                for c in &mut node.children {
+                    self.analyze_node(c)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    // New helper: in_expression determines whether stage usage is illegal
+    fn analyze_call(&mut self, node: &AstNode<'a>, in_expression: bool) -> Result<(), ()> {
+        let (callee, args) = match &node.kind {
+            AstType::CallExpression { callee, args } => (callee, args),
+            _ => return Ok(()),
+        };
+        let name = match &callee.kind {
+            AstType::Identifier { name } => name.as_ref(),
+            _ => {
+                report!(Level::Error, "Callee must be identifier".into(),
+                    Some("SemanticAnalyzer".into()), node.span.clone(), node.location.clone());
+                return Err(());
+            }
+        };
+
+        // Builtins
+        if self.is_builtin(name) {
+            // Basic arity check for say(x)
+            if name == "say" && args.len() != 1 {
+                report!(
+                    Level::Error,
+                    "say expects exactly 1 argument".into(),
+                    Some("SemanticAnalyzer".into()),
+                    node.span.clone(),
+                    node.location.clone()
+                );
+                return Err(());
+            }
+            for a in args { self.analyze_expression(a)?; }
+            return Ok(());
+        }
+
+        // Stage: allowed only as statement (side-effect), not as value
+        if self.is_stage_name(name) {
+            if in_expression {
+                report!(
+                    Level::Error,
+                    format!("Stage '{}' does not return a value; cannot be used in expression.", name),
+                    Some("SemanticAnalyzer".into()),
+                    node.span.clone(),
+                    node.location.clone()
+                );
+                return Err(());
+            }
+        } else if self.is_task_name(name) {
+            // Task: ensure return type inferred (already done); OK in both contexts
+            if let Some(rt) = self.task_returns.get(name) {
+                if in_expression && matches!(rt, InferredType::Unit | InferredType::Unknown) {
+                    report!(
+                        Level::Error,
+                        format!("Task '{}' has no usable return value.", name),
+                        Some("SemanticAnalyzer".into()),
+                        node.span.clone(),
+                        node.location.clone()
+                    );
+                    return Err(());
+                }
+            }
+        } else if !self.symbol_table.exists(name) {
+            report!(
+                Level::Error,
+                format!("Unknown callable '{}'", name),
+                Some("SemanticAnalyzer".into()),
+                node.span.clone(),
+                node.location.clone()
+            );
+            return Err(());
+        }
+
+        // Analyze args (always expression context)
+        for a in args {
+            self.analyze_expression(a)?;
+        }
+        Ok(())
+    }
+
+    // Mark symbols of a given node that satisfy predicate
+    fn mark_symbol<F>(&mut self, node: &AstNode<'a>, pred: F)
+    where
+        F: Fn(&Symbol<'a>) -> bool,
+    {
+        let name_opt = match &node.kind {
+            AstType::Workspace { name }
+            | AstType::Project { name }
+            | AstType::Stage { name, .. }
+            | AstType::Task { name, .. } => Some(name.as_ref()),
+            _ => None,
+        };
+        if let Some(name) = name_opt {
+            if let Some(vec) = self.symbol_table.get_mut(name) {
+                for s in vec {
+                    if pred(s) {
+                        s.increment_reference_count();
+                    }
+                }
+            }
+        }
+    }
+
+    // Mark projects referenced by workspace.members = [ ... ]
+    fn mark_workspace_members(&mut self, workspace_node: &AstNode<'a>) {
+        for child in &workspace_node.children {
+            // Expect Assignment with key 'members'
+            if let AstType::Assignment = child.kind {
+                if child.children.len() >= 2 {
+                    if let AstType::Identifier { name: lhs } = &child.children[0].kind {
+                        if lhs == "members" {
+                            self.collect_member_projects(&child.children[1]);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn collect_member_projects(&mut self, node: &AstNode<'a>) {
+        match &node.kind {
+            AstType::Identifier { name } => {
+                if let Some(vec) = self.symbol_table.get_mut(name) {
+                    for s in vec {
+                        if s.kind() == &SymbolKind::Project {
+                            s.increment_reference_count();
+                        }
+                    }
+                }
+            }
+            _ => {
+                for c in &node.children {
+                    self.collect_member_projects(c);
+                }
             }
         }
     }

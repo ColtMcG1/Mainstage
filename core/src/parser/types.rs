@@ -17,7 +17,6 @@ use crate::parser::AstNode;
 #[derive(Debug, Clone)]
 pub enum AstType<'a> {
     // --- Top Level ---
-    /// Represents the root of a script.
     Script,
     /// Represents an `include` directive with a file path.
     Include { path: Cow<'a, str> },
@@ -32,16 +31,21 @@ pub enum AstType<'a> {
     /// Represents a `stage` block with a name.
     Stage { name: Cow<'a, str>, params: Vec<AstNode<'a>> },
     /// Represents a `task` block with a name.
-    Task { name: Cow<'a, str>, params: Vec<AstNode<'a>> },
+    Task  { name: Cow<'a, str>, params: Vec<AstNode<'a>> },
 
-    // --- Expressions ---
+    // --- Expressions / Statements ---
     /// Represents an assignment expression (e.g., `x = 5`).
     Assignment,
 
     /// Represents an arguments declaration (e.g., `fn my_function(x, y)`).
     Arguments { params: Vec<AstNode<'a>> },
 
-    // --- Declarations ---
+    /// Represents a function or method call expression (e.g., `my_function(arg1, arg2)`).
+    CallExpression { callee: Box<AstNode<'a>>, args: Vec<AstNode<'a>> },
+
+    /// Represents a return statement.
+    Return,
+
     /// Represents a variable declaration (e.g., `let x = 5`).
     VariableDeclaration { name: Cow<'a, str>, value: Option<Cow<'a, str>> },
 
@@ -119,10 +123,14 @@ impl<'a> AstType<'a> {
             AstType::Workspace { name } => AstType::Workspace { name: Cow::Owned(name.into_owned()) },
             AstType::Project { name } => AstType::Project { name: Cow::Owned(name.into_owned()) },
             AstType::Stage { name, params } => AstType::Stage { name: Cow::Owned(name.into_owned()), params: params.into_iter().map(|p| p.into_lifetime()).collect() },
-            AstType::Task { name, params } => AstType::Task { name: Cow::Owned(name.into_owned()), params: params.into_iter().map(|p| p.into_lifetime()).collect() },
+            AstType::Task  { name, params } => AstType::Task  { name: Cow::Owned(name.into_owned()), params: params.into_iter().map(|p| p.into_lifetime()).collect() },
             AstType::Assignment => AstType::Assignment,
             AstType::Arguments { params } => AstType::Arguments {
                 params: params.into_iter().map(|p| p.into_owned()).collect(),
+            },
+            AstType::CallExpression { callee, args } => AstType::CallExpression {
+                callee: Box::new(callee.into_lifetime()),
+                args: args.into_iter().map(|a| a.into_lifetime()).collect(),
             },
             AstType::VariableDeclaration { name, value } => AstType::VariableDeclaration {
                 name: Cow::Owned(name.into_owned()),
@@ -138,6 +146,7 @@ impl<'a> AstType<'a> {
             AstType::Boolean { value } => AstType::Boolean { value },
             AstType::Array => AstType::Array,
             AstType::Null => AstType::Null,
+            AstType::Return => AstType::Return,
         }
     }
 
@@ -156,10 +165,14 @@ impl<'a> AstType<'a> {
             AstType::Workspace { name } => AstType::Workspace { name: Cow::Owned(name.into_owned()) },
             AstType::Project { name } => AstType::Project { name: Cow::Owned(name.into_owned()) },
             AstType::Stage { name, params } => AstType::Stage { name: Cow::Owned(name.into_owned()), params: params.into_iter().map(|p| p.into_owned()).collect() },
-            AstType::Task { name, params } => AstType::Task { name: Cow::Owned(name.into_owned()), params: params.into_iter().map(|p| p.into_owned()).collect() },
+            AstType::Task  { name, params } => AstType::Task  { name: Cow::Owned(name.into_owned()), params: params.into_iter().map(|p| p.into_owned()).collect() },
             AstType::Assignment => AstType::Assignment,
             AstType::Arguments { params } => AstType::Arguments {
                 params: params.into_iter().map(|p| p.into_owned()).collect(),
+            },
+            AstType::CallExpression { callee, args } => AstType::CallExpression {
+                callee: Box::new(callee.into_owned()),
+                args: args.into_iter().map(|a| a.into_owned()).collect(),
             },
             AstType::VariableDeclaration { name, value } => AstType::VariableDeclaration {
                 name: Cow::Owned(name.into_owned()),
@@ -175,6 +188,7 @@ impl<'a> AstType<'a> {
             AstType::Boolean { value } => AstType::Boolean { value },
             AstType::Array => AstType::Array,
             AstType::Null => AstType::Null,
+            AstType::Return => AstType::Return,
         }
     }
 }
@@ -189,7 +203,7 @@ impl<'a> PartialEq for AstType<'a> {
             (AstType::Workspace { name: n1 }, AstType::Workspace { name: n2 }) => n1 == n2,
             (AstType::Project { name: n1 }, AstType::Project { name: n2 }) => n1 == n2,
             (AstType::Stage { name: n1, params: params1 }, AstType::Stage { name: n2, params: params2 }) => n1 == n2 && params1 == params2,
-            (AstType::Task { name: n1, params: params1 }, AstType::Task { name: n2, params: params2 }) => n1 == n2 && params1 == params2,
+            (AstType::Task  { name: n1, params: params1 }, AstType::Task  { name: n2, params: params2 }) => n1 == n2 && params1 == params2,
             (AstType::Assignment, AstType::Assignment) => true,
             (AstType::Arguments { params: p1 }, AstType::Arguments { params: p2 }) => p1 == p2,
             (AstType::VariableDeclaration { name: n1, value: v1 }, AstType::VariableDeclaration { name: n2, value: v2 }) => n1 == n2 && v1 == v2,
@@ -200,6 +214,7 @@ impl<'a> PartialEq for AstType<'a> {
             (AstType::Boolean { value: b1 }, AstType::Boolean { value: b2 }) => b1 == b2,
             (AstType::Array, AstType::Array) => true,
             (AstType::Null, AstType::Null) => true,
+            (AstType::Return, AstType::Return) => true,
             _ => false,
         }
     }

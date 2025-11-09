@@ -1,5 +1,11 @@
+task compute() {
+    return 42
+}
+
 stage app () {
     name = "Demo App"
+    result = compute()
+    say(result)
 }
 
 project core_lib {
@@ -7,8 +13,6 @@ project core_lib {
     description = "Core library"
     enabled = true
     version = 1
-
-    dependencies = [app]
 }
 
 workspace demo_ws {

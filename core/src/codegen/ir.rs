@@ -26,6 +26,9 @@ pub enum IROpKind {
     JumpIfFalse(Label),
     Call(u32, u8),       // function id, argc
     Return,
+    Say, 
+    Read, 
+    Write,
     NoOp,
 }
 
@@ -54,8 +57,8 @@ pub struct ModuleIR {
     pub globals: Vec<String>,
     pub const_pool: Vec<IRConst>,
     pub functions: Vec<IRFunction>,
-    // Optional indices (e.g., name -> function)
-    pub func_index: HashMap<String, u32>,
+    pub func_index: HashMap<String, u32>,       // full name
+    pub plain_index: HashMap<String, u32>,      // plain (stage/task) name
 }
 
 impl ModuleIR {
@@ -65,11 +68,11 @@ impl ModuleIR {
             const_pool: Vec::new(),
             functions: Vec::new(),
             func_index: HashMap::new(),
+            plain_index: HashMap::new(),
         }
     }
 
     pub fn intern_const(&mut self, c: IRConst) -> u32 {
-        println!("Interning const: {:?}", c);
         if let Some((i, _)) = self.const_pool.iter().enumerate().find(|(_, v)| **v == c) {
             i as u32
         } else {
@@ -92,7 +95,16 @@ impl ModuleIR {
     pub fn add_function(&mut self, f: IRFunction) -> u32 {
         let id = self.functions.len() as u32;
         self.func_index.insert(f.name.clone(), id);
+        if let Some(rest) = f.name.strip_prefix("stage:init:") {
+            self.plain_index.insert(rest.to_string(), id);
+        } else if let Some(rest) = f.name.strip_prefix("task:init:") {
+            self.plain_index.insert(rest.to_string(), id);
+        }
         self.functions.push(f);
         id
+    }
+
+    pub fn get_plain_func(&self, name: &str) -> Option<u32> {
+        self.plain_index.get(name).copied()
     }
 }

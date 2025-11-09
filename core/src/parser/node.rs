@@ -7,11 +7,11 @@
 //! date: 2025-10-18
 //! license: See LICENSE file in the root directory
 
+use crate::parser::attributes::Attribute;
 pub use crate::parser::types::AstType;
 use crate::report;
 use crate::reports::*;
 use crate::scripts::script::Script;
-use crate::parser::attributes::Attribute;
 
 use std::borrow::Cow;
 
@@ -197,6 +197,7 @@ impl<'a> AstNode<'a> {
         let span = Self::convert_pest_span_to_span(inner_pair.as_span());
         let location = Self::convert_pest_span_to_location(inner_pair.as_span(), script);
         match inner_pair.as_rule() {
+            Rule::return_statement => AstNode::process_return_statement_rule(inner_pair, script),
             Rule::declaration => AstNode::process_declaration_rule(inner_pair, script),
             Rule::assignment => AstNode::process_assignment_rule(inner_pair, script),
             Rule::expression => AstNode::process_expression_rule(inner_pair, script),
@@ -219,6 +220,31 @@ impl<'a> AstNode<'a> {
                     attributes: vec![],
                 }
             }
+        }
+    }
+
+    /// Processes a `return_statement` rule to create an `AstNode`.
+    /// This function extracts the expression from the return statement and constructs the AST node.
+    /// # Arguments
+    /// * `pair` - The parsing pair representing the return statement.
+    /// * `script` - The script being processed.
+    /// # Returns
+    /// * An `AstNode` representing the return statement.
+    fn process_return_statement_rule(
+        pair: pest::iterators::Pair<'a, Rule>,
+        script: &Script,
+    ) -> Self {
+        let span = Self::convert_pest_span_to_span(pair.as_span());
+        let location = Self::convert_pest_span_to_location(pair.as_span(), script);
+        let mut inner_rules = pair.into_inner();
+        let expr_pair = inner_rules.next().unwrap(); // Get the expression pair
+        AstNode {
+            id: AstNode::generate_id(),
+            kind: AstType::Return,
+            span: Some(span),
+            location: Some(location),
+            children: vec![Self::process_expression_rule(expr_pair, script)],
+            attributes: vec![],
         }
     }
 
@@ -262,11 +288,17 @@ impl<'a> AstNode<'a> {
         let alias = Cow::from(alias_pair.as_str());
         AstNode {
             id: AstNode::generate_id(),
-            kind: AstType::Import { path: path.clone(), alias: alias.clone() },
+            kind: AstType::Import {
+                path: path.clone(),
+                alias: alias.clone(),
+            },
             span: Some(span),
             location: Some(location),
             children: vec![],
-            attributes: vec![Attribute::new("path".to_string(), path.to_string()), Attribute::new("alias".to_string(), alias.to_string())],
+            attributes: vec![
+                Attribute::new("path".to_string(), path.to_string()),
+                Attribute::new("alias".to_string(), alias.to_string()),
+            ],
         }
     }
 
@@ -342,6 +374,7 @@ impl<'a> AstNode<'a> {
         let span = Self::convert_pest_span_to_span(inner_pair.as_span());
         let location = Self::convert_pest_span_to_location(inner_pair.as_span(), script);
         match inner_pair.as_rule() {
+            Rule::call_expression => Self::process_call_expression_rule(inner_pair, script),
             Rule::identifier => Self::process_identifier_rule(inner_pair, script),
             Rule::value => Self::process_value_rule(inner_pair, script),
             _ => {
@@ -361,6 +394,40 @@ impl<'a> AstNode<'a> {
                     attributes: vec![],
                 }
             }
+        }
+    }
+
+    /// Processes a `call_expression` rule to create an `AstNode`.
+    /// This function extracts the function name and arguments from the call expression and constructs the AST node.
+    /// # Arguments
+    /// * `pair` - The parsing pair representing the call expression.
+    /// * `script` - The script being processed.
+    /// # Returns
+    /// * An `AstNode` representing the call expression.
+    fn process_call_expression_rule(
+        pair: pest::iterators::Pair<'a, Rule>,
+        script: &Script,
+    ) -> Self {
+        let span = Self::convert_pest_span_to_span(pair.as_span());
+        let location = Self::convert_pest_span_to_location(pair.as_span(), script);
+        let mut inner_rules = pair.into_inner();
+        let callee = Box::new(Self::process_identifier_rule(
+            inner_rules.next().unwrap(),
+            script,
+        ));
+        let args = match inner_rules.peek() {
+            Some(next_pair) if next_pair.as_rule() == Rule::arguments => {
+                Self::process_arguments_rule(inner_rules.next().unwrap(), script)
+            }
+            _ => Vec::new(),
+        };
+        AstNode {
+            id: AstNode::generate_id(),
+            kind: AstType::CallExpression { callee, args },
+            span: Some(span),
+            location: Some(location),
+            children: vec![],
+            attributes: vec![],
         }
     }
 
@@ -419,18 +486,26 @@ impl<'a> AstNode<'a> {
                 let command = Cow::from(command_pair.as_str());
                 AstNode {
                     id: AstNode::generate_id(),
-                    kind: AstType::ShellCommand { shell: shell.clone(), command: command.clone() },
+                    kind: AstType::ShellCommand {
+                        shell: shell.clone(),
+                        command: command.clone(),
+                    },
                     span: Some(span),
                     location: Some(location),
                     children: vec![],
-                    attributes: vec![Attribute::new("shell".to_string(), shell.to_string()), Attribute::new("command".to_string(), command.to_string())],
+                    attributes: vec![
+                        Attribute::new("shell".to_string(), shell.to_string()),
+                        Attribute::new("command".to_string(), command.to_string()),
+                    ],
                 }
             }
             Rule::string => {
                 let value = Cow::from(inner_pair.as_str().trim_matches('"')); // Remove quotes
                 AstNode {
                     id: AstNode::generate_id(),
-                    kind: AstType::String { value: value.clone() },
+                    kind: AstType::String {
+                        value: value.clone(),
+                    },
                     span: Some(span),
                     location: Some(location),
                     children: vec![],
@@ -581,7 +656,10 @@ impl<'a> AstNode<'a> {
 
         AstNode {
             id: AstNode::generate_id(),
-            kind: AstType::Stage { name: name.clone(), params: params.clone() },
+            kind: AstType::Stage {
+                name: name.clone(),
+                params: params.clone(),
+            },
             span: Some(span),
             location: Some(location),
             children: Self::process_body(inner_rules.next().unwrap().into_inner(), script),
@@ -613,7 +691,10 @@ impl<'a> AstNode<'a> {
 
         AstNode {
             id: AstNode::generate_id(),
-            kind: AstType::Task { name: name.clone(), params: params.clone() },
+            kind: AstType::Task {
+                name: name.clone(),
+                params: params.clone(),
+            },
             span: Some(span),
             location: Some(location),
             children: Self::process_body(inner_rules.next().unwrap().into_inner(), script),

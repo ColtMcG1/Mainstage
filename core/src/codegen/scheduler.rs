@@ -1,6 +1,17 @@
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 use crate::parser::{AstNode, AstType};
 use crate::codegen::ir::ModuleIR;
+
+// Scope we schedule within
+#[derive(Debug, Clone)]
+pub enum ScopeKind<'a> {
+    Workspace(&'a str),
+    Project(&'a str),
+    Stage(&'a str),
+    Task(&'a str),
+    Global,
+    Local,
+}
 
 #[derive(Default, Clone)]
 struct RW {
@@ -9,54 +20,86 @@ struct RW {
     side_effect: bool,
 }
 
-// Extract a symbol name for project assignment key (e.g., "project:{proj}.{key}")
-fn sym_for_project_key(project: &str, key: &str) -> String {
-    format!("project:{project}.{key}")
+// FQ symbol helpers
+fn fq(scope: &ScopeKind<'_>, key: &str) -> String {
+    match scope {
+        ScopeKind::Workspace(n) => format!("workspace:{n}.{key}"),
+        ScopeKind::Project(n)   => format!("project:{n}.{key}"),
+        ScopeKind::Stage(n)     => format!("stage:{n}.{key}"),
+        ScopeKind::Task(n)      => format!("task:{n}.{key}"),
+        ScopeKind::Global       => format!("global:{key}"),
+        ScopeKind::Local        => format!("local:{key}"),
+    }
 }
 
+// Extract key/value pair from an assignment-shaped node: Assignment(key, value)
+pub fn extract_key_value<'a>(node: &'a AstNode<'a>) -> Option<(String, &'a AstNode<'a>)> {
+    if let AstType::Assignment = node.kind {
+        if node.children.len() >= 2 {
+            if let Some(key) = extract_identifier(&node.children[0]) {
+                return Some((key, &node.children[1]));
+            }
+        }
+    }
+    None
+}
+
+// Identifier text
+fn extract_identifier(node: &AstNode<'_>) -> Option<String> {
+    match &node.kind {
+        AstType::Identifier { name } => Some(name.to_string()),
+        _ => None,
+    }
+}
+
+// Collect read/write info for a single statement within a scope
 fn collect_rw_for_stmt(
-    project: &str,
+    scope: &ScopeKind<'_>,
     stmt: &AstNode<'_>,
     out: &mut RW,
 ) {
-    // Writes: project key on assignment
-    if let Some((key, value_node)) = super::lowering::extract_key_value(stmt) {
-        out.writes.insert(sym_for_project_key(project, &key));
-        collect_reads(value_node, &mut out.reads);
+    if let Some((key, value_node)) = extract_key_value(stmt) {
+        out.writes.insert(fq(scope, &key));
+        collect_reads(scope, value_node, &mut out.reads);
     }
-
-    // Side effects: includes/imports or shell executions
+    if let AstType::CallExpression { args, .. } = &stmt.kind {
+        for a in args {
+            collect_reads(scope, a, &mut out.reads);
+        }
+    }
     match stmt.kind {
         AstType::Include { .. } | AstType::Import { .. } => out.side_effect = true,
         _ => {}
     }
 }
 
-// Walk expressions to collect identifier reads (adapt to your AST).
-fn collect_reads(node: &AstNode<'_>, reads: &mut HashSet<String>) {
+// Walk value expressions to collect reads within this scope
+fn collect_reads(scope: &ScopeKind<'_>, node: &AstNode<'_>, reads: &mut HashSet<String>) {
     match &node.kind {
-        // Example: identifiers that refer to other project keys like `root` or `project.key`
+        // Bare identifiers inside values are treated as referring to a key in the same scope
+        // e.g., default_project = members[0] reads "members" in workspace scope
         AstType::Identifier { name } => {
-            // If you have scoped names, normalize here.
-            reads.insert(name.to_string());
+            reads.insert(fq(scope, name));
         }
         _ => {
             for c in &node.children {
-                collect_reads(c, reads);
+                collect_reads(scope, c, reads);
             }
         }
     }
 }
 
-// Returns a schedule of indices into `body.children`
-pub fn schedule_project_body(project_name: &str, body: &AstNode<'_>, _mod_ir: &ModuleIR) -> Vec<usize> {
+// Generic scheduler for a "key/value" body under a scope
+pub fn schedule_kv_body(scope: ScopeKind<'_>, body: &AstNode<'_>, _mod_ir: &ModuleIR) -> Vec<usize> {
     let n = body.children.len();
+    if n == 0 { return Vec::new(); }
+
     let mut infos = vec![RW::default(); n];
     for (idx, stmt) in body.children.iter().enumerate() {
-        collect_rw_for_stmt(project_name, stmt, &mut infos[idx]);
+        collect_rw_for_stmt(&scope, stmt, &mut infos[idx]);
     }
 
-    // Build last-writer map
+    // Graph
     let mut last_writer: HashMap<String, usize> = HashMap::new();
     let mut indeg = vec![0usize; n];
     let mut adj: Vec<Vec<usize>> = vec![vec![]; n];
@@ -70,8 +113,7 @@ pub fn schedule_project_body(project_name: &str, body: &AstNode<'_>, _mod_ir: &M
                 indeg[j] += 1;
             }
         }
-
-        // Write-after-write edges (preserve last-one-wins)
+        // Write-after-write edges (last-write wins)
         for w in &infos[j].writes {
             if let Some(&i) = last_writer.get(w) {
                 adj[i].push(j);
@@ -79,8 +121,7 @@ pub fn schedule_project_body(project_name: &str, body: &AstNode<'_>, _mod_ir: &M
             }
             last_writer.insert(w.clone(), j);
         }
-
-        // Side-effect barrier
+        // Side-effect barrier sequencing
         if infos[j].side_effect {
             if let Some(i) = last_side_effect {
                 adj[i].push(j);
@@ -90,32 +131,24 @@ pub fn schedule_project_body(project_name: &str, body: &AstNode<'_>, _mod_ir: &M
         }
     }
 
-    // Stable Kahn’s algorithm: prefer smaller AST index
-    let mut ready: VecDeque<usize> = (0..n).filter(|&i| indeg[i] == 0).collect();
-    // Keep it stable by sorting once
-    let mut ready_vec: Vec<usize> = ready.drain(..).collect();
-    ready_vec.sort_unstable();
+    // Stable Kahn’s topo (preserve AST order among independents)
+    let mut ready: Vec<usize> = (0..n).filter(|&i| indeg[i] == 0).collect();
+    ready.sort_unstable();
     let mut schedule = Vec::with_capacity(n);
-    let push_ready = |q: &mut Vec<usize>, v: usize| {
-        // binary insert to keep sorted
-        let pos = q.binary_search(&v).unwrap_or_else(|p| p);
-        q.insert(pos, v);
-    };
 
-    while let Some(j) = ready_vec.first().cloned() {
-        ready_vec.remove(0);
+    while let Some(j) = if ready.is_empty() { None } else { Some(ready.remove(0)) } {
         schedule.push(j);
         for &k in &adj[j] {
             indeg[k] -= 1;
             if indeg[k] == 0 {
-                push_ready(&mut ready_vec, k);
+                let pos = ready.binary_search(&k).unwrap_or_else(|p| p);
+                ready.insert(pos, k);
             }
         }
     }
 
-    // If we didn’t schedule all, there’s a cycle; fall back to AST order for remaining
+    // Fallback to AST order for any leftover (cycle or missing edges)
     if schedule.len() != n {
-        // You can report a cycle here using your Accumulator
         for i in 0..n {
             if !schedule.contains(&i) {
                 schedule.push(i);
@@ -124,4 +157,18 @@ pub fn schedule_project_body(project_name: &str, body: &AstNode<'_>, _mod_ir: &M
     }
 
     schedule
+}
+
+// Convenience wrappers per scope
+pub fn schedule_workspace_body(name: &str, body: &AstNode<'_>, ir: &ModuleIR) -> Vec<usize> {
+    schedule_kv_body(ScopeKind::Workspace(name), body, ir)
+}
+pub fn schedule_project_body(name: &str, body: &AstNode<'_>, ir: &ModuleIR) -> Vec<usize> {
+    schedule_kv_body(ScopeKind::Project(name), body, ir)
+}
+pub fn schedule_stage_body(name: &str, body: &AstNode<'_>, ir: &ModuleIR) -> Vec<usize> {
+    schedule_kv_body(ScopeKind::Stage(name), body, ir)
+}
+pub fn schedule_task_body(name: &str, body: &AstNode<'_>, ir: &ModuleIR) -> Vec<usize> {
+    schedule_kv_body(ScopeKind::Task(name), body, ir)
 }

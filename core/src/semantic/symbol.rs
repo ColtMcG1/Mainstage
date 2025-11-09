@@ -54,8 +54,6 @@ pub enum SymbolType {
     None,
     /// An integer type.
     Integer,
-    /// A float type.
-    Float,
     /// A string type.
     String,
     /// An array type.

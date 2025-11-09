@@ -6,7 +6,9 @@ COMMENT = _{ "//" ~ (!"\n" ~ ANY)* ~ ("\n" | EOI) }
 script = { SOI ~ statement* ~ EOI }
 
 // --- Statements ---
-statement = { declaration | assignment | expression | include | import | COMMENT }
+statement = { return_statement | declaration | assignment | expression | include | import | COMMENT }
+
+return_statement = { "return" ~ expression }
 
 include = { "include" ~ string }
 import = { "import" ~ string ~ "as" ~ identifier }
@@ -34,7 +36,8 @@ task_body = { statement* }
 assignment = { identifier ~ "=" ~ expression }
 
 // --- Expressions ---
-expression = { value | identifier }
+expression = { value | call_expression | identifier }
+call_expression = { identifier ~ "(" ~ arguments? ~ ")" }
 
 // --- Values ---
 value = { string | boolean | number | shell_string | array }
