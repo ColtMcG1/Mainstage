@@ -472,7 +472,6 @@ impl<'a> SemanticAnalyzer<'a> {
 
         // Builtins
         if self.is_builtin(name) {
-            // Basic arity check for say(x)
             if name == "say" && args.len() != 1 {
                 report!(
                     Level::Error,
@@ -487,7 +486,7 @@ impl<'a> SemanticAnalyzer<'a> {
             return Ok(());
         }
 
-        // Stage: allowed only as statement (side-effect), not as value
+        // Stage: allowed only as statement; mark as referenced when valid
         if self.is_stage_name(name) {
             if in_expression {
                 report!(
@@ -498,9 +497,25 @@ impl<'a> SemanticAnalyzer<'a> {
                     node.location.clone()
                 );
                 return Err(());
+            } else {
+                if let Some(vec) = self.symbol_table.get_mut(name) {
+                    for s in vec {
+                        if s.kind() == &SymbolKind::Stage {
+                            s.increment_reference_count();
+                        }
+                    }
+                }
             }
         } else if self.is_task_name(name) {
-            // Task: ensure return type inferred (already done); OK in both contexts
+            // Task: mark as referenced (both as statement and expression)
+            if let Some(vec) = self.symbol_table.get_mut(name) {
+                for s in vec {
+                    if s.kind() == &SymbolKind::Task {
+                        s.increment_reference_count();
+                    }
+                }
+            }
+            // Optional: enforce non-Unit return only in expression context
             if let Some(rt) = self.task_returns.get(name) {
                 if in_expression && matches!(rt, InferredType::Unit | InferredType::Unknown) {
                     report!(

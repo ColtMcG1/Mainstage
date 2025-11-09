@@ -53,5 +53,5 @@ shell_prefix = { "sh" | "bash" | "zsh" | "pwsh" | "cmd" }
 identifier = { (ASCII_ALPHANUMERIC | "_" | "-" | ".")+ }
 
 // --- Arguments ---
-parameter = { identifier }
+parameter = { expression }
 arguments = { parameter ~ ("," ~ parameter)* }

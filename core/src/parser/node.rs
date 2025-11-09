@@ -756,7 +756,9 @@ impl<'a> AstNode<'a> {
     /// # Returns
     /// * An `AstNode` representing the parameter.
     fn process_param_rule(pair: pest::iterators::Pair<'a, Rule>, script: &Script) -> AstNode<'a> {
-        Self::process_identifier_rule(pair, script)
+        let mut inner = pair.into_inner();
+        let expr_pair = inner.next().unwrap(); // guaranteed by grammar
+        Self::process_expression_rule(expr_pair, script)
     }
 
     /// Converts the `AstNode` instance to have a different lifetime.
