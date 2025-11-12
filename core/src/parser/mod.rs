@@ -8,12 +8,15 @@
 //! license: See LICENSE file in the root directory
 
 pub mod types;
-pub mod node;
 pub mod parser;
 pub mod expander;
 pub mod attributes;
+pub mod driver;      // pest parser + Rule
+pub mod ast;         // AstNode struct + common helpers
+pub mod builders;    // rule-specific processors
 
 pub use types::*;
-pub use node::*;
 pub use parser::*;
 pub use attributes::*;
+pub use driver::MainstageParser;
+pub use ast::AstNode;

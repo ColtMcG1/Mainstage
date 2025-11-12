@@ -2,20 +2,15 @@
 WHITESPACE = _{ " " | "\t" | "\r\n" | "\n" }
 COMMENT = _{ "//" ~ (!"\n" ~ ANY)* ~ ("\n" | EOI) }
 
-// --- Top-Level Rules ---
+// --- Top-Level ---
 script = { SOI ~ statement* ~ EOI }
 
 // --- Statements ---
-statement = { return_statement | declaration | assignment | expression | include | import | COMMENT }
+statement = { return_statement | declaration | assignment | expression | include | import }
 
 return_statement = { "return" ~ expression }
-
 include = { "include" ~ string }
-import = { "import" ~ string ~ "as" ~ identifier }
-
-// --- Attributes ---
-attribute = { identifier }
-attributes = { "[" ~ attribute ~ ("," ~ attribute)* ~ "]" }
+import  = { "import" ~ string ~ "as" ~ identifier }
 
 // --- Declarations ---
 declaration = { workspace_decl | project_decl | stage_decl | task_decl }
@@ -24,7 +19,7 @@ workspace_decl = { attributes? ~ "workspace" ~ identifier ~ "{" ~ workspace_body
 workspace_body = { statement* }
 
 project_decl = { attributes? ~ "project" ~ identifier ~ "{" ~ project_body ~ "}" }
-project_body = { statement* }
+project_body  = { statement* }
 
 stage_decl = { attributes? ~ "stage" ~ identifier ~ "(" ~ arguments? ~ ")" ~ "{" ~ stage_body ~ "}" }
 stage_body = { statement* }
@@ -32,26 +27,43 @@ stage_body = { statement* }
 task_decl = { attributes? ~ "task" ~ identifier ~ "(" ~ arguments? ~ ")" ~ "{" ~ task_body ~ "}" }
 task_body = { statement* }
 
-// --- Assignments ---
+// --- Assignment ---
 assignment = { identifier ~ "=" ~ expression }
 
-// --- Expressions ---
-expression = { value | call_expression | identifier }
+// --- Operators / Expressions ---
+eq_op      = { "==" | "!=" }
+rel_op     = { "<=" | ">=" | "<" | ">" }
+add_op     = { "+" | "-" }
+mul_op     = { "*" | "/" }
+unary_op   = { "++" | "--" | "+" | "-" }
+
+expression               = { equality_expression }
+equality_expression       = { relational_expression ~ (eq_op ~ relational_expression)* }
+relational_expression     = { additive_expression ~ (rel_op ~ additive_expression)* }
+additive_expression       = { multiplicative_expression ~ (add_op ~ multiplicative_expression)* }
+multiplicative_expression = { unary_expression ~ (mul_op ~ unary_expression)* }
+unary_expression          = { (unary_op)* ~ postfix_expression }
+postfix_expression        = { primary_expression ~ (postfix_op)* }
+postfix_op                = { ("." ~ identifier) | ("[" ~ expression ~ "]") | "++" | "--" }
+primary_expression        = { call_expression | value | identifier | "(" ~ expression ~ ")" }
+
 call_expression = { identifier ~ "(" ~ arguments? ~ ")" }
 
-// --- Values ---
-value = { string | boolean | number | shell_string | array }
+// --- Arguments / Attributes ---
+parameter  = { expression }
+arguments  = { parameter ~ ("," ~ parameter)* }
 
-array = { "[" ~ (expression ~ ("," ~ expression)*)? ~ "]" }
-boolean = { "true" | "false" }
-number = { ASCII_DIGIT+ }
-string = { "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
+attribute  = { identifier }
+attributes = { "[" ~ attribute ~ ("," ~ attribute)* ~ "]" }
+
+// --- Values ---
+value        = { array | shell_string | string | boolean | number }
+array        = { "[" ~ (expression ~ ("," ~ expression)*)? ~ "]" }
+boolean      = { "true" | "false" }
+number       = { ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }
+string       = { "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
 shell_string = { shell_prefix ~ string }
 shell_prefix = { "sh" | "bash" | "zsh" | "pwsh" | "cmd" }
 
 // --- Identifiers ---
-identifier = { (ASCII_ALPHANUMERIC | "_" | "-" | ".")+ }
-
-// --- Arguments ---
-parameter = { expression }
-arguments = { parameter ~ ("," ~ parameter)* }
+identifier = { (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }

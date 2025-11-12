@@ -46,8 +46,8 @@ impl AstParser {
     /// * `script` - The script to be parsed.
     /// # Returns
     /// * `Ok(pest::iterators::Pairs)` if parsing is successful.
-    fn parse_script<'a>(script: &'a scripts::Script) -> Result<pest::iterators::Pairs<'a, parser::Rule>, ParserError> {
-        parser::MainstageParser::parse(parser::Rule::script, &script.content)
+    fn parse_script<'a>(script: &'a scripts::Script) -> Result<pest::iterators::Pairs<'a, parser::driver::Rule>, ParserError> {
+        parser::driver::MainstageParser::parse(parser::driver::Rule::script, &script.content)
             .map_err(|e| {
                 report!(
                     reports::Level::Error,
@@ -69,7 +69,7 @@ impl AstParser {
     /// * `Ok(parser::AstNode)` if AST construction is successful.
     /// * `Err(ParserError)` if AST construction fails.
     fn construct_ast(
-        rules: pest::iterators::Pairs<parser::Rule>,
+        rules: pest::iterators::Pairs<parser::driver::Rule>,
         script: &scripts::Script,
     ) -> Result<parser::AstNode<'static>, ParserError> {
         parser::AstNode::new(rules, script)

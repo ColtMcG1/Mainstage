@@ -15,6 +15,7 @@ pub struct BytecodeFunction {
 pub struct BytecodeModule {
     pub const_pool: Vec<IRConst>,
     pub functions: Vec<BytecodeFunction>,
+    pub name_to_global: HashMap<String, usize>,
 }
 
 fn push_u8(buf: &mut Vec<u8>, v: u8) { buf.push(v); }
@@ -69,8 +70,16 @@ fn encode_func(f: &IRFunction) -> BytecodeFunction {
                 }
                 IROpKind::Return => push_u8(&mut bf.code, Op::Return as u8),
                 IROpKind::Say => push_u8(&mut bf.code, Op::Say as u8),
+                IROpKind::Ask(argc) => {
+                    push_u8(&mut bf.code, Op::Ask as u8);
+                    push_u8(&mut bf.code, argc);
+                }
                 IROpKind::Read => push_u8(&mut bf.code, Op::Read as u8),
                 IROpKind::Write => push_u8(&mut bf.code, Op::Write as u8),
+                IROpKind::LoadMemberDyn(idx) => {
+                    push_u8(&mut bf.code, Op::LoadMemberDyn as u8);
+                    push_u32(&mut bf.code, idx);
+                }
                 IROpKind::NoOp => push_u8(&mut bf.code, Op::NoOp as u8),
             }
         }
@@ -91,6 +100,9 @@ pub fn emit_bytecode(module: &ModuleIR) -> BytecodeModule {
     let mut out = BytecodeModule {
         const_pool: module.const_pool.clone(),
         functions: Vec::new(),
+        name_to_global: module.globals.iter().enumerate()
+            .map(|(i, name)| (name.clone(), i))
+            .collect(),
     };
 
     for f in &module.functions {

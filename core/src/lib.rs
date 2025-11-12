@@ -15,11 +15,11 @@ use crate::semantic::*;
 pub mod reports;
 
 pub mod acyclic;
+pub mod codegen;
 pub mod parser;
+pub mod runtime;
 pub mod scripts;
 pub mod semantic;
-pub mod codegen;
-pub mod runtime;
 
 use std::rc::Rc;
 
@@ -111,12 +111,15 @@ impl Pipeline {
             return;
         }
 
-        let _ = self.execute().map(|_| {
-            // Execution successful.
-            println!("Execution completed successfully.");
-        }).map_err(|_| {
-            // Error reports are generated within execute().
-        });
+        let _ = self
+            .execute()
+            .map(|_| {
+                // Execution successful.
+                println!("Execution completed successfully.");
+            })
+            .map_err(|_| {
+                // Error reports are generated within execute().
+            });
     }
 
     /// Loads a script from the given path and stores it in the pipeline.
@@ -236,8 +239,7 @@ impl Pipeline {
                     report!(report);
                 })?;
             Ok(())
-        }
-        else {
+        } else {
             let report = reports::Report::new(
                 reports::Level::Error,
                 "No parser available for semantic analysis.".into(),
@@ -288,8 +290,7 @@ impl Pipeline {
             }
 
             Ok(())
-        }
-        else {
+        } else {
             let report = reports::Report::new(
                 reports::Level::Error,
                 "No parser or semantic analyzer available for acyclic analysis.".into(),
@@ -349,8 +350,8 @@ impl Pipeline {
     /// ```
     fn execute(&mut self) -> Result<(), ()> {
         if let Some(bytecode) = &self.ir {
-            return runtime::execute(bytecode).map_err(|op|
-                {
+            return runtime::execute(bytecode, self.script.as_ref().unwrap().path()).map_err(
+                |op| {
                     let report = reports::Report::new(
                         reports::Level::Error,
                         format!("Runtime error during execution at op: {:?}", op),
@@ -359,7 +360,7 @@ impl Pipeline {
                         None,
                     );
                     report!(report);
-                }
+                },
             );
         } else {
             let report = reports::Report::new(

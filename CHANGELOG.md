@@ -57,3 +57,7 @@
 - Added CLI dump stages for loader/parser/IR/DAG ([core/src/lib.rs](core/src/lib.rs), [cli/src/main.rs](cli/src/main.rs)).
 - Fixed date formatting & improved diagnostics formatting in parser & reports.
 - Added CHANGELOG.md ([CHANGELOG.md](CHANGELOG.md)) for tracking and compiling the changes made to the project.
+- Added member access support in grammar, parser, and AST ([core/src/grammar.pest](core/src/grammar.pest), [core/src/parser/node.rs](core/src/parser/node.rs)).
+- Added member access lowering in codegen ([core/src/codegen/lowering.rs](core/src/codegen/lowering.rs)).
+- Added member access opcode in runtime ([core/src/runtime/opcode.rs](core/src/runtime/opcode.rs)).
+- Added member access semantic checks in analyzer ([core/src/semantic/analyzer.rs](core/src/semantic/analyzer.rs)).

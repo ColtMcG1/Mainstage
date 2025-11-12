@@ -23,7 +23,7 @@ use std::rc::Rc;
 
 pub fn expand_includes(ast: &mut AstParser, script: Rc<script::Script>) -> Result<(), ()> {
     for node in ast.root.children.iter().cloned().collect::<Vec<_>>() {
-        if let crate::parser::node::AstType::Include { path } = &node.kind {
+        if let crate::parser::AstType::Include { path } = &node.kind {
             // Process the include directive
             if let Err(e) = process_include(&node, path, ast, script.clone()) {
                 report!(
@@ -50,7 +50,7 @@ pub fn expand_includes(ast: &mut AstParser, script: Rc<script::Script>) -> Resul
 /// * `Ok(())` if successful
 /// * `Err(String)` with an error message if failed.
 fn process_include(
-    node: &crate::parser::node::AstNode,
+    node: &crate::parser::AstNode,
     path: &str,
     ast: &mut AstParser,
     script: Rc<script::Script>,
@@ -134,8 +134,8 @@ fn parse_include_ast(script: &script::Script) -> Result<AstParser, String> {
 /// * `Err(String)` with an error message if failed.
 fn replace_include_node(
     ast: &mut AstParser,
-    include_node: &crate::parser::node::AstNode,
-    new_children: Vec<crate::parser::node::AstNode>,
+    include_node: &crate::parser::AstNode,
+    new_children: Vec<crate::parser::AstNode>,
 ) {
     if let Some(pos) = ast.root.children.iter().position(|n| n == include_node) {
         // Remove the include node

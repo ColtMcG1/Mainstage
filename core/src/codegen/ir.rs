@@ -12,6 +12,15 @@ pub enum IRConst {
     Null,
 }
 
+impl IRConst {
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            IRConst::Str(s) => Some(s),
+            _ => None,
+        }
+    }
+}
+
 pub type Label = u32;
 
 #[derive(Debug, Clone)]
@@ -27,8 +36,10 @@ pub enum IROpKind {
     Call(u32, u8),       // function id, argc
     Return,
     Say, 
-    Read, 
+    Ask(u8),             // Optional output string
+    Read,
     Write,
+    LoadMemberDyn(u32), // field index
     NoOp,
 }
 
@@ -59,6 +70,7 @@ pub struct ModuleIR {
     pub functions: Vec<IRFunction>,
     pub func_index: HashMap<String, u32>,       // full name
     pub plain_index: HashMap<String, u32>,      // plain (stage/task) name
+    pub workspace_projects: HashMap<String, Vec<String>>,
 }
 
 impl ModuleIR {
@@ -69,6 +81,7 @@ impl ModuleIR {
             functions: Vec::new(),
             func_index: HashMap::new(),
             plain_index: HashMap::new(),
+            workspace_projects: HashMap::new()
         }
     }
 

@@ -1,20 +1,7 @@
-task compute() {
-    return 42
-}
-
-stage app () {
-    result = compute()
-    say(compute())
-}
-
-project core_lib {
-
-}
-
 workspace demo_ws {
-    members = [core_lib]
-
-    default_project = members[0]
-
-    app()
+    test = [1,2,3]             // Define an array with three elements: 1,2,3
+    index1 = test[2] - test[1] // 3 - 2 = 1
+    say(test[0])               // Write "1" to console
+    say(test[index1])          // Write "2" to console
+    say(test[2])               // Write "3" to console
 }

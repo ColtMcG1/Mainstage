@@ -62,8 +62,8 @@ fn collect_rw_for_stmt(
         out.writes.insert(fq(scope, &key));
         collect_reads(scope, value_node, &mut out.reads);
     }
-    if let AstType::CallExpression { args, .. } = &stmt.kind {
-        for a in args {
+    if let AstType::CallExpression { arguments, .. } = &stmt.kind {
+        for a in arguments {
             collect_reads(scope, a, &mut out.reads);
         }
     }
@@ -76,10 +76,20 @@ fn collect_rw_for_stmt(
 // Walk value expressions to collect reads within this scope
 fn collect_reads(scope: &ScopeKind<'_>, node: &AstNode<'_>, reads: &mut HashSet<String>) {
     match &node.kind {
-        // Bare identifiers inside values are treated as referring to a key in the same scope
-        // e.g., default_project = members[0] reads "members" in workspace scope
         AstType::Identifier { name } => {
             reads.insert(fq(scope, name));
+        }
+        AstType::MemberAccess { target, member } => {
+            // Treat "a.b" as read of "stage:a.b"
+            if let AstType::Identifier { name: obj } = &target.kind {
+                if let AstType::Identifier { name: field } = &member.kind {
+                    reads.insert(format!("stage:{obj}.{field}"));
+                    return;
+                }
+            }
+            // Fallback: walk children
+            collect_reads(scope, target, reads);
+            collect_reads(scope, member, reads);
         }
         _ => {
             for c in &node.children {
