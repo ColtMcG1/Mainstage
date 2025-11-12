@@ -19,6 +19,8 @@ pub enum Op {
     Read = 0x71,
     Ask = 0x72,
     LoadMemberDyn = 0x80,
+    Index = 0x81,
+    Pop = 0x82,
     NoOp = 0xFF,
 }
 
@@ -43,6 +45,8 @@ impl Op {
             0x71 => Op::Read,
             0x72 => Op::Ask,
             0x80 => Op::LoadMemberDyn,
+            0x81 => Op::Index,
+            0x82 => Op::Pop,
             0xFF => Op::NoOp,
             _ => return None,
         })

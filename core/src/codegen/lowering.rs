@@ -281,11 +281,17 @@ fn emit_member_access_value(
                     for a in arguments {
                         let _ = emit_expr_value_in_scope(module, ops, "stage", base, a);
                     }
-                    ops.push(IROp { kind: IROpKind::Call(fid, arguments.len() as u8), span: target.span.clone() });
+                    ops.push(IROp {
+                        kind: IROpKind::Call(fid, arguments.len() as u8),
+                        span: target.span.clone(),
+                    });
                 }
                 if let Some(fq) = fq_for_member(module, base, field) {
                     let gid = module.intern_global(fq);
-                    ops.push(IROp { kind: IROpKind::LoadVar(gid), span: node.span.clone() });
+                    ops.push(IROp {
+                        kind: IROpKind::LoadVar(gid),
+                        span: node.span.clone(),
+                    });
                     return true;
                 }
             }
@@ -296,14 +302,23 @@ fn emit_member_access_value(
         if let AstType::Identifier { name: obj } = &target.kind {
             if let Some(fq) = fq_for_member(module, obj, field) {
                 let gid = module.intern_global(fq);
-                ops.push(IROp { kind: IROpKind::LoadVar(gid), span: node.span.clone() });
+                ops.push(IROp {
+                    kind: IROpKind::LoadVar(gid),
+                    span: node.span.clone(),
+                });
                 return true;
             }
             // Dynamic: treat identifier as variable holding object name
             let var_fq = format!("{scope_prefix}:{scope_name}.{obj}");
             let gid = module.intern_global(var_fq);
-            ops.push(IROp { kind: IROpKind::LoadVar(gid), span: target.span.clone() });
-            ops.push(IROp { kind: IROpKind::LoadMemberDyn(field_cidx), span: node.span.clone() });
+            ops.push(IROp {
+                kind: IROpKind::LoadVar(gid),
+                span: target.span.clone(),
+            });
+            ops.push(IROp {
+                kind: IROpKind::LoadMemberDyn(field_cidx),
+                span: node.span.clone(),
+            });
             return true;
         }
 
@@ -312,14 +327,20 @@ fn emit_member_access_value(
             let object = parts.last().unwrap();
             if let Some(fq) = fq_for_member(module, object, field) {
                 let gid = module.intern_global(fq);
-                ops.push(IROp { kind: IROpKind::LoadVar(gid), span: node.span.clone() });
+                ops.push(IROp {
+                    kind: IROpKind::LoadVar(gid),
+                    span: node.span.clone(),
+                });
                 return true;
             }
         }
 
         // Generic dynamic fallback: evaluate target as value then dynamic member
         if emit_expr_value_in_scope(module, ops, scope_prefix, scope_name, target) {
-            ops.push(IROp { kind: IROpKind::LoadMemberDyn(field_cidx), span: node.span.clone() });
+            ops.push(IROp {
+                kind: IROpKind::LoadMemberDyn(field_cidx),
+                span: node.span.clone(),
+            });
             return true;
         }
     }
@@ -338,6 +359,44 @@ fn emit_expr_value_in_scope(
     match &expr.kind {
         AstType::MemberAccess { .. } => {
             return emit_member_access_value(module, ops, scope_prefix, scope_name, expr);
+        }
+        AstType::Index { target, index } => {
+            // Evaluate target (array/value), then index (int), then index op.
+            if !emit_expr_value_in_scope(module, ops, scope_prefix, scope_name, target) {
+                return false;
+            }
+            if !emit_expr_value_in_scope(module, ops, scope_prefix, scope_name, index) {
+                return false;
+            }
+            ops.push(IROp {
+                kind: IROpKind::Index,
+                span: expr.span.clone(),
+            });
+            return true;
+        }
+        AstType::BinaryOp { op, left, right } => {
+            // Evaluate LHS, then RHS, then apply op
+            if !emit_expr_value_in_scope(module, ops, scope_prefix, scope_name, left) {
+                return false;
+            }
+            if !emit_expr_value_in_scope(module, ops, scope_prefix, scope_name, right) {
+                return false;
+            }
+            // Map operators; adjust if you have more than + - * /
+            use crate::parser::types::BinaryOperator;
+            let kind = match op {
+                BinaryOperator::Add => IROpKind::Add,
+                BinaryOperator::Sub => IROpKind::Sub,
+                BinaryOperator::Mul => IROpKind::Mul,
+                BinaryOperator::Div => IROpKind::Div,
+                // For comparisons, you’ll need new IR/VM ops; omit here.
+                _ => return false,
+            };
+            ops.push(IROp {
+                kind,
+                span: expr.span.clone(),
+            });
+            return true;
         }
         AstType::CallExpression { target, arguments } => {
             // Callee must be identifier
@@ -369,7 +428,15 @@ fn emit_expr_value_in_scope(
                     return false;
                 }
                 let argc = arguments.len() as u8;
-                if argc == 1 && !emit_expr_value_in_scope(module, ops, scope_prefix, scope_name, &arguments[0]) {
+                if argc == 1
+                    && !emit_expr_value_in_scope(
+                        module,
+                        ops,
+                        scope_prefix,
+                        scope_name,
+                        &arguments[0],
+                    )
+                {
                     return false;
                 }
                 ops.push(IROp {
@@ -460,18 +527,32 @@ fn emit_call_stmt(
     scope_name: &str,
     stmt: &AstNode<'_>,
 ) -> bool {
-    if let AstType::CallExpression { .. } = &stmt.kind {
-        // Lower as value-producing expression. Builtin say will consume its arg.
-        if emit_expr_value_in_scope(module, ops, scope_prefix, scope_name, stmt) {
-            // NOTE: Regular task calls leave their return value on the stack.
-            // If you want to discard it, add a Pop opcode and emit it here.
-            return true;
+    if let AstType::CallExpression { target, .. } = &stmt.kind {
+        // Lower call
+        if !emit_expr_value_in_scope(module, ops, scope_prefix, scope_name, stmt) {
+            return false;
         }
+        // Decide if we need to pop the result
+        let mut need_pop = true;
+        if let AstType::Identifier { name } = &target.kind {
+            let n = name.to_string();
+            // say/write produce no value to keep (unit)
+            if n == "say" || n == "write" {
+                need_pop = false;
+            }
+        }
+        if need_pop {
+            ops.push(IROp {
+                kind: IROpKind::Pop,
+                span: stmt.span.clone(),
+            });
+        }
+        return true;
     }
     false
 }
 
-// Lower call in value position (assignment RHS, return expr)fn emit_call_value(
+// Lower call in value position (assignment RHS, return expr)
 fn emit_call_value(
     module: &mut ModuleIR,
     ops: &mut Vec<IROp>,
@@ -683,8 +764,14 @@ fn lower_discover(
                     let serialized = linked_projects.join(",");
                     let cidx = module.intern_const(IRConst::Str(serialized));
                     let w_gid = module.intern_global(format!("workspace:{name}.projects"));
-                    ops.push(IROp { kind: IROpKind::LoadConst(cidx), span: node.span.clone() });
-                    ops.push(IROp { kind: IROpKind::StoreVar(w_gid), span: node.span.clone() });
+                    ops.push(IROp {
+                        kind: IROpKind::LoadConst(cidx),
+                        span: node.span.clone(),
+                    });
+                    ops.push(IROp {
+                        kind: IROpKind::StoreVar(w_gid),
+                        span: node.span.clone(),
+                    });
                 }
 
                 // 2) Prelude: ensure referenced objects are initialized (stage/project/workspace/task)
@@ -699,11 +786,20 @@ fn lower_discover(
                             let w_gid = module.intern_global(format!("workspace:{name}.projects"));
                             let dst_gid = module.intern_global(format!("{scope}:{obj}.projects"));
                             // Load from workspace, store into stage/task
-                            ops.push(IROp { kind: IROpKind::LoadVar(w_gid), span: node.span.clone() });
-                            ops.push(IROp { kind: IROpKind::StoreVar(dst_gid), span: node.span.clone() });
+                            ops.push(IROp {
+                                kind: IROpKind::LoadVar(w_gid),
+                                span: node.span.clone(),
+                            });
+                            ops.push(IROp {
+                                kind: IROpKind::StoreVar(dst_gid),
+                                span: node.span.clone(),
+                            });
                         }
                         if let Some(fid) = module.func_index.get(&format!("{scope}:init:{obj}")) {
-                            ops.push(IROp { kind: IROpKind::Call(*fid, 0), span: node.span.clone() });
+                            ops.push(IROp {
+                                kind: IROpKind::Call(*fid, 0),
+                                span: node.span.clone(),
+                            });
                         }
                     }
                 }
@@ -711,11 +807,18 @@ fn lower_discover(
                 // 3) Lower workspace body statements
                 emit_kv_ops("workspace", name, node, &order, module, &mut ops);
 
-                ops.push(IROp { kind: IROpKind::Return, span: node.span.clone() });
+                ops.push(IROp {
+                    kind: IROpKind::Return,
+                    span: node.span.clone(),
+                });
                 let fid = module.add_function(IRFunction {
                     name: fname,
                     params: vec![],
-                    blocks: vec![BasicBlock { label: 0, ops, next: vec![] }],
+                    blocks: vec![BasicBlock {
+                        label: 0,
+                        ops,
+                        next: vec![],
+                    }],
                 });
                 call_list.push(fid);
             }

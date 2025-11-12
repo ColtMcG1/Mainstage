@@ -40,6 +40,8 @@ pub enum IROpKind {
     Read,
     Write,
     LoadMemberDyn(u32), // field index
+    Index,              // pop index, then array; push element
+    Pop,                // pop and discard top of stack
     NoOp,
 }
 

@@ -207,6 +207,20 @@ impl<'a> Vm<'a> {
                         self.stack.push(Value::Null);
                     }
                 }
+                Op::Index => {
+                    let index_v = self.pop()?;
+                    let array_v = self.pop()?;
+                    let index = index_v.as_int().ok_or("Index: index must be an integer")? as usize;
+                    let array = array_v.as_array().ok_or("Index: value must be an array")?;
+                    if index >= array.len() {
+                        return Err(format!("Index: index {} out of bounds for array of length {}", index, array.len()));
+                    }
+                    let elem = array[index].clone();
+                    self.stack.push(elem);
+                }
+                Op::Pop => {
+                    self.pop()?;
+                }
                 Op::NoOp => {}
             }
         }
