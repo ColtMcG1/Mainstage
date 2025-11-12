@@ -1,74 +1,51 @@
 //! file: ./acyclic/edge.rs
-//! description: Module for representing edges in a directed acyclic graph (DAG).
-//! 
-//! This module provides functionality to create and manage edges within a DAG structure.
-//! 
-//! author: Colton McGraw <https://github.com/ColtMcG1>
-//! date: 2025/10/25
-//! license: See LICENSE file in repository root.
+//! Lightweight DAG edges (store IDs only) with an explicit kind.
 
-use crate::acyclic::node::*;
+/// Kind of DAG edge.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum EdgeKind {
+    /// Structural parent -> child (AST tree shape)
+    Structural,
+    /// Data dependency producer -> consumer (values used by Assignments/Calls)
+    Data,
+}
 
 /// Represents an edge in a directed acyclic graph (DAG).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct AcyclicEdge {
-    /// The source node of the edge.
-    pub source: AcyclicNode,
-    /// The target node of the edge.
-    pub target: AcyclicNode,
+    /// The source node id of the edge.
+    pub source: String,
+    /// The target node id of the edge.
+    pub target: String,
+    /// The kind of the edge.
+    pub kind: EdgeKind,
 }
 
 impl AcyclicEdge {
-    /// Creates a new `Edge`.
-    /// # Examples
-    /// ```
-    /// let edge = Edge::new(source_node, target_node);
-    /// ```
-    pub fn new(source: AcyclicNode, target: AcyclicNode) -> Self {
-        Self { source, target }
+    pub fn new_with_kind<S: Into<String>, T: Into<String>>(source: S, target: T, kind: EdgeKind) -> Self {
+        Self { source: source.into(), target: target.into(), kind }
     }
-
-    /// Returns the ID of the source node.
-    /// # Returns
-    /// A string slice representing the ID of the source node.
-    pub fn source_id(&self) -> &str {
-        &self.source.id
+    pub fn new_structural<S: Into<String>, T: Into<String>>(source: S, target: T) -> Self {
+        Self::new_with_kind(source, target, EdgeKind::Structural)
     }
-    /// Returns the ID of the target node.
-    /// # Returns
-    /// A string slice representing the ID of the target node.
-    pub fn target_id(&self) -> &str {
-        &self.target.id
+    pub fn new_data<S: Into<String>, T: Into<String>>(source: S, target: T) -> Self {
+        Self::new_with_kind(source, target, EdgeKind::Data)
     }
-
-    /// Checks if the edge is between the given source and target nodes.
-    /// # Arguments
-    /// * `source` - The source node.
-    /// * `target` - The target node.
-    /// # Returns
-    /// `true` if the edge is between the given source and target nodes, `false` otherwise.
-    pub fn is_between(&self, source: &AcyclicNode, target: &AcyclicNode) -> bool {
-        &self.source == source && &self.target == target
+    pub fn source_id(&self) -> &str { &self.source }
+    pub fn target_id(&self) -> &str { &self.target }
+    pub fn is_between_ids(&self, source_id: &str, target_id: &str) -> bool {
+        self.source == source_id && self.target == target_id
     }
-
-    /// Checks if the edge is a self-loop (i.e., source and target are the same).
-    /// # Returns
-    /// `true` if the edge is a self-loop, `false` otherwise.
-    pub fn is_self_loop(&self) -> bool {
-        self.source == self.target
-    }
-
-    /// Returns a new `Edge` that is the reverse of this edge.
-    /// # Returns
-    /// A new `Edge` with source and target swapped.
+    pub fn is_self_loop(&self) -> bool { self.source == self.target }
     pub fn reversed(&self) -> AcyclicEdge {
-        AcyclicEdge::new(self.target.clone(), self.source.clone())
+        AcyclicEdge::new_with_kind(self.target.clone(), self.source.clone(), self.kind)
     }
 }
 
 use std::fmt;
 impl fmt::Display for AcyclicEdge {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} -> {}", self.source.id, self.target.id)
+        let k = match self.kind { EdgeKind::Structural => "struct", EdgeKind::Data => "data" };
+        write!(f, "{} -[{}]-> {}", self.source, k, self.target)
     }
 }
