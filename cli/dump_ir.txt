@@ -126,7 +126,7 @@ BytecodeModule {
         },
     ],
     name_to_global: {
-        "workspace:demo_ws.index1": 1,
         "workspace:demo_ws.test": 0,
+        "workspace:demo_ws.index1": 1,
     },
 }
