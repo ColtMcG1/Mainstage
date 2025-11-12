@@ -115,7 +115,6 @@ impl Pipeline {
             .execute()
             .map(|_| {
                 // Execution successful.
-                println!("Execution completed successfully.");
             })
             .map_err(|_| {
                 // Error reports are generated within execute().

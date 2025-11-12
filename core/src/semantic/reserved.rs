@@ -3,7 +3,7 @@
 //! Reserved names for various semantic scopes.
 
 pub const RESERVED_WORKSPACE_MEMBERS: &[&str] = &[
-    "projects",
+    "projects", // reserved for workspace.projects
     // add more as needed
 ];
 

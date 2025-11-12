@@ -6,13 +6,6 @@ use std::borrow::Cow;
 
 use super::types::SymbolType;
 
-pub const RESERVED_WORKSPACE_MEMBERS: &[&str] = &["projects"];
-pub const RESERVED_PROJECT_MEMBERS: &[&str] = &[];
-pub const RESERVED_STAGE_MEMBERS: &[&str] = &[];
-pub const RESERVED_TASK_MEMBERS: &[&str] = &[];
-
-// ===== Symbol =====
-
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum SymbolKind {
     Variable,

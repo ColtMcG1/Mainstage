@@ -22,18 +22,28 @@ pub enum SymbolType {
     Void,
 }
 
-// Internal inference lattice used during analysis
+/// Internal inference lattice used during analysis. Not directly exposed.
+/// Represents the inferred type of an expression or symbol.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InferredType {
+    /// An integer type. A whole number.
     Int,
+    /// A boolean type. A true/false value.
     Bool,
+    /// A string type. A string of Unicode characters.
     Str,
+    /// An array type. An array of values. All elements are of the same type.
     Array,
+    /// A unit type. Represents a value that carries no information.
     Unit,
+    /// An unknown type. The type could not be inferred.
     Unknown,
 }
 
 impl InferredType {
+    /// Converts an `InferredType` to a `SymbolType`.
+    /// # Returns
+    /// - The corresponding `SymbolType`.
     pub fn to_symbol_type(self) -> SymbolType {
         match self {
             InferredType::Int => SymbolType::Integer,

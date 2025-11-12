@@ -10,6 +10,8 @@ use crate::semantic::types::{InferredType, SymbolType};
 use crate::semantic::inference as infer;
 use std::collections::{HashMap, HashSet};
 
+/// SemanticAnalyzer performs semantic analysis on the AST, building a symbol table and checking for semantic errors.
+/// 'a is the lifetime of the AST nodes being analyzed.
 pub struct SemanticAnalyzer<'a> {
     ast: AstParser,
     pub symbol_table: SymbolTable<'a>,
@@ -180,10 +182,14 @@ impl<'a> SemanticAnalyzer<'a> {
                 Ok(())
             }
             AstType::Identifier { name } => {
-                if crate::semantic::symbol::RESERVED_WORKSPACE_MEMBERS.contains(&name.as_ref())
-                    || crate::semantic::symbol::RESERVED_PROJECT_MEMBERS.contains(&name.as_ref())
-                    || crate::semantic::symbol::RESERVED_STAGE_MEMBERS.contains(&name.as_ref())
-                    || crate::semantic::symbol::RESERVED_TASK_MEMBERS.contains(&name.as_ref())
+                if [
+                    &crate::reserved::RESERVED_WORKSPACE_MEMBERS,
+                    &crate::reserved::RESERVED_PROJECT_MEMBERS,
+                    &crate::reserved::RESERVED_STAGE_MEMBERS,
+                    &crate::reserved::RESERVED_TASK_MEMBERS,
+                ]
+                .iter()
+                .any(|set| set.contains(&name.as_ref()))
                 {
                     if let Some(vec) = self.symbol_table.get_mut(name) {
                         for s in vec { s.increment_reference_count(); }
@@ -266,7 +272,7 @@ impl<'a> SemanticAnalyzer<'a> {
             AstType::Workspace { name } => {
                 let sym = Symbol::new_workspace(name.to_string().into(), SymbolScope::Global);
                 self.symbol_table.insert(sym)?;
-                for m in crate::semantic::symbol::RESERVED_WORKSPACE_MEMBERS {
+                for m in crate::reserved::RESERVED_WORKSPACE_MEMBERS {
                     self.insert_reserved_member(m);
                 }
                 for c in &mut node.children {
@@ -300,10 +306,14 @@ impl<'a> SemanticAnalyzer<'a> {
                         let rhs = &node.children[1];
 
                         // If assigning to a reserved member, do NOT attempt to insert a new symbol.
-                        let is_reserved = crate::semantic::symbol::RESERVED_WORKSPACE_MEMBERS.contains(&name.as_ref())
-                            || crate::semantic::symbol::RESERVED_PROJECT_MEMBERS.contains(&name.as_ref())
-                            || crate::semantic::symbol::RESERVED_STAGE_MEMBERS.contains(&name.as_ref())
-                            || crate::semantic::symbol::RESERVED_TASK_MEMBERS.contains(&name.as_ref());
+                        let is_reserved = [
+                            &crate::reserved::RESERVED_WORKSPACE_MEMBERS,
+                            &crate::reserved::RESERVED_PROJECT_MEMBERS,
+                            &crate::reserved::RESERVED_STAGE_MEMBERS,
+                            &crate::reserved::RESERVED_TASK_MEMBERS,
+                        ]
+                        .iter()
+                        .any(|set| set.contains(&name.as_ref()));
 
                         if is_reserved {
                             // Analyze RHS expression only.

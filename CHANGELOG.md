@@ -61,3 +61,13 @@
 - Added member access lowering in codegen ([core/src/codegen/lowering.rs](core/src/codegen/lowering.rs)).
 - Added member access opcode in runtime ([core/src/runtime/opcode.rs](core/src/runtime/opcode.rs)).
 - Added member access semantic checks in analyzer ([core/src/semantic/analyzer.rs](core/src/semantic/analyzer.rs)).
+
+
+### 11/11/2025 - DAG refactor, modular lowering, Index/Pop opcodes
+- Refactored DAG edge representation (IDs + EdgeKind) and added incoming adjacency ([core/src/acyclic/{edge.rs,node.rs,analyzer.rs}]).
+- Added data dependency edges for Assignment RHS and Call arguments (EdgeKind::Data).
+- Added CompactDag (index-based) + structural-only topo sort, cycle detection, DOT exporters.
+- Implemented new bytecode ops Index (0x81) and Pop (0x82) with VM handlers ([core/src/runtime/{opcode.rs,vm.rs}], [core/src/codegen/{ir.rs,bytecode.rs}]).
+- Lowering now emits Index for array subscripts and Pop for unused call results ([core/src/codegen/lowering/*]).
+- Modularized lowering into discover.rs, expr.rs, stmt.rs, mod.rs (replacing monolithic lowering.rs).
+- Updated IR dump and acyclic dump outputs ([cli/dump_ir.txt], [cli/dump_acyclic.txt]).
