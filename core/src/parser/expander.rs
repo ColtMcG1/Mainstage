@@ -25,7 +25,7 @@ pub fn expand_includes(ast: &mut AstParser, script: Rc<script::Script>) -> Resul
     for node in ast.root.children.iter().cloned().collect::<Vec<_>>() {
         if let crate::parser::AstType::Include { path } = &node.kind {
             // Process the include directive
-            if let Err(e) = process_include(&node, path, ast, script.clone()) {
+            if let Err(e) = process_include(&node, &path, ast, script.clone()) {
                 report!(
                     Level::Error,
                     e,

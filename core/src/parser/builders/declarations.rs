@@ -1,136 +1,110 @@
-use crate::parser::{ast::AstNode, driver::Rule};
+// Ensure decl bodies read a generic block { ... }.
+use crate::parser::{ast::AstNode, driver::Rule, types::AstType};
+use crate::parser::builders::expressions::{process_arguments_rule, process_attributes_rule};
 use crate::scripts::script::Script;
-use crate::parser::types::AstType;
-use crate::parser::builders::expressions::{process_attributes_rule, process_arguments_rule};
-use crate::parser::builders::utils::{null_node};
+
+fn collect_block<'a>(p: pest::iterators::Pair<'a, Rule>, script: &Script) -> Vec<AstNode<'a>> {
+    match p.as_rule() {
+        Rule::block => p.into_inner().map(|c| AstNode::process_node(c, script)).collect(),
+        _ => vec![],
+    }
+}
 
 pub(crate) fn process_declaration_rule<'a>(
     pair: pest::iterators::Pair<'a, Rule>,
     script: &Script,
 ) -> AstNode<'a> {
+    // declaration wraps the specific decl
     let node = pair.into_inner().next().unwrap();
     match node.as_rule() {
-        Rule::workspace_decl => process_workspace_decl_rule(node, script),
-        Rule::project_decl   => process_project_decl_rule(node, script),
-        Rule::stage_decl     => process_stage_decl_rule(node, script),
-        Rule::task_decl      => process_task_decl_rule(node, script),
-        _ => null_node(&node, script),
+        Rule::workspace_decl => process_workspace(node, script),
+        Rule::project_decl   => process_project(node, script),
+        Rule::stage_decl     => process_stage(node, script),
+        Rule::task_decl      => process_task(node, script),
+        _ => crate::parser::builders::utils::unhandled_rule(node, script),
     }
 }
 
-pub(crate) fn process_workspace_decl_rule<'a>(
-    pair: pest::iterators::Pair<'a, Rule>,
-    script: &Script,
-) -> AstNode<'a> {
+fn process_workspace<'a>(pair: pest::iterators::Pair<'a, Rule>, script: &Script) -> AstNode<'a> {
     let span = AstNode::convert_pest_span_to_span(pair.as_span());
     let location = AstNode::convert_pest_span_to_location(pair.as_span(), script);
-    let mut inner = pair.into_inner().peekable();
-    let attributes = if inner.peek().map(|p| p.as_rule()) == Some(Rule::attributes) {
-        process_attributes_rule(inner.next().unwrap(), script)
+    let mut it = pair.into_inner().peekable();
+    let attributes = if it.peek().map(|p| p.as_rule()) == Some(Rule::attributes) {
+        process_attributes_rule(it.next().unwrap(), script)
     } else { vec![] };
-    let name_pair = inner.next().expect("workspace name");
-    let name = name_pair.as_str();
-    let body_pair = inner.next().expect("workspace_body");
-    let children = body_pair.into_inner()
-        .map(|p| AstNode::process_node(p, script))
-        .collect();
+    let name = it.next().expect("workspace name").as_str();
+    let body = it.next().expect("workspace block");
     AstNode {
         id: AstNode::generate_id(),
         kind: AstType::Workspace { name: name.into() },
         span: Some(span),
         location: Some(location),
-        children,
+        children: collect_block(body, script),
         attributes,
     }
 }
 
-// New: project
-pub(crate) fn process_project_decl_rule<'a>(
-    pair: pest::iterators::Pair<'a, Rule>,
-    script: &Script,
-) -> AstNode<'a> {
+fn process_project<'a>(pair: pest::iterators::Pair<'a, Rule>, script: &Script) -> AstNode<'a> {
     let span = AstNode::convert_pest_span_to_span(pair.as_span());
     let location = AstNode::convert_pest_span_to_location(pair.as_span(), script);
-    let mut inner = pair.into_inner().peekable();
-    let attributes = if inner.peek().map(|p| p.as_rule()) == Some(Rule::attributes) {
-        process_attributes_rule(inner.next().unwrap(), script)
+    let mut it = pair.into_inner().peekable();
+    let attributes = if it.peek().map(|p| p.as_rule()) == Some(Rule::attributes) {
+        process_attributes_rule(it.next().unwrap(), script)
     } else { vec![] };
-    let name_pair = inner.next().expect("project name");
-    let name = name_pair.as_str();
-    let body_pair = inner.next().expect("project_body");
-    let children = body_pair.into_inner()
-        .map(|p| AstNode::process_node(p, script))
-        .collect();
+    let name = it.next().expect("project name").as_str();
+    let body = it.next().expect("project block");
     AstNode {
         id: AstNode::generate_id(),
         kind: AstType::Project { name: name.into() },
         span: Some(span),
         location: Some(location),
-        children,
+        children: collect_block(body, script),
         attributes,
     }
 }
 
-// New: stage
-pub(crate) fn process_stage_decl_rule<'a>(
-    pair: pest::iterators::Pair<'a, Rule>,
-    script: & Script,
-) -> AstNode<'a> {
+fn process_stage<'a>(pair: pest::iterators::Pair<'a, Rule>, script: &Script) -> AstNode<'a> {
     let span = AstNode::convert_pest_span_to_span(pair.as_span());
     let location = AstNode::convert_pest_span_to_location(pair.as_span(), script);
-    let mut inner = pair.into_inner().peekable();
-    let attributes = if inner.peek().map(|p| p.as_rule()) == Some(Rule::attributes) {
-        process_attributes_rule(inner.next().unwrap(), script)
+    let mut it = pair.into_inner().peekable();
+    let attributes = if it.peek().map(|p| p.as_rule()) == Some(Rule::attributes) {
+        process_attributes_rule(it.next().unwrap(), script)
     } else { vec![] };
-    let name_pair = inner.next().expect("stage name");
-    let name = name_pair.as_str();
-    // params
-    let params_pair = inner.next().expect("stage params list or )");
-    let params = if params_pair.as_rule() == Rule::arguments {
-        process_arguments_rule(params_pair, script)
-    } else { vec![] };
-    // body
-    let body_pair = inner.find(|p| p.as_rule() == Rule::stage_body).expect("stage body");
-    let children = body_pair.into_inner()
-        .map(|p| AstNode::process_node(p, script))
-        .collect();
+    let name = it.next().expect("stage name").as_str();
+    let mut params = Vec::new();
+    if it.peek().map(|p| p.as_rule()) == Some(Rule::arguments) {
+        params = process_arguments_rule(it.next().unwrap(), script);
+    }
+    let body = it.next().expect("stage block");
     AstNode {
         id: AstNode::generate_id(),
         kind: AstType::Stage { name: name.into(), params },
         span: Some(span),
         location: Some(location),
-        children,
+        children: collect_block(body, script),
         attributes,
     }
 }
 
-// New: task
-pub(crate) fn process_task_decl_rule<'a>(
-    pair: pest::iterators::Pair<'a, Rule>,
-    script: & Script,
-) -> AstNode<'a> {
+fn process_task<'a>(pair: pest::iterators::Pair<'a, Rule>, script: &Script) -> AstNode<'a> {
     let span = AstNode::convert_pest_span_to_span(pair.as_span());
     let location = AstNode::convert_pest_span_to_location(pair.as_span(), script);
-    let mut inner = pair.into_inner().peekable();
-    let attributes = if inner.peek().map(|p| p.as_rule()) == Some(Rule::attributes) {
-        process_attributes_rule(inner.next().unwrap(), script)
+    let mut it = pair.into_inner().peekable();
+    let attributes = if it.peek().map(|p| p.as_rule()) == Some(Rule::attributes) {
+        process_attributes_rule(it.next().unwrap(), script)
     } else { vec![] };
-    let name_pair = inner.next().expect("task name");
-    let name = name_pair.as_str();
-    let params_pair = inner.next().expect("task params or )");
-    let params = if params_pair.as_rule() == Rule::arguments {
-        process_arguments_rule(params_pair, script)
-    } else { vec![] };
-    let body_pair = inner.find(|p| p.as_rule() == Rule::task_body).expect("task body");
-    let children = body_pair.into_inner()
-        .map(|p| AstNode::process_node(p, script))
-        .collect();
+    let name = it.next().expect("task name").as_str();
+    let mut params = Vec::new();
+    if it.peek().map(|p| p.as_rule()) == Some(Rule::arguments) {
+        params = process_arguments_rule(it.next().unwrap(), script);
+    }
+    let body = it.next().expect("task block");
     AstNode {
         id: AstNode::generate_id(),
         kind: AstType::Task { name: name.into(), params },
         span: Some(span),
         location: Some(location),
-        children,
+        children: collect_block(body, script),
         attributes,
     }
 }

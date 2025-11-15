@@ -8,9 +8,13 @@ pub(crate) fn process_script_rule<'a>(
     let span = AstNode::convert_pest_span_to_span(pair.as_span());
     let location = AstNode::convert_pest_span_to_location(pair.as_span(), script);
     let mut children = Vec::new();
-    for p in pair.into_inner() {
-        if p.as_rule() == Rule::EOI { continue; }
-        children.push(AstNode::process_node(p, script));
+    for p in pair.clone().into_inner() {
+        // grammar: script -> item*
+        if p.as_rule() == Rule::item {
+            if let Some(inner) = p.into_inner().next() {
+                children.push(AstNode::process_node(inner, script));
+            }
+        }
     }
     AstNode {
         id: AstNode::generate_id(),

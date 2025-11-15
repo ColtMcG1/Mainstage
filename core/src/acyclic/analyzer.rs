@@ -101,7 +101,7 @@ impl DirectedAcyclicGraphAnalyzer {
                         }
                     }
                 }
-                AstType::CallExpression { target: _, arguments } => {
+                AstType::Call { target: _, arguments } => {
                     let mut producers = HashSet::new();
                     for arg in arguments {
                         collect_producers(arg, &mut producers);
@@ -131,15 +131,15 @@ impl DirectedAcyclicGraphAnalyzer {
                 // Core producers (keep these)
                 AstType::Identifier { .. }
                 | AstType::Index { .. }
-                | AstType::MemberAccess { .. }
-                | AstType::CallExpression { .. } => {
+                | AstType::Member { .. }
+                | AstType::Call { .. } => {
                     out.insert(expr.id.clone());
                 }
 
                 // Optional: treat literals as producers (comment out to suppress)
                 AstType::Number { .. }
-                | AstType::String { .. }
-                | AstType::Boolean { .. } => {
+                | AstType::Str { .. }
+                | AstType::Bool { .. } => {
                     // Uncomment if you want literal data edges:
                     // out.insert(expr.id.clone());
                 }

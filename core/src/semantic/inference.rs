@@ -25,7 +25,7 @@ pub fn unify(a: InferredType, b: InferredType) -> InferredType {
 /// Infer the type of a call expression based on builtins, stages, and tasks.
 pub fn infer_call_expr_type(an: &SemanticAnalyzer<'_>, node: &AstNode<'_>) -> Option<InferredType> {
     let (target, _args) = match &node.kind {
-        AstType::CallExpression { target, arguments } => (target, arguments),
+        AstType::Call { target, arguments } => (target, arguments),
         _ => return None,
     };
 
@@ -59,11 +59,11 @@ pub fn infer_call_expr_type(an: &SemanticAnalyzer<'_>, node: &AstNode<'_>) -> Op
 pub fn infer_expr_type(an: &SemanticAnalyzer<'_>, node: &AstNode<'_>) -> InferredType {
     match &node.kind {
         AstType::Number { .. } => InferredType::Int,
-        AstType::Boolean { .. } => InferredType::Bool,
-        AstType::String { .. } => InferredType::Str,
+        AstType::Bool { .. } => InferredType::Bool,
+        AstType::Str { .. } => InferredType::Str,
         AstType::Array => InferredType::Array,
         AstType::Null => InferredType::Unit,
-        AstType::CallExpression { .. } => infer_call_expr_type(an, node).unwrap_or(InferredType::Unknown),
+        AstType::Call { .. } => infer_call_expr_type(an, node).unwrap_or(InferredType::Unknown),
         AstType::Identifier { name } => {
             if let Some(syms) = an.symbol_table.get(name) {
                 match syms[0].symbol_type() {
@@ -119,21 +119,21 @@ pub fn infer_expr_type(an: &SemanticAnalyzer<'_>, node: &AstNode<'_>) -> Inferre
                     }
                 }
                 BinaryOperator::Eq
-                | BinaryOperator::Neq
+                | BinaryOperator::Ne
                 | BinaryOperator::Lt
                 | BinaryOperator::Gt
                 | BinaryOperator::Le
                 | BinaryOperator::Ge => InferredType::Bool,
             }
         }
-        AstType::MemberAccess { .. } => InferredType::Unknown,
+        AstType::Member { .. } => InferredType::Unknown,
         _ => InferredType::Unknown,
     }
 }
 
 pub fn infer_type(an: &SemanticAnalyzer<'_>, node: &AstNode<'_>) -> Result<SymbolType, ()> {
     match &node.kind {
-        AstType::CallExpression { .. } => {
+        AstType::Call { .. } => {
             let it = infer_call_expr_type(an, node).unwrap_or(InferredType::Unknown);
             match it {
                 InferredType::Unknown | InferredType::Unit => Ok(SymbolType::None),
@@ -148,8 +148,8 @@ pub fn infer_type(an: &SemanticAnalyzer<'_>, node: &AstNode<'_>) -> Result<Symbo
             }
         }
         AstType::Number { .. } => Ok(SymbolType::Integer),
-        AstType::Boolean { .. } => Ok(SymbolType::Boolean),
-        AstType::String { .. } => Ok(SymbolType::String),
+        AstType::Bool { .. } => Ok(SymbolType::Boolean),
+        AstType::Str { .. } => Ok(SymbolType::String),
         AstType::Array => {
             if node.children.is_empty() {
                 Ok(SymbolType::Array)
@@ -232,7 +232,7 @@ pub fn infer_type(an: &SemanticAnalyzer<'_>, node: &AstNode<'_>) -> Result<Symbo
                     }
                 }
                 BinaryOperator::Eq
-                | BinaryOperator::Neq
+                | BinaryOperator::Ne
                 | BinaryOperator::Lt
                 | BinaryOperator::Gt
                 | BinaryOperator::Le

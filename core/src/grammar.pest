@@ -1,57 +1,78 @@
-// --- Utility Rules ---
-WHITESPACE = _{ " " | "\t" | "\r\n" | "\n" }
-COMMENT = _{ "//" ~ (!"\n" ~ ANY)* ~ ("\n" | EOI) }
+// --- Lexical / Skipping ---
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" | COMMENT }
+COMMENT    = _{ "//" ~ (!"\n" ~ ANY)* ~ ("\n" | EOI) }
 
 // --- Top-Level ---
-script = { SOI ~ statement* ~ EOI }
+script = { SOI ~ item* ~ EOI }
+
+// Items are either declarations or statements (where statements can be blocks)
+item = { declaration | statement }
 
 // --- Statements ---
-statement = { return_statement | declaration | assignment | expression | include | import }
+statement = { terminated_statement | loop_stmt | block }
 
-return_statement = { "return" ~ expression }
-include = { "include" ~ string }
-import  = { "import" ~ string ~ "as" ~ identifier }
+terminated_statement = {
+    return_stmt
+  | include_stmt
+  | import_stmt
+  | assignment_stmt
+  | expression_stmt
+}
 
-// --- Declarations ---
-declaration = { workspace_decl | project_decl | stage_decl | task_decl }
+return_stmt     = { "return" ~ expression ~ ";" }
+include_stmt    = { "include" ~ string ~ ";" }
+import_stmt     = { "import" ~ string ~ "as" ~ identifier ~ ";" }
+assignment_stmt = { identifier ~ "=" ~ expression ~ ";" }
+expression_stmt = { expression ~ ";" }
 
-workspace_decl = { attributes? ~ "workspace" ~ identifier ~ "{" ~ workspace_body ~ "}" }
-workspace_body = { statement* }
+// --- Blocks ---
+block = { "{" ~ statement* ~ "}" }
 
-project_decl = { attributes? ~ "project" ~ identifier ~ "{" ~ project_body ~ "}" }
-project_body  = { statement* }
+// --- Declarations (no trailing semicolon) ---
+declaration   = { workspace_decl | project_decl | stage_decl | task_decl }
 
-stage_decl = { attributes? ~ "stage" ~ identifier ~ "(" ~ arguments? ~ ")" ~ "{" ~ stage_body ~ "}" }
-stage_body = { statement* }
+workspace_decl = { attributes? ~ "workspace" ~ identifier ~ block }
+project_decl   = { attributes? ~ "project"   ~ identifier ~ block }
+stage_decl     = { attributes? ~ "stage"     ~ identifier ~ "(" ~ arguments? ~ ")" ~ block }
+task_decl      = { attributes? ~ "task"      ~ identifier ~ "(" ~ arguments? ~ ")" ~ block }
 
-task_decl = { attributes? ~ "task" ~ identifier ~ "(" ~ arguments? ~ ")" ~ "{" ~ task_body ~ "}" }
-task_body = { statement* }
+// --- Loops (no trailing semicolon; body must be a block) ---
+loop_stmt    = { forin_stmt | for_stmt | while_stmt }
+forin_stmt   = { "for" ~ identifier ~ "in" ~ expression ~ block }
+while_stmt   = { "while" ~ "(" ~ expression ~ ")" ~ block }
+// Use assignment_expr (no trailing ';') in the for-header
+assignment_expr = { identifier ~ "=" ~ expression }
+for_stmt     = { "for" ~ "(" ~ assignment_expr? ~ ";" ~ expression? ~ ";" ~ assignment_expr? ~ ")" ~ block }
 
-// --- Assignment ---
-assignment = { identifier ~ "=" ~ expression }
-
-// --- Operators / Expressions ---
-eq_op      = { "==" | "!=" }
-rel_op     = { "<=" | ">=" | "<" | ">" }
-add_op     = { "+" | "-" }
-mul_op     = { "*" | "/" }
-unary_op   = { "++" | "--" | "+" | "-" }
-
-expression               = { equality_expression }
-equality_expression       = { relational_expression ~ (eq_op ~ relational_expression)* }
-relational_expression     = { additive_expression ~ (rel_op ~ additive_expression)* }
+// --- Expressions ---
+// Make calls/members/index postfix ops so chaining works: obj.fn(a).x[i]++.
+expression                = { equality_expression }
+equality_expression       = { relational_expression ~ (eq_op  ~ relational_expression)* }
+relational_expression     = { additive_expression   ~ (rel_op ~ additive_expression)* }
 additive_expression       = { multiplicative_expression ~ (add_op ~ multiplicative_expression)* }
-multiplicative_expression = { unary_expression ~ (mul_op ~ unary_expression)* }
+multiplicative_expression = { unary_expression      ~ (mul_op ~ unary_expression)* }
 unary_expression          = { (unary_op)* ~ postfix_expression }
-postfix_expression        = { primary_expression ~ (postfix_op)* }
-postfix_op                = { ("." ~ identifier) | ("[" ~ expression ~ "]") | "++" | "--" }
-primary_expression        = { call_expression | value | identifier | "(" ~ expression ~ ")" }
 
-call_expression = { identifier ~ "(" ~ arguments? ~ ")" }
+postfix_expression = { primary_expression ~ (postfix_op)* }
+postfix_op = {
+      "(" ~ arguments? ~ ")"        // call
+    | "." ~ identifier              // member
+    | "[" ~ expression ~ "]"        // index
+    | "++"                          // postfix inc
+    | "--"                          // postfix dec
+}
+
+primary_expression = { value | identifier | "(" ~ expression ~ ")" }
+
+eq_op    = { "==" | "!=" }
+rel_op   = { "<=" | ">=" | "<" | ">" }
+add_op   = { "+" | "-" }
+mul_op   = { "*" | "/" }
+unary_op = { "++" | "--" | "+" | "-" }
 
 // --- Arguments / Attributes ---
 parameter  = { expression }
-arguments  = { parameter ~ ("," ~ parameter)* }
+arguments  = { parameter ~ ("," ~ parameter)* ~ ","? }   // trailing comma ok
 
 attribute  = { identifier }
 attributes = { "[" ~ attribute ~ ("," ~ attribute)* ~ "]" }
@@ -66,4 +87,4 @@ shell_string = { shell_prefix ~ string }
 shell_prefix = { "sh" | "bash" | "zsh" | "pwsh" | "cmd" }
 
 // --- Identifiers ---
-identifier = { (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+identifier = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }

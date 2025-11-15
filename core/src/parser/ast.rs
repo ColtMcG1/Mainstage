@@ -1,9 +1,10 @@
-use std::borrow::Cow;
+use crate::parser::builders;
+use crate::parser::driver::Rule;
+use crate::parser::types::AstType;
+use crate::report;
 use crate::reports::*;
 use crate::scripts::script::Script;
-use crate::parser::types::AstType;
-use crate::parser::driver::Rule;
-use crate::parser::builders;
+use std::borrow::Cow;
 
 #[derive(Clone)]
 pub struct AstNode<'a> {
@@ -17,8 +18,31 @@ pub struct AstNode<'a> {
 
 impl<'a> AstNode<'a> {
     pub fn new(pairs: pest::iterators::Pairs<'a, Rule>, script: &Script) -> Result<Self, ()> {
-        if pairs.clone().count() == 0 { return Err(()); }
-        Ok(Self::process_node(pairs.into_iter().next().unwrap(), script))
+        if pairs.clone().count() == 0 {
+            return Err(());
+        }
+        Ok(Self::process_node(
+            pairs.into_iter().next().unwrap(),
+            script,
+        ))
+    }
+
+    pub(crate) fn null() -> Self {
+        report!(
+            report::Level::Warning,
+            "Created null AstNode".into(),
+            Some("parser.ast".into()),
+            None,
+            None
+        );
+        AstNode {
+            id: AstNode::generate_id(),
+            kind: AstType::Null,
+            span: None,
+            location: None,
+            children: vec![],
+            attributes: vec![],
+        }
     }
 
     pub(crate) fn generate_id() -> String {
@@ -38,12 +62,14 @@ impl<'a> AstNode<'a> {
     ) -> locations::Location<'static> {
         let span = Self::convert_pest_span_to_span(span);
         match &script.location(span.start) {
-            Some(loc) => loc.clone()
+            Some(loc) => loc
+                .clone()
                 .with_file(Cow::Owned(script.path().to_string_lossy().into()))
                 .into_owned(),
             None => locations::Location {
                 file: Cow::Owned(script.path().to_string_lossy().into()),
-                line: 0, column: 0,
+                line: 0,
+                column: 0,
             },
         }
     }
@@ -51,20 +77,20 @@ impl<'a> AstNode<'a> {
     // Central dispatcher (thin): forwards to builders
     pub(crate) fn process_node(pair: pest::iterators::Pair<'a, Rule>, script: &Script) -> Self {
         match pair.as_rule() {
-            Rule::script            => builders::script::process_script_rule(pair, script),
-            Rule::statement         => builders::statements::process_statement_rule(pair, script),
-            Rule::workspace_decl
-            | Rule::project_decl
-            | Rule::stage_decl
-            | Rule::task_decl       => builders::declarations::process_declaration_rule(pair, script),
-            Rule::assignment        => builders::expressions::process_assignment_rule(pair, script),
-            Rule::expression        => builders::expressions::process_expression_rule(pair, script),
-            Rule::call_expression   => builders::expressions::process_call_expression_rule(pair, script),
-            Rule::value             => builders::values::process_value_rule(pair, script),
-            Rule::identifier        => builders::expressions::process_identifier_rule(pair, script),
-            Rule::EOI               => builders::utils::null_silent(pair, script), // ignore end-of-input
-            _                       => builders::utils::fallback_unhandled(pair, script),
+            Rule::script      => builders::script::process_script_rule(pair, script),
+            Rule::item        => Self::process_item(pair, script),
+            Rule::statement   => builders::statements::process_statement_rule(pair, script),
+            Rule::declaration => builders::declarations::process_declaration_rule(pair, script),
+            
+            // Fallback for silent nulls and unhandled
+            _                 => builders::utils::unhandled_rule(pair, script),
         }
+    }
+
+    fn process_item(pair: pest::iterators::Pair<'a, Rule>, script: &Script) -> Self {
+        let mut inner = pair.into_inner();
+        assert!(inner.len() == 1); // exactly one child per rule
+        Self::process_node(inner.next().unwrap(), script)
     }
 
     pub fn into_lifetime(self) -> AstNode<'static> {
@@ -73,7 +99,11 @@ impl<'a> AstNode<'a> {
             kind: self.kind.into_lifetime(),
             span: self.span,
             location: self.location.map(|l| l.into_owned()),
-            children: self.children.into_iter().map(|c| c.into_lifetime()).collect(),
+            children: self
+                .children
+                .into_iter()
+                .map(|c| c.into_lifetime())
+                .collect(),
             attributes: self.attributes.into_iter().map(|a| a.clone()).collect(),
         }
     }
@@ -92,7 +122,10 @@ impl<'a> AstNode<'a> {
 
 impl<'a> PartialEq for AstNode<'a> {
     fn eq(&self, other: &Self) -> bool {
-        self.kind == other.kind && self.span == other.span && self.location == other.location && self.children == other.children
+        self.kind == other.kind
+            && self.span == other.span
+            && self.location == other.location
+            && self.children == other.children
     }
 }
 

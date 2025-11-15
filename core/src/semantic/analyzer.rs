@@ -5,9 +5,9 @@
 use crate::parser::*;
 use crate::report;
 use crate::reports::*;
-use crate::semantic::{Symbol, SymbolKind, SymbolScope, SymbolTable};
-use crate::semantic::types::{InferredType, SymbolType};
 use crate::semantic::inference as infer;
+use crate::semantic::types::{InferredType, SymbolType};
+use crate::semantic::{Symbol, SymbolKind, SymbolScope, SymbolTable};
 use std::collections::{HashMap, HashSet};
 
 /// SemanticAnalyzer performs semantic analysis on the AST, building a symbol table and checking for semantic errors.
@@ -29,6 +29,7 @@ impl<'a> SemanticAnalyzer<'a> {
             task_returns: HashMap::new(),
             builtin_funcs: ["say", "ask", "read", "write"].into_iter().collect(),
         };
+        analyzer.predeclare_top_level();
         analyzer.analyze()?;
         Ok(analyzer)
     }
@@ -40,11 +41,57 @@ impl<'a> SemanticAnalyzer<'a> {
         matches!(name, "read" | "ask")
     }
 
+    fn predeclare_top_level(&mut self) {
+        for child in &self.ast.root().children {
+            match &child.kind {
+                AstType::Workspace { name } => {
+                    if !self.symbol_table.exists(name) {
+                        let _ = self.symbol_table.insert(Symbol::new_workspace(
+                            name.to_string().into(),
+                            SymbolScope::Global,
+                        ));
+                    }
+                }
+                AstType::Project { name } => {
+                    if !self.symbol_table.exists(name) {
+                        let _ = self.symbol_table.insert(Symbol::new_project(
+                            name.to_string().into(),
+                            SymbolScope::Global,
+                        ));
+                    }
+                }
+                AstType::Stage { name, .. } => {
+                    if !self.symbol_table.exists(name) {
+                        let _ = self.symbol_table.insert(Symbol::new_stage(
+                            name.to_string().into(),
+                            SymbolScope::Global,
+                        ));
+                    }
+                }
+                AstType::Task { name, .. } => {
+                    if !self.symbol_table.exists(name) {
+                        let _ = self.symbol_table.insert(Symbol::new_task(
+                            name.to_string().into(),
+                            SymbolScope::Global,
+                        ));
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
     fn analyze(&mut self) -> Result<(), ()> {
         let root_clone = self.ast.root.clone();
         let mut children = root_clone.children.clone();
         if children.is_empty() {
-            report!(Level::Error, "The AST is empty. Nothing to analyze.".into(), Some("SemanticAnalyzer".into()), None, None);
+            report!(
+                Level::Error,
+                "The AST is empty. Nothing to analyze.".into(),
+                Some("SemanticAnalyzer".into()),
+                None,
+                None
+            );
             return Err(());
         }
 
@@ -59,21 +106,38 @@ impl<'a> SemanticAnalyzer<'a> {
             match &node.kind {
                 AstType::Workspace { .. } => workspace_id = Some(node.clone()),
                 AstType::Project { .. } | AstType::Stage { .. } => {
-                    if has_entrypoint_attr(node) { entrypoint_ids.push(node.clone()); }
+                    if has_entrypoint_attr(node) {
+                        entrypoint_ids.push(node.clone());
+                    }
                 }
                 _ => {}
             }
         }
 
         if entrypoint_ids.len() > 1 {
-            report!(Level::Critical, format!("Multiple entrypoints specified: {:?}. Only one entrypoint is allowed.", entrypoint_ids), Some("SemanticAnalyzer".into()), None, None);
+            report!(
+                Level::Critical,
+                format!(
+                    "Multiple entrypoints specified: {:?}. Only one entrypoint is allowed.",
+                    entrypoint_ids
+                ),
+                Some("SemanticAnalyzer".into()),
+                None,
+                None
+            );
             return Err(());
         } else if entrypoint_ids.len() == 1 {
             self.entry_point = entrypoint_ids[0].clone();
         } else if let Some(ws_id) = workspace_id.clone() {
             self.entry_point = ws_id;
         } else {
-            report!(Level::Critical, "No entrypoint or workspace found in the AST.".into(), Some("SemanticAnalyzer".into()), None, None);
+            report!(
+                Level::Critical,
+                "No entrypoint or workspace found in the AST.".into(),
+                Some("SemanticAnalyzer".into()),
+                None,
+                None
+            );
             return Err(());
         }
 
@@ -101,10 +165,16 @@ impl<'a> SemanticAnalyzer<'a> {
     fn infer_task_return_types(&mut self, node: &AstNode<'_>) {
         match &node.kind {
             AstType::Task { name, .. } => {
-                let ty = self.infer_return_type_in_task(node).unwrap_or(InferredType::Unit);
+                let ty = self
+                    .infer_return_type_in_task(node)
+                    .unwrap_or(InferredType::Unit);
                 self.task_returns.insert(name.to_string(), ty);
             }
-            _ => for c in &node.children { self.infer_task_return_types(c); }
+            _ => {
+                for c in &node.children {
+                    self.infer_task_return_types(c);
+                }
+            }
         }
     }
 
@@ -112,15 +182,26 @@ impl<'a> SemanticAnalyzer<'a> {
         let mut acc: Option<InferredType> = None;
         self.walk_returns(task_node, &mut |expr| {
             let t = infer::infer_expr_type(self, expr);
-            acc = Some(match acc { None => t, Some(prev) => infer::unify(prev, t) });
+            acc = Some(match acc {
+                None => t,
+                Some(prev) => infer::unify(prev, t),
+            });
         });
         acc
     }
 
     fn walk_returns<F: FnMut(&AstNode<'_>)>(&self, node: &AstNode<'_>, f: &mut F) {
         match &node.kind {
-            AstType::Return => { if let Some(expr) = node.children.get(0) { f(expr); } }
-            _ => for c in &node.children { self.walk_returns(c, f); }
+            AstType::Return => {
+                if let Some(expr) = node.children.get(0) {
+                    f(expr);
+                }
+            }
+            _ => {
+                for c in &node.children {
+                    self.walk_returns(c, f);
+                }
+            }
         }
     }
 
@@ -128,12 +209,16 @@ impl<'a> SemanticAnalyzer<'a> {
     pub(crate) fn is_stage_name(&self, name: &str) -> bool {
         if let Some(syms) = self.symbol_table.get(name) {
             syms.iter().any(|s| s.kind() == &SymbolKind::Stage)
-        } else { false }
+        } else {
+            false
+        }
     }
     pub(crate) fn is_task_name(&self, name: &str) -> bool {
         if let Some(syms) = self.symbol_table.get(name) {
             syms.iter().any(|s| s.kind() == &SymbolKind::Task)
-        } else { false }
+        } else {
+            false
+        }
     }
 
     fn infer_type(&self, node: &AstNode) -> Result<SymbolType, ()> {
@@ -142,10 +227,10 @@ impl<'a> SemanticAnalyzer<'a> {
 
     fn analyze_expression(&mut self, node: &AstNode<'a>) -> Result<(), ()> {
         match &node.kind {
-            AstType::CallExpression { .. } => self.analyze_call(node, true),
-            AstType::MemberAccess { target, member } => {
+            AstType::Call { .. } => self.analyze_call(node, true),
+            AstType::Member { target, member } => {
                 // If target is a stage call, allow it (no “cannot be used” error)
-                if let AstType::CallExpression { target , .. } = &target.kind {
+                if let AstType::Call { target, .. } = &target.kind {
                     if let AstType::Identifier { name: stage_name } = &target.kind {
                         if self.is_stage_name(stage_name) {
                             // Mark stage referenced
@@ -157,7 +242,7 @@ impl<'a> SemanticAnalyzer<'a> {
                                 }
                             }
                             // Analyze call args
-                            if let AstType::CallExpression { arguments, .. } = &target.kind {
+                            if let AstType::Call { arguments, .. } = &target.kind {
                                 for a in arguments {
                                     self.analyze_expression(a)?;
                                 }
@@ -192,7 +277,9 @@ impl<'a> SemanticAnalyzer<'a> {
                 .any(|set| set.contains(&name.as_ref()))
                 {
                     if let Some(vec) = self.symbol_table.get_mut(name) {
-                        for s in vec { s.increment_reference_count(); }
+                        for s in vec {
+                            s.increment_reference_count();
+                        }
                     }
                     return Ok(());
                 }
@@ -235,7 +322,7 @@ impl<'a> SemanticAnalyzer<'a> {
                 }
                 Ok(())
             }
-            AstType::String { value } => {
+            AstType::Str { value } => {
                 if value.is_empty() {
                     report!(
                         Level::Error,
@@ -261,7 +348,7 @@ impl<'a> SemanticAnalyzer<'a> {
                 }
                 Ok(())
             }
-            AstType::Boolean { .. } | AstType::Null | AstType::ShellCommand { .. } => Ok(()),
+            AstType::Bool { .. } | AstType::Null | AstType::ShellCmd { .. } => Ok(()),
             _ => Ok(()),
         }
     }
@@ -270,8 +357,10 @@ impl<'a> SemanticAnalyzer<'a> {
     fn analyze_node(&mut self, node: &mut AstNode<'a>) -> Result<(), ()> {
         match &node.kind {
             AstType::Workspace { name } => {
-                let sym = Symbol::new_workspace(name.to_string().into(), SymbolScope::Global);
-                self.symbol_table.insert(sym)?;
+                if !self.symbol_table.exists(name) {
+                    let sym = Symbol::new_workspace(name.to_string().into(), SymbolScope::Global);
+                    let _ = self.symbol_table.insert(sym);
+                }
                 for m in crate::reserved::RESERVED_WORKSPACE_MEMBERS {
                     self.insert_reserved_member(m);
                 }
@@ -280,22 +369,28 @@ impl<'a> SemanticAnalyzer<'a> {
                 }
             }
             AstType::Project { name } => {
-                let sym = Symbol::new_project(name.to_string().into(), SymbolScope::Global);
-                self.symbol_table.insert(sym)?;
+                if !self.symbol_table.exists(name) {
+                    let sym = Symbol::new_project(name.to_string().into(), SymbolScope::Global);
+                    let _ = self.symbol_table.insert(sym);
+                }
                 for c in &mut node.children {
                     self.analyze_node(c)?;
                 }
             }
             AstType::Stage { name, .. } => {
-                let sym = Symbol::new_stage(name.to_string().into(), SymbolScope::Global);
-                self.symbol_table.insert(sym)?;
+                if !self.symbol_table.exists(name) {
+                    let sym = Symbol::new_stage(name.to_string().into(), SymbolScope::Global);
+                    let _ = self.symbol_table.insert(sym);
+                }
                 for c in &mut node.children {
                     self.analyze_node(c)?;
                 }
             }
             AstType::Task { name, .. } => {
-                let sym = Symbol::new_task(name.to_string().into(), SymbolScope::Global);
-                self.symbol_table.insert(sym)?;
+                if !self.symbol_table.exists(name) {
+                    let sym = Symbol::new_task(name.to_string().into(), SymbolScope::Global);
+                    let _ = self.symbol_table.insert(sym);
+                }
                 for c in &mut node.children {
                     self.analyze_node(c)?;
                 }
@@ -330,7 +425,11 @@ impl<'a> SemanticAnalyzer<'a> {
                             }
                         } else {
                             let ty = self.infer_type(rhs).unwrap_or(SymbolType::None);
-                            let var_sym = Symbol::new_variable(name.to_string().into(), ty, SymbolScope::Global);
+                            let var_sym = Symbol::new_variable(
+                                name.to_string().into(),
+                                ty,
+                                SymbolScope::Global,
+                            );
                             // Ignore duplicate error silently (do not emit duplicate for re-assignment).
                             let _ = self.symbol_table.insert(var_sym);
                             self.analyze_expression(rhs)?;
@@ -346,7 +445,7 @@ impl<'a> SemanticAnalyzer<'a> {
                     }
                 }
             }
-            AstType::CallExpression { .. } => {
+            AstType::Call { .. } => {
                 // Statement context
                 self.analyze_call(node, false)?;
             }
@@ -356,12 +455,12 @@ impl<'a> SemanticAnalyzer<'a> {
                 }
             }
             AstType::Identifier { .. }
-            | AstType::String { .. }
+            | AstType::Str { .. }
             | AstType::Number { .. }
-            | AstType::Boolean { .. }
+            | AstType::Bool { .. }
             | AstType::Array
             | AstType::Null
-            | AstType::ShellCommand { .. } => {
+            | AstType::ShellCmd { .. } => {
                 self.analyze_expression(node)?;
             }
             AstType::Include { .. } | AstType::Import { .. } => {
@@ -381,7 +480,7 @@ impl<'a> SemanticAnalyzer<'a> {
     // New helper: in_expression determines whether stage usage is illegal
     fn analyze_call(&mut self, node: &AstNode<'a>, in_expression: bool) -> Result<(), ()> {
         let (target, arguments) = match &node.kind {
-            AstType::CallExpression { target, arguments } => (target, arguments),
+            AstType::Call { target, arguments } => (target, arguments),
             _ => return Ok(()),
         };
 
@@ -441,7 +540,10 @@ impl<'a> SemanticAnalyzer<'a> {
             if !in_expression && self.is_value_builtin(name) {
                 report!(
                     Level::Warning,
-                    format!("Return value of builtin '{}' is discarded (not assigned).", name),
+                    format!(
+                        "Return value of builtin '{}' is discarded (not assigned).",
+                        name
+                    ),
                     Some("SemanticAnalyzer".into()),
                     node.span.clone(),
                     node.location.clone()
@@ -455,7 +557,10 @@ impl<'a> SemanticAnalyzer<'a> {
             if in_expression {
                 report!(
                     Level::Error,
-                    format!("Stage '{}' returns no value; cannot be used in expression.", name),
+                    format!(
+                        "Stage '{}' returns no value; cannot be used in expression.",
+                        name
+                    ),
                     Some("SemanticAnalyzer".into()),
                     node.span.clone(),
                     node.location.clone()
@@ -494,17 +599,23 @@ impl<'a> SemanticAnalyzer<'a> {
 
             // Determine return type
             let ret_ty = self.task_returns.get(name);
-            let returns_value = matches!(ret_ty, Some(InferredType::Str)
-                                      | Some(InferredType::Int)
-                                      | Some(InferredType::Bool)
-                                      | Some(InferredType::Array)
-                                      | Some(InferredType::Unit));
+            let returns_value = matches!(
+                ret_ty,
+                Some(InferredType::Str)
+                    | Some(InferredType::Int)
+                    | Some(InferredType::Bool)
+                    | Some(InferredType::Array)
+                    | Some(InferredType::Unit)
+            );
 
             // If used as bare statement and returns a value, warn
             if !in_expression && returns_value {
                 report!(
                     Level::Warning,
-                    format!("Return value of task '{}' is discarded (not assigned).", name),
+                    format!(
+                        "Return value of task '{}' is discarded (not assigned).",
+                        name
+                    ),
                     Some("SemanticAnalyzer".into()),
                     node.span.clone(),
                     node.location.clone()
@@ -584,12 +695,18 @@ impl<'a> SemanticAnalyzer<'a> {
 
     fn insert_reserved_member(&mut self, name: &str) {
         if !self.symbol_table.exists(name) {
-            let sym = Symbol::new_variable(name.to_string().into(), SymbolType::Array, SymbolScope::Global)
-                .with_reserved(); // ensure you have a builder or set a flag; if not, remove this line.
+            let sym = Symbol::new_variable(
+                name.to_string().into(),
+                SymbolType::Array,
+                SymbolScope::Global,
+            )
+            .with_reserved(); // ensure you have a builder or set a flag; if not, remove this line.
             let _ = self.symbol_table.insert(sym);
         }
         if let Some(vec) = self.symbol_table.get_mut(name) {
-            for s in vec { s.increment_reference_count(); }
+            for s in vec {
+                s.increment_reference_count();
+            }
         }
     }
 }

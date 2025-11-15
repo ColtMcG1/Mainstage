@@ -71,3 +71,18 @@
 - Lowering now emits Index for array subscripts and Pop for unused call results ([core/src/codegen/lowering/*]).
 - Modularized lowering into discover.rs, expr.rs, stmt.rs, mod.rs (replacing monolithic lowering.rs).
 - Updated IR dump and acyclic dump outputs ([cli/dump_ir.txt], [cli/dump_acyclic.txt]).
+
+### 11/12/2025 - Init-on-first-reference, Ref values, and fixes
+- Runtime/VM
+  - Added init-on-first-reference: dereferencing a Ref triggers {scope}:{name}::init once.
+  - Preallocated/auto-resizing globals; safe load/store helpers to avoid OOB panics.
+  - Built local function index in VM for init lookups.
+  - New opcode handler: LoadRefMember (resolves refs to globals).
+- IR/Codegen
+  - Added IRConst::Ref and IROpKind::LoadRefMember.
+  - Workspace projects now stores Array<Ref{scope:"project", object:name}>.
+  - Member access lowering prefers LoadRefMember for variables/expressions yielding refs.
+- Parser
+  - Fixed number parsing by trimming tokens before parse; added debug logging removal readiness.
+- Sample
+  - say(test1) prints project name; say(test1.test) now resolves (after auto-init).

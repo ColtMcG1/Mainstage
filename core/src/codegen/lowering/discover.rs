@@ -19,9 +19,18 @@ fn has_attr(node: &AstNode<'_>, key: &str) -> bool {
 // Resolve the function id for a given scope node (after functions are added)
 fn func_id_for_node(module: &ModuleIR, node: &AstNode<'_>) -> Option<u32> {
     match &node.kind {
-        AstType::Stage { name, .. } => module.func_index.get(&format!("stage:init:{name}")).copied(),
-        AstType::Project { name, .. } => module.func_index.get(&format!("project:init:{name}")).copied(),
-        AstType::Workspace { name, .. } => module.func_index.get(&format!("workspace:init:{name}")).copied(),
+        AstType::Stage { name, .. } => module
+            .func_index
+            .get(&format!("stage:init:{name}"))
+            .copied(),
+        AstType::Project { name, .. } => module
+            .func_index
+            .get(&format!("project:init:{name}"))
+            .copied(),
+        AstType::Workspace { name, .. } => module
+            .func_index
+            .get(&format!("workspace:init:{name}"))
+            .copied(),
         _ => None,
     }
 }
@@ -31,7 +40,11 @@ fn find_entrypoint_node<'a>(root: &'a AstNode<'a>) -> Option<&'a AstNode<'a>> {
     let mut first_workspace: Option<&AstNode> = None;
     let mut explicit: Option<&AstNode> = None;
 
-    fn walk<'a>(n: &'a AstNode<'a>, first_ws: &mut Option<&'a AstNode<'a>>, explicit: &mut Option<&'a AstNode<'a>>) {
+    fn walk<'a>(
+        n: &'a AstNode<'a>,
+        first_ws: &mut Option<&'a AstNode<'a>>,
+        explicit: &mut Option<&'a AstNode<'a>>,
+    ) {
         match &n.kind {
             AstType::Stage { .. } | AstType::Project { .. } => {
                 if has_attr(n, "entrypoint") && explicit.is_none() {
@@ -45,7 +58,9 @@ fn find_entrypoint_node<'a>(root: &'a AstNode<'a>) -> Option<&'a AstNode<'a>> {
             }
             _ => {}
         }
-        for c in &n.children { walk(c, first_ws, explicit); }
+        for c in &n.children {
+            walk(c, first_ws, explicit);
+        }
     }
 
     walk(root, &mut first_workspace, &mut explicit);
@@ -90,12 +105,12 @@ fn collect_member_object_refs<'a>(
     out: &mut std::collections::HashMap<&'static str, std::collections::HashSet<String>>,
 ) {
     match &node.kind {
-        AstType::MemberAccess { target, member: _ } => {
+        AstType::Member { target, member: _ } => {
             if let AstType::Identifier { name: base } = &target.kind {
                 if let Some(scope) = resolve_object_scope(module, base) {
                     out.entry(scope).or_default().insert(base.to_string());
                 }
-            } else if let AstType::CallExpression { target, .. } = &target.kind {
+            } else if let AstType::Call { target, .. } = &target.kind {
                 if let AstType::Identifier { name: base } = &target.kind {
                     if let Some(scope) = resolve_object_scope(module, base) {
                         out.entry(scope).or_default().insert(base.to_string());
@@ -105,7 +120,7 @@ fn collect_member_object_refs<'a>(
             collect_member_object_refs(module, target, out);
         }
         // NEW: also traverse call expression target/arguments so app().result is seen
-        AstType::CallExpression { target, arguments } => {
+        AstType::Call { target, arguments } => {
             collect_member_object_refs(module, target, out);
             for a in arguments {
                 collect_member_object_refs(module, a, out);
@@ -123,13 +138,25 @@ fn collect_member_object_refs<'a>(
 
     // Nested helper reused from expr module
     fn resolve_object_scope<'a>(module: &ModuleIR, object: &str) -> Option<&'static str> {
-        if module.func_index.contains_key(&format!("stage:init:{object}")) {
+        if module
+            .func_index
+            .contains_key(&format!("stage:init:{object}"))
+        {
             Some("stage")
-        } else if module.func_index.contains_key(&format!("project:init:{object}")) {
+        } else if module
+            .func_index
+            .contains_key(&format!("project:init:{object}"))
+        {
             Some("project")
-        } else if module.func_index.contains_key(&format!("workspace:init:{object}")) {
+        } else if module
+            .func_index
+            .contains_key(&format!("workspace:init:{object}"))
+        {
             Some("workspace")
-        } else if module.func_index.contains_key(&format!("task:init:{object}")) {
+        } else if module
+            .func_index
+            .contains_key(&format!("task:init:{object}"))
+        {
             Some("task")
         } else {
             None
@@ -153,14 +180,24 @@ pub fn lower_ast_to_ir(root: &AstNode<'_>) -> ModuleIR {
     // 3) Build main to call ONLY the entrypoint (fallback: no call)
     let mut main_ops: Vec<IROp> = Vec::new();
     if let Some(fid) = entry_fid {
-        main_ops.push(IROp { kind: IROpKind::Call(fid, 0), span: None });
+        main_ops.push(IROp {
+            kind: IROpKind::Call(fid, 0),
+            span: None,
+        });
     }
-    main_ops.push(IROp { kind: IROpKind::Return, span: None });
+    main_ops.push(IROp {
+        kind: IROpKind::Return,
+        span: None,
+    });
 
     let main = IRFunction {
         name: "main".into(),
         params: vec![],
-        blocks: vec![BasicBlock { label: 0, ops: main_ops, next: vec![] }],
+        blocks: vec![BasicBlock {
+            label: 0,
+            ops: main_ops,
+            next: vec![],
+        }],
     };
     module.add_function(main);
     module
@@ -185,17 +222,27 @@ fn lower_discover(
                 for (scope, set) in refs {
                     for obj in set {
                         if let Some(fid) = module.func_index.get(&format!("{scope}:init:{obj}")) {
-                            ops.push(IROp { kind: IROpKind::Call(*fid, 0), span: node.span.clone() });
+                            ops.push(IROp {
+                                kind: IROpKind::Call(*fid, 0),
+                                span: node.span.clone(),
+                            });
                         }
                     }
                 }
 
                 emit_kv_ops("project", name, node, &order, module, &mut ops);
-                ops.push(IROp { kind: IROpKind::Return, span: node.span.clone() });
+                ops.push(IROp {
+                    kind: IROpKind::Return,
+                    span: node.span.clone(),
+                });
                 let fid = module.add_function(IRFunction {
                     name: fname,
                     params: vec![],
-                    blocks: vec![BasicBlock { label: 0, ops, next: vec![] }],
+                    blocks: vec![BasicBlock {
+                        label: 0,
+                        ops,
+                        next: vec![],
+                    }],
                 });
                 call_list.push(fid);
             }
@@ -209,11 +256,18 @@ fn lower_discover(
                 let order = schedule_stage_body(name, node, module);
                 let mut ops = Vec::new();
                 emit_kv_ops("stage", name, node, &order, module, &mut ops);
-                ops.push(IROp { kind: IROpKind::Return, span: node.span.clone() });
+                ops.push(IROp {
+                    kind: IROpKind::Return,
+                    span: node.span.clone(),
+                });
                 let fid = module.add_function(IRFunction {
                     name: fname,
                     params: vec![],
-                    blocks: vec![BasicBlock { label: 0, ops, next: vec![] }],
+                    blocks: vec![BasicBlock {
+                        label: 0,
+                        ops,
+                        next: vec![],
+                    }],
                 });
                 call_list.push(fid);
             }
@@ -227,45 +281,56 @@ fn lower_discover(
                 let order = schedule_workspace_body(name, node, module);
                 let mut ops = Vec::new();
 
-                // 1) Extract workspace.projects and store as a global
+                // 1) Keep ONLY the Ref array assignment for workspace.projects
                 let linked_projects = scan_workspace_projects(node);
-                module.workspace_projects.insert(name.to_string(), linked_projects.clone());
 
+                // Store projects as an array of refs
                 if !linked_projects.is_empty() {
-                    // For now serialize as comma-separated string; later switch to array Value
-                    let serialized = linked_projects.join(",");
-                    let cidx = module.intern_const(IRConst::Str(serialized));
+                    let mut elems = Vec::new();
+                    for p in &linked_projects {
+                        elems.push(IRConst::Ref { scope: "project".to_string(), object: p.clone() });
+                    }
+                    let arr_idx = module.intern_const(IRConst::Array(elems));
                     let w_gid = module.intern_global(format!("workspace:{name}.projects"));
-                    ops.push(IROp { kind: IROpKind::LoadConst(cidx), span: node.span.clone() });
+                    ops.push(IROp { kind: IROpKind::LoadConst(arr_idx), span: node.span.clone() });
                     ops.push(IROp { kind: IROpKind::StoreVar(w_gid), span: node.span.clone() });
                 }
 
-                // 2) Prelude: ensure referenced objects are initialized and propagate projects
-                let mut refs = std::collections::HashMap::new();
-                collect_member_object_refs(module, node, &mut refs);
+                // Call each project's init before body (so project:<name>.* are ready)
+                for p in &linked_projects {
+                    if let Some(fid) = module.func_index.get(&format!("project:init:{p}")) {
+                        ops.push(IROp {
+                            kind: IROpKind::Call(*fid, 0),
+                            span: node.span.clone(),
+                        });
+                    }
+                }
 
-                for (scope, set) in refs {
-                    for obj in set {
-                        if !linked_projects.is_empty() && (scope == "stage" || scope == "task") {
-                            let w_gid = module.intern_global(format!("workspace:{name}.projects"));
-                            let dst_gid = module.intern_global(format!("{scope}:{obj}.projects"));
-                            ops.push(IROp { kind: IROpKind::LoadVar(w_gid), span: node.span.clone() });
-                            ops.push(IROp { kind: IROpKind::StoreVar(dst_gid), span: node.span.clone() });
-                        }
-                        if let Some(fid) = module.func_index.get(&format!("{scope}:init:{obj}")) {
-                            ops.push(IROp { kind: IROpKind::Call(*fid, 0), span: node.span.clone() });
-                        }
+                // Prelude: call init of each project listed before member accesses
+                for p in &linked_projects {
+                    if let Some(fid) = module.func_index.get(&format!("project:init:{p}")) {
+                        ops.push(IROp {
+                            kind: IROpKind::Call(*fid, 0),
+                            span: node.span.clone(),
+                        });
                     }
                 }
 
                 // 3) Lower workspace body statements
                 emit_kv_ops("workspace", name, node, &order, module, &mut ops);
 
-                ops.push(IROp { kind: IROpKind::Return, span: node.span.clone() });
+                ops.push(IROp {
+                    kind: IROpKind::Return,
+                    span: node.span.clone(),
+                });
                 let fid = module.add_function(IRFunction {
                     name: fname,
                     params: vec![],
-                    blocks: vec![BasicBlock { label: 0, ops, next: vec![] }],
+                    blocks: vec![BasicBlock {
+                        label: 0,
+                        ops,
+                        next: vec![],
+                    }],
                 });
                 call_list.push(fid);
             }
@@ -279,11 +344,18 @@ fn lower_discover(
                 let order = schedule_task_body(name, node, module);
                 let mut ops = Vec::new();
                 emit_kv_ops("task", name, node, &order, module, &mut ops);
-                ops.push(IROp { kind: IROpKind::Return, span: node.span.clone() });
+                ops.push(IROp {
+                    kind: IROpKind::Return,
+                    span: node.span.clone(),
+                });
                 let fid = module.add_function(IRFunction {
                     name: fname,
                     params: vec![],
-                    blocks: vec![BasicBlock { label: 0, ops, next: vec![] }],
+                    blocks: vec![BasicBlock {
+                        label: 0,
+                        ops,
+                        next: vec![],
+                    }],
                 });
                 call_list.push(fid);
             }

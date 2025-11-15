@@ -1,5 +1,6 @@
-use crate::runtime::{Op, Value};
 use crate::codegen::bytecode::BytecodeModule;
+use crate::runtime::{Op, Value};
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 pub type ExecutionResult = Result<(), String>;
@@ -17,21 +18,30 @@ pub struct Vm<'a> {
     ip: usize,
     stack: Vec<Value>,
     frames: Vec<Frame>,
-    globals: Vec<Value>,
+    globals: Vec<Value>, 
+    initialized: HashSet<String>,
+    func_index: HashMap<String, usize>, // NEW
     const_pool: &'a [crate::codegen::ir::IRConst],
-    base_dir: PathBuf, // NEW: script directory
+    base_dir: PathBuf,
 }
 
 impl<'a> Vm<'a> {
     pub fn new_with_base(module: &'a BytecodeModule, base_dir: impl Into<PathBuf>) -> Self {
         let main_id = module.functions.len().saturating_sub(1);
+        let global_len = module.name_to_global.len();
+        let mut func_index = HashMap::new();
+        for (i, f) in module.functions.iter().enumerate() {
+            func_index.insert(f.name.clone(), i);
+        }
         Vm {
             module,
             func_id: main_id,
             ip: 0,
             stack: Vec::with_capacity(128),
             frames: Vec::new(),
-            globals: Vec::new(),
+            globals: vec![Value::Null; global_len],
+            initialized: HashSet::new(),
+            func_index, // NEW
             const_pool: &module.const_pool,
             base_dir: base_dir.into(),
         }
@@ -70,33 +80,26 @@ impl<'a> Vm<'a> {
             }
 
             // Fetch opcode byte without keeping a long borrow
-            let op_byte = {
-                let code = self.current_code();
-                code[self.ip]
-            };
-            let op = Op::from_byte(op_byte)
-                .ok_or_else(|| format!("Unknown opcode {:X}", op_byte))?;
-            self.ip += 1;
+            let op = self.read_op()?;
 
             match op {
                 Op::LoadConst => {
                     let idx = self.read_u32();
-                    let c = self.const_pool.get(idx as usize)
+                    let c = self
+                        .const_pool
+                        .get(idx as usize)
                         .ok_or_else(|| format!("Const index OOB {}", idx))?;
                     self.stack.push(to_value(c));
                 }
                 Op::LoadVar => {
                     let gid = self.read_u32() as usize;
-                    let v = self.globals.get(gid).cloned().unwrap_or(Value::Null);
+                    let v = self.load_global(gid);
                     self.stack.push(v);
                 }
                 Op::StoreVar | Op::StoreGlobal => {
                     let gid = self.read_u32() as usize;
                     let val = self.pop()?;
-                    if gid >= self.globals.len() {
-                        self.globals.resize(gid + 1, Value::Null);
-                    }
-                    self.globals[gid] = val;
+                    self.store_global(gid, val);
                 }
                 Op::Call => {
                     let fid = self.read_u32() as usize;
@@ -117,7 +120,9 @@ impl<'a> Vm<'a> {
                         self.stack.truncate(frame.stack_base);
                         self.func_id = frame.return_func;
                         self.ip = frame.return_ip;
-                        if let Some(v) = ret_val { self.stack.push(v); }
+                        if let Some(v) = ret_val {
+                            self.stack.push(v);
+                        }
                     } else {
                         break;
                     }
@@ -129,7 +134,9 @@ impl<'a> Vm<'a> {
                 Op::Read => {
                     // Stack: ... [path]
                     let path_v = self.pop()?;
-                    let path = path_v.as_str().ok_or_else(|| "read: path must be a string".to_string())?;
+                    let path = path_v
+                        .as_str()
+                        .ok_or_else(|| "read: path must be a string".to_string())?;
                     let full = self.resolve_path(&path);
                     let contents = std::fs::read_to_string(&full)
                         .map_err(|e| format!("read: {}: {}", full.display(), e))?;
@@ -139,11 +146,16 @@ impl<'a> Vm<'a> {
                     // Stack: ... [path, data] (pushed in that order), pop in reverse
                     let data_v = self.pop()?;
                     let path_v = self.pop()?;
-                    let path = path_v.as_str().ok_or_else(|| "write: path must be a string".to_string())?;
-                    let data = data_v.as_str().ok_or_else(|| "write: data must be a string".to_string())?;
+                    let path = path_v
+                        .as_str()
+                        .ok_or_else(|| "write: path must be a string".to_string())?;
+                    let data = data_v
+                        .as_str()
+                        .ok_or_else(|| "write: data must be a string".to_string())?;
                     let full = self.resolve_path(&path);
                     if let Some(parent) = full.parent() {
-                        std::fs::create_dir_all(parent).map_err(|e| format!("write: {}: {}", parent.display(), e))?;
+                        std::fs::create_dir_all(parent)
+                            .map_err(|e| format!("write: {}: {}", parent.display(), e))?;
                     }
                     std::fs::write(&full, data.as_bytes())
                         .map_err(|e| format!("write: {}: {}", full.display(), e))?;
@@ -157,7 +169,9 @@ impl<'a> Vm<'a> {
                         Op::Sub => a - b,
                         Op::Mul => a * b,
                         Op::Div => {
-                            if b == 0 { return Err("Division by zero".into()); }
+                            if b == 0.0 {
+                                return Err("Division by zero".into());
+                            }
                             a / b
                         }
                         _ => unreachable!(),
@@ -176,11 +190,15 @@ impl<'a> Vm<'a> {
                 Op::JumpIfFalse => {
                     let target = self.read_u32() as usize;
                     let cond = self.pop()?.as_bool();
-                    if !cond { self.ip = target; }
+                    if !cond {
+                        self.ip = target;
+                    }
                 }
                 Op::Ask => {
                     let argc = self.read_u8() as usize;
-                    if argc > 1 { return Err("ask: invalid argc".into()); }
+                    if argc > 1 {
+                        return Err("ask: invalid argc".into());
+                    }
                     use std::io::{self, Write};
                     if argc == 1 {
                         let prompt_val = self.pop()?;
@@ -190,20 +208,29 @@ impl<'a> Vm<'a> {
                         }
                     }
                     let mut input = String::new();
-                    io::stdin().read_line(&mut input).map_err(|e| e.to_string())?;
+                    io::stdin()
+                        .read_line(&mut input)
+                        .map_err(|e| e.to_string())?;
                     let trimmed = input.trim_end().to_string();
                     self.stack.push(Value::Str(trimmed));
                 }
                 Op::LoadMemberDyn => {
                     let field_ci = self.read_u32() as usize;
-                    let field = self.const_pool[field_ci].as_str().ok_or_else(|| "LoadMemberDyn: field must be string const".to_string())?;
+                    let field = self.const_pool[field_ci]
+                        .as_str()
+                        .ok_or_else(|| "LoadMemberDyn: field must be string const".to_string())?;
                     let obj_v = self.pop()?;
-                    let obj = obj_v.as_str().ok_or_else(|| "LoadMemberDyn: object must be Identifier or String".to_string())?;
+                    let obj = obj_v.as_str().ok_or_else(|| {
+                        "LoadMemberDyn: object must be Identifier or String".to_string()
+                    })?;
                     if let Some(gidx) = self.resolve_member_dyn(&obj, field) {
                         let v = self.globals.get(gidx).cloned().unwrap_or(Value::Null);
                         self.stack.push(v);
                     } else {
-                        println!("Warning: LoadMemberDyn: member not found: {}.{}", obj, field);
+                        println!(
+                            "Warning: LoadMemberDyn: member not found: {}.{}",
+                            obj, field
+                        );
                         self.stack.push(Value::Null);
                     }
                 }
@@ -213,7 +240,11 @@ impl<'a> Vm<'a> {
                     let index = index_v.as_int().ok_or("Index: index must be an integer")? as usize;
                     let array = array_v.as_array().ok_or("Index: value must be an array")?;
                     if index >= array.len() {
-                        return Err(format!("Index: index {} out of bounds for array of length {}", index, array.len()));
+                        return Err(format!(
+                            "Index: index {} out of bounds for array of length {}",
+                            index,
+                            array.len()
+                        ));
                     }
                     let elem = array[index].clone();
                     self.stack.push(elem);
@@ -222,11 +253,57 @@ impl<'a> Vm<'a> {
                     self.pop()?;
                 }
                 Op::NoOp => {}
+                Op::LoadRefMember => {
+                    let field_idx = self.read_u32();
+                    let field = match &self.const_pool[field_idx as usize] {
+                        crate::codegen::ir::IRConst::Str(s) => s.clone(),
+                        _ => { self.stack.push(Value::Null); continue; }
+                    };
+                    let base = match self.stack.pop() { Some(v) => v, None => { self.stack.push(Value::Null); continue; } };
+                    match base {
+                        Value::Ref { scope, object } => {
+                            // init-on-first-reference
+                            self.ensure_init_for(&scope, &object);
+                            let key = format!("{scope}:{object}.{field}");
+                            if let Some(&gidx) = self.module.name_to_global.get(&key) {
+                               self.stack.push(self.load_global(gidx as usize));
+                            } else {
+                                self.stack.push(Value::Null);
+                            }
+                        }
+                        Value::Str(s) => {
+                            // Fallback: try known scopes, ensuring init before lookup
+                            let mut pushed = false;
+                            for sc in ["project","stage","workspace","task"] {
+                                self.ensure_init_for(sc, &s);
+                                let key = format!("{sc}:{s}.{field}");
+                                if let Some(&gidx) = self.module.name_to_global.get(&key) {
+                                   self.stack.push(self.load_global(gidx as usize));
+                                    pushed = true;
+                                    break;
+                                }
+                            }
+                            if !pushed { self.stack.push(Value::Null); }
+                        }
+                        _ => self.stack.push(Value::Null),
+                    }
+                }
             }
         }
         Ok(())
     }
 
+    fn read_op(&mut self) -> Result<Op, String> {
+        let op_byte = {
+            let code = self.current_code();
+            code[self.ip]
+        };
+        let op =
+            Op::from_byte(op_byte).ok_or_else(|| format!("Unknown opcode {:X}", op_byte))?;
+        self.ip += 1;
+        Ok(op)
+    }
+    
     fn read_u32(&mut self) -> u32 {
         let start = self.ip;
         let end = start + 4;
@@ -247,8 +324,80 @@ impl<'a> Vm<'a> {
         self.ip += 1;
         b
     }
+    #[inline]
     fn pop(&mut self) -> Result<Value, String> {
         self.stack.pop().ok_or_else(|| "Stack underflow".into())
+    }
+
+    #[inline]
+    fn store_global(&mut self, gid: usize, val: Value) {
+        if gid >= self.globals.len() {
+            self.globals.resize(gid + 1, Value::Null);
+        }
+        self.globals[gid] = val;
+    }
+    #[inline]
+    fn load_global(&self, gid: usize) -> Value {
+        self.globals.get(gid).cloned().unwrap_or(Value::Null)
+    }
+
+    // Run a simple function to completion (used for init). Supports the ops emitted in init.
+    fn run_function_now(&mut self, fid: usize) -> Result<(), String> {
+        let saved_func = self.func_id;
+        let saved_ip = self.ip;
+        let saved_stack_len = self.stack.len();
+
+        self.func_id = fid;
+        self.ip = 0;
+
+        loop {
+            let op = self.read_op()?;
+            match op {
+                Op::LoadConst => {
+                    let cidx = self.read_u32() as usize;
+                    let v = match &self.const_pool[cidx] {
+                        crate::codegen::ir::IRConst::Int(i) => Value::Int(*i),
+                        crate::codegen::ir::IRConst::Bool(b) => Value::Bool(*b),
+                        crate::codegen::ir::IRConst::Str(s) => Value::Str(s.clone()),
+                        crate::codegen::ir::IRConst::Null => Value::Null,
+                        // init functions only use simple consts; others default to Null
+                        _ => Value::Null,
+                    };
+                    self.stack.push(v);
+                }
+                Op::LoadVar => {
+                    let gid = self.read_u32() as usize;
+                    let v = self.load_global(gid);
+                    self.stack.push(v);
+                }
+                Op::StoreVar => {
+                    let gid = self.read_u32() as usize;
+                    let v = self.stack.pop().unwrap_or(Value::Null);
+                    self.store_global(gid, v);
+                }
+                Op::Return => break,
+                // If an unexpected op appears, bail out safely.
+                _ => break,
+            }
+        }
+
+        self.stack.truncate(saved_stack_len);
+        self.func_id = saved_func;
+        self.ip = saved_ip;
+
+        return Ok(())
+    }
+
+    // Ensure {scope}:{object}::init has run once, synchronously.
+    fn ensure_init_for(&mut self, scope: &str, object: &str) {
+        let tag = format!("{scope}:{object}");
+        if self.initialized.contains(&tag) {
+            return;
+        }
+        if let Some(&fid) = self.func_index.get(&format!("{scope}:init:{object}")) {
+            self.run_function_now(fid).ok();
+        }
+        self.initialized.insert(tag);
     }
 
     fn resolve_member_dyn(&self, obj: &str, field: &str) -> Option<usize> {
@@ -271,6 +420,10 @@ fn to_value(c: &crate::codegen::ir::IRConst) -> Value {
         K::Ident(s) => Value::Identifier(s.clone()),
         K::Command(s) => Value::Command(s.clone()),
         K::Array(items) => Value::Array(items.iter().map(to_value).collect()),
+        K::Ref { scope, object } => Value::Ref {
+            scope: scope.clone(),
+            object: object.clone(),
+        },
         K::Null => Value::Null,
     }
 }

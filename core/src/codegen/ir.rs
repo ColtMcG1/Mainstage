@@ -3,12 +3,13 @@ use crate::reports::locations::Span;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum IRConst {
-    Int(i64),
+    Int(f64),
     Str(String),
     Bool(bool),
     Array(Vec<IRConst>),
     Ident(String),
     Command(String),
+    Ref { scope: String, object: String },
     Null,
 }
 
@@ -42,6 +43,7 @@ pub enum IROpKind {
     LoadMemberDyn(u32), // field index
     Index,              // pop index, then array; push element
     Pop,                // pop and discard top of stack
+    LoadRefMember(u32), // field const index
     NoOp,
 }
 

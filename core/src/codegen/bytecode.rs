@@ -86,6 +86,10 @@ fn encode_func(f: &IRFunction) -> BytecodeFunction {
                 IROpKind::Pop => {
                     push_u8(&mut bf.code, Op::Pop as u8);
                 }
+                IROpKind::LoadRefMember(idx) => {
+                    push_u8(&mut bf.code, Op::LoadRefMember as u8);
+                    push_u32(&mut bf.code, idx);
+                }
                 IROpKind::NoOp => push_u8(&mut bf.code, Op::NoOp as u8),
             }
         }

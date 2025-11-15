@@ -62,7 +62,7 @@ fn collect_rw_for_stmt(
         out.writes.insert(fq(scope, &key));
         collect_reads(scope, value_node, &mut out.reads);
     }
-    if let AstType::CallExpression { arguments, .. } = &stmt.kind {
+    if let AstType::Call { arguments, .. } = &stmt.kind {
         for a in arguments {
             collect_reads(scope, a, &mut out.reads);
         }
@@ -79,7 +79,7 @@ fn collect_reads(scope: &ScopeKind<'_>, node: &AstNode<'_>, reads: &mut HashSet<
         AstType::Identifier { name } => {
             reads.insert(fq(scope, name));
         }
-        AstType::MemberAccess { target, member } => {
+        AstType::Member { target, member } => {
             // Treat "a.b" as read of "stage:a.b"
             if let AstType::Identifier { name: obj } = &target.kind {
                 if let AstType::Identifier { name: field } = &member.kind {

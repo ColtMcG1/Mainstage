@@ -1,0 +1,14 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug mainstage build",
+      "program": "${workspaceFolder}/cli/target/debug/mainstage.exe",
+      "args": ["build", ".\\samples\\e2e\\1.ms", "--dump", "parser"],
+      "cwd": "${workspaceFolder}/cli",
+      "stopOnEntry": true
+    }
+  ]
+}

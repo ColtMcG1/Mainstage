@@ -9,20 +9,28 @@
 
 use std::borrow::Cow;
 
-use crate::parser::AstNode;
-
 /// Represents binary operators in the AST.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinaryOperator {
-    Add, Sub, Mul, Div,
-    Eq, Neq,
-    Lt, Gt, Le, Ge,
+    Eq,
+    Ne,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+    Add,
+    Sub,
+    Mul,
+    Div,
 }
 
 /// Represents unary operators in the AST.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnaryOperator {
-    Plus, Minus, Inc, Dec,
+    Inc,
+    Dec,
+    Plus,
+    Minus,
 }
 
 /// Represents the different types of AST nodes in the parser.
@@ -30,74 +38,55 @@ pub enum UnaryOperator {
 /// including top-level constructs, scopes, expressions, declarations, and values.
 #[derive(Debug, Clone)]
 pub enum AstType<'a> {
-    // --- Top Level ---
+    // Top-level
     Script,
-    /// Represents an `include` directive with a file path.
-    Include { path: Cow<'a, str> },
-    /// Represents an `import` directive with a file path and an alias.
-    Import { path: Cow<'a, str>, alias: Cow<'a, str> },
 
-    // --- Scopes ---
-    /// Represents a `workspace` block with a name.
+    // Declarations
     Workspace { name: Cow<'a, str> },
-    /// Represents a `project` block with a name.
-    Project { name: Cow<'a, str> },
-    /// Represents a `stage` block with a name.
-    Stage { name: Cow<'a, str>, params: Vec<AstNode<'a>> },
-    /// Represents a `task` block with a name.
-    Task  { name: Cow<'a, str>, params: Vec<AstNode<'a>> },
+    Project   { name: Cow<'a, str> },
+    Stage     { name: Cow<'a, str>, params: Vec<super::ast::AstNode<'a>> },
+    Task      { name: Cow<'a, str>, params: Vec<super::ast::AstNode<'a>> },
 
-    // --- Expressions / Statements ---
-    /// Represents an assignment expression (e.g., `x = 5`).
-    Assignment,
-    /// Represents a binary operation (e.g., `a + b`).
-    BinaryOp {
-        op: BinaryOperator,
-        left: Box<AstNode<'a>>,
-        right: Box<AstNode<'a>>,
-    },
-    /// Represents a unary operation (e.g., `-a` or `++a`).
-    UnaryOp {
-        op: UnaryOperator,
-        expr: Box<AstNode<'a>>,
-        prefix: bool,          // true if prefix (++x), false if postfix (x++)
-    },
-    /// Represents an index access (e.g., `array[index]`).
-    Index {
-        target: Box<AstNode<'a>>,
-        index: Box<AstNode<'a>>,
-    },
-    /// Represents a member access expression (e.g., `object.property`).
-    MemberAccess {
-        target: Box<AstNode<'a>>,
-        member: Box<AstNode<'a>>,
-    },
-    /// Represents a call to execute an object (e.g., `object(args?)`)
-    CallExpression {
-        target: Box<AstNode<'a>>,
-        arguments: Vec<AstNode<'a>>,
-    },
+    // Blocks
+    Block,
 
-    /// Represents a return statement.
+    // Statements
     Return,
+    Assignment,
+    Include   { path: Cow<'a, str> },
+    Import    { path: Cow<'a, str>, alias: Cow<'a, str> },
 
-    /// Represents a variable declaration (e.g., `let x = 5`).
-    VariableDeclaration { name: Cow<'a, str>, value: Option<Cow<'a, str>> },
+    // Loops
+    While { 
+        cond: Box<super::ast::AstNode<'a>>, 
+        body: Box<super::ast::AstNode<'a>> 
+    },
+    For   {
+        init: Option<Box<super::ast::AstNode<'a>>>,
+        cond: Option<Box<super::ast::AstNode<'a>>>,
+        step: Option<Box<super::ast::AstNode<'a>>>,
+        body: Box<super::ast::AstNode<'a>>,
+    },
+    Forin {
+        iden: Cow<'a, str>,
+        iter: Box<super::ast::AstNode<'a>>,
+        body: Box<super::ast::AstNode<'a>>,
+    },
 
-    // --- Values ---
-    /// Represents an identifier (e.g., a variable name).
+    // Expressions
     Identifier { name: Cow<'a, str> },
-    /// Represents a shell command (e.g., `bash -c "echo Hello"`).
-    ShellCommand { shell: Cow<'a, str>, command: Cow<'a, str> },
-    /// Represents a string value.
-    String { value: Cow<'a, str> },
-    /// Represents a numeric value.
-    Number { value: f64 },
-    /// Represents a boolean value (`true` or `false`).
-    Boolean { value: bool },
-    /// Represents an array value.
+    Number     { value: f64 },
+    Str        { value: Cow<'a, str> },
+    ShellCmd   { shell: Cow<'a, str>, command: Cow<'a, str> },
+    Bool       { value: bool },
     Array,
-    /// Represents a `null` value.
+    Call { target: Box<super::ast::AstNode<'a>>, arguments: Vec<super::ast::AstNode<'a>> },
+    Member  { target: Box<super::ast::AstNode<'a>>, member: Box<super::ast::AstNode<'a>> },
+    Index         { target: Box<super::ast::AstNode<'a>>, index: Box<super::ast::AstNode<'a>> },
+    UnaryOp       { op: UnaryOperator, expr: Box<super::ast::AstNode<'a>>, prefix: bool },
+    BinaryOp      { op: BinaryOperator, left: Box<super::ast::AstNode<'a>>, right: Box<super::ast::AstNode<'a>> },
+
+    // Other
     Null,
 }
 
@@ -122,9 +111,9 @@ impl<'a> AstType<'a> {
     pub fn is_value(&self) -> bool {
         matches!(
             self,
-            AstType::String { .. }
+            AstType::Str { .. }
                 | AstType::Number { .. }
-                | AstType::Boolean { .. }
+                | AstType::Bool { .. }
                 | AstType::Null
         )
     }
@@ -151,49 +140,38 @@ impl<'a> AstType<'a> {
         match self {
             AstType::Script => AstType::Script,
             AstType::Include { path } => AstType::Include { path: Cow::Owned(path.into_owned()) },
-            AstType::Import { path, alias } => AstType::Import {
-                path: Cow::Owned(path.into_owned()),
-                alias: Cow::Owned(alias.into_owned()),
-            },
+            AstType::Import { path, alias } => AstType::Import { path: Cow::Owned(path.into_owned()), alias: Cow::Owned(alias.into_owned()) },
             AstType::Workspace { name } => AstType::Workspace { name: Cow::Owned(name.into_owned()) },
             AstType::Project { name } => AstType::Project { name: Cow::Owned(name.into_owned()) },
             AstType::Stage { name, params } => AstType::Stage { name: Cow::Owned(name.into_owned()), params: params.into_iter().map(|p| p.into_lifetime()).collect() },
             AstType::Task  { name, params } => AstType::Task  { name: Cow::Owned(name.into_owned()), params: params.into_iter().map(|p| p.into_lifetime()).collect() },
+            AstType::Block => AstType::Block,
             AstType::Assignment => AstType::Assignment,
-            AstType::BinaryOp { op, left, right } => AstType::BinaryOp {
-                op,
-                left: Box::new(left.into_lifetime()),
-                right: Box::new(right.into_lifetime()),
+            AstType::BinaryOp { op, left, right } => AstType::BinaryOp { op, left: Box::new(left.into_lifetime()), right: Box::new(right.into_lifetime()) },
+            AstType::UnaryOp { op, expr, prefix } => AstType::UnaryOp { op, expr: Box::new(expr.into_lifetime()), prefix },
+            AstType::Index { target, index } => AstType::Index { target: Box::new(target.into_lifetime()), index: Box::new(index.into_lifetime()) },
+            AstType::Member { target, member } => AstType::Member { target: Box::new(target.into_lifetime()), member: Box::new(member.into_lifetime()) },
+            AstType::Call { target, arguments } => AstType::Call { target: Box::new(target.into_lifetime()), arguments: arguments.into_iter().map(|a| a.into_lifetime()).collect() },
+            AstType::For { init, cond, step, body } => AstType::For {
+                init: Some(Box::new(init.unwrap().into_lifetime())),
+                cond: Some(Box::new(cond.unwrap().into_lifetime())),
+                step: Some(Box::new(step.unwrap().into_lifetime())),
+                body: Box::new(body.into_lifetime()),
             },
-            AstType::UnaryOp { op, expr, prefix } => AstType::UnaryOp {
-                op,
-                expr: Box::new(expr.into_lifetime()),
-                prefix,
+            AstType::Forin { iden, iter, body } => AstType::Forin {
+                iden: Cow::Owned(iden.into_owned()),
+                iter: Box::new(iter.into_lifetime()),
+                body: Box::new(body.into_lifetime()),
             },
-            AstType::Index { target, index } => AstType::Index {
-                target: Box::new(target.into_lifetime()),
-                index: Box::new(index.into_lifetime()),
-            },
-            AstType::MemberAccess { target, member } => AstType::MemberAccess {
-                target: Box::new(target.into_lifetime()),
-                member: Box::new(member.into_lifetime()),
-            },
-            AstType::CallExpression { target, arguments } => AstType::CallExpression { 
-                target: Box::new(target.into_lifetime()), 
-                arguments: arguments.into_iter().map(|arg| arg.into_lifetime()).collect(),
-            },
-            AstType::VariableDeclaration { name, value } => AstType::VariableDeclaration {
-                name: Cow::Owned(name.into_owned()),
-                value: value.map(|v| Cow::Owned(v.into_owned())),
+            AstType::While { cond, body } => AstType::While {
+                cond: Box::new(cond.into_lifetime()),
+                body: Box::new(body.into_lifetime()),
             },
             AstType::Identifier { name } => AstType::Identifier { name: Cow::Owned(name.into_owned()) },
-            AstType::ShellCommand { shell, command } => AstType::ShellCommand {
-                shell: Cow::Owned(shell.into_owned()),
-                command: Cow::Owned(command.into_owned()),
-            },
-            AstType::String { value } => AstType::String { value: Cow::Owned(value.into_owned()) },
+            AstType::ShellCmd { shell, command } => AstType::ShellCmd { shell: Cow::Owned(shell.into_owned()), command: Cow::Owned(command.into_owned()) },
+            AstType::Str { value } => AstType::Str { value: Cow::Owned(value.into_owned()) },
             AstType::Number { value } => AstType::Number { value },
-            AstType::Boolean { value } => AstType::Boolean { value },
+            AstType::Bool { value } => AstType::Bool { value },
             AstType::Array => AstType::Array,
             AstType::Null => AstType::Null,
             AstType::Return => AstType::Return,
@@ -208,49 +186,38 @@ impl<'a> AstType<'a> {
         match self {
             AstType::Script => AstType::Script,
             AstType::Include { path } => AstType::Include { path: Cow::Owned(path.into_owned()) },
-            AstType::Import { path, alias } => AstType::Import {
-                path: Cow::Owned(path.into_owned()),
-                alias: Cow::Owned(alias.into_owned()),
-            },
+            AstType::Import { path, alias } => AstType::Import { path: Cow::Owned(path.into_owned()), alias: Cow::Owned(alias.into_owned()) },
             AstType::Workspace { name } => AstType::Workspace { name: Cow::Owned(name.into_owned()) },
             AstType::Project { name } => AstType::Project { name: Cow::Owned(name.into_owned()) },
             AstType::Stage { name, params } => AstType::Stage { name: Cow::Owned(name.into_owned()), params: params.into_iter().map(|p| p.into_owned()).collect() },
             AstType::Task  { name, params } => AstType::Task  { name: Cow::Owned(name.into_owned()), params: params.into_iter().map(|p| p.into_owned()).collect() },
+            AstType::Block => AstType::Block,
             AstType::Assignment => AstType::Assignment,
-            AstType::BinaryOp { op, left, right } => AstType::BinaryOp {
-                op,
-                left: Box::new(left.into_owned()),
-                right: Box::new(right.into_owned()),
+            AstType::BinaryOp { op, left, right } => AstType::BinaryOp { op, left: Box::new(left.into_owned()), right: Box::new(right.into_owned()) },
+            AstType::UnaryOp { op, expr, prefix } => AstType::UnaryOp { op, expr: Box::new(expr.into_owned()), prefix },
+            AstType::Index { target, index } => AstType::Index { target: Box::new(target.into_owned()), index: Box::new(index.into_owned()) },
+            AstType::Member { target, member } => AstType::Member { target: Box::new(target.into_owned()), member: Box::new(member.into_owned()) },
+            AstType::Call { target, arguments } => AstType::Call { target: Box::new(target.into_owned()), arguments: arguments.into_iter().map(|a| a.into_owned()).collect() },
+            AstType::For { init, cond, step, body } => AstType::For {
+                init: init.map(|n| Box::new(n.into_owned())),
+                cond: cond.map(|n| Box::new(n.into_owned())),
+                step: step.map(|n| Box::new(n.into_owned())),
+                body: Box::new(body.into_owned()),
             },
-            AstType::UnaryOp { op, expr, prefix } => AstType::UnaryOp {
-                op,
-                expr: Box::new(expr.into_owned()),
-                prefix,
+            AstType::Forin { iden, iter, body } => AstType::Forin {
+                iden: Cow::Owned(iden.into_owned()),
+                iter: Box::new(iter.into_owned()),
+                body: Box::new(body.into_owned()),
             },
-            AstType::Index { target, index } => AstType::Index {
-                target: Box::new(target.into_owned()),
-                index: Box::new(index.into_owned()),
-            },
-            AstType::MemberAccess { target, member } => AstType::MemberAccess {
-                target: Box::new(target.into_owned()),
-                member: Box::new(member.into_owned()),
-            },
-            AstType::VariableDeclaration { name, value } => AstType::VariableDeclaration {
-                name: Cow::Owned(name.into_owned()),
-                value: value.map(|v| Cow::Owned(v.into_owned())),
-            },
-            AstType::CallExpression { target, arguments } => AstType::CallExpression { 
-                target: Box::new(target.into_owned()), 
-                arguments: arguments.into_iter().map(|arg| arg.into_owned()).collect(),
+            AstType::While { cond, body } => AstType::While {
+                cond: Box::new(cond.into_owned()),
+                body: Box::new(body.into_owned()),
             },
             AstType::Identifier { name } => AstType::Identifier { name: Cow::Owned(name.into_owned()) },
-            AstType::ShellCommand { shell, command } => AstType::ShellCommand {
-                shell: Cow::Owned(shell.into_owned()),
-                command: Cow::Owned(command.into_owned()),
-            },
-            AstType::String { value } => AstType::String { value: Cow::Owned(value.into_owned()) },
+            AstType::ShellCmd { shell, command } => AstType::ShellCmd { shell: Cow::Owned(shell.into_owned()), command: Cow::Owned(command.into_owned()) },
+            AstType::Str { value } => AstType::Str { value: Cow::Owned(value.into_owned()) },
             AstType::Number { value } => AstType::Number { value },
-            AstType::Boolean { value } => AstType::Boolean { value },
+            AstType::Bool { value } => AstType::Bool { value },
             AstType::Array => AstType::Array,
             AstType::Null => AstType::Null,
             AstType::Return => AstType::Return,
@@ -270,15 +237,23 @@ impl<'a> PartialEq for AstType<'a> {
             (AstType::Stage { name: n1, params: params1 }, AstType::Stage { name: n2, params: params2 }) => n1 == n2 && params1 == params2,
             (AstType::Task  { name: n1, params: params1 }, AstType::Task  { name: n2, params: params2 }) => n1 == n2 && params1 == params2,
             (AstType::Assignment, AstType::Assignment) => true,
-            (AstType::VariableDeclaration { name: n1, value: v1 }, AstType::VariableDeclaration { name: n2, value: v2 }) => n1 == n2 && v1 == v2,
             (AstType::Identifier { name: n1 }, AstType::Identifier { name: n2 }) => n1 == n2,
-            (AstType::ShellCommand { shell: s1, command: c1 }, AstType::ShellCommand { shell: s2, command: c2 }) => s1 == s2 && c1 == c2,
-            (AstType::String { value: v1 }, AstType::String { value: v2 }) => v1 == v2,
+            (AstType::ShellCmd { shell: s1, command: c1 }, AstType::ShellCmd { shell: s2, command: c2 }) => s1 == s2 && c1 == c2,
+            (AstType::Str { value: v1 }, AstType::Str { value: v2 }) => v1 == v2,
             (AstType::Number { value: v1 }, AstType::Number { value: v2 }) => v1 == v2,
-            (AstType::Boolean { value: b1 }, AstType::Boolean { value: b2 }) => b1 == b2,
+            (AstType::Bool { value: b1 }, AstType::Bool { value: b2 }) => b1 == b2,
             (AstType::Array, AstType::Array) => true,
             (AstType::Null, AstType::Null) => true,
             (AstType::Return, AstType::Return) => true,
+            (AstType::Block, AstType::Block) => true,
+            (AstType::BinaryOp { op: o1, left: l1, right: r1 }, AstType::BinaryOp { op: o2, left: l2, right: r2 }) => o1 == o2 && l1 == l2 && r1 == r2,
+            (AstType::UnaryOp { op: o1, expr: e1, prefix: p1 }, AstType::UnaryOp { op: o2, expr: e2, prefix: p2 }) => o1 == o2 && e1 == e2 && p1 == p2,
+            (AstType::Index { target: t1, index: i1 }, AstType::Index { target: t2, index: i2 }) => t1 == t2 && i1 == i2,
+            (AstType::Member { target: t1, member: m1 }, AstType::Member { target: t2, member: m2 }) => t1 == t2 && m1 == m2,
+            (AstType::Call { target: t1, arguments: a1 }, AstType::Call { target: t2, arguments: a2 }) => t1 == t2 && a1 == a2,
+            (AstType::For { init: i1, cond: c1, step: s1, body: b1 }, AstType::For { init: i2, cond: c2, step: s2, body: b2 }) => i1 == i2 && c1 == c2 && s1 == s2 && b1 == b2,
+            (AstType::Forin { iden: v1, iter: i1, body: b1 }, AstType::Forin { iden: v2, iter: i2, body: b2 }) => v1 == v2 && i1 == i2 && b1 == b2,
+            (AstType::While { cond: c1, body: b1 }, AstType::While { cond: c2, body: b2 }) => c1 == c2 && b1 == b2,
             _ => false,
         }
     }

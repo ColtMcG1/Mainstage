@@ -21,6 +21,7 @@ pub enum Op {
     LoadMemberDyn = 0x80,
     Index = 0x81,
     Pop = 0x82,
+    LoadRefMember = 0x83,
     NoOp = 0xFF,
 }
 
@@ -47,6 +48,7 @@ impl Op {
             0x80 => Op::LoadMemberDyn,
             0x81 => Op::Index,
             0x82 => Op::Pop,
+            0x83 => Op::LoadRefMember,
             0xFF => Op::NoOp,
             _ => return None,
         })

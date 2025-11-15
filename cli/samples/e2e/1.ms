@@ -1,8 +1,18 @@
 workspace demo_ws {
-    test = [1,2,3]             // Define an array with three elements: 1,2,3
-    index1 = test[2] - test[1] // 3 - 2 = 1
-    say("Hello world")         // Write "Hello world" to console
-    say(test[0])               // Write "1" to console
-    say(test[index1])          // Write "2" to console
-    say(test[2])               // Write "3" to console
+    projects = [test_pj];  // list of project references; Should call project init for all projects in list since this is their first reference.
+    
+    for project in projects {
+        say(project); // Should print something like: Ref(ProjectId(1))
+    }
+
+}
+
+project test_pj {
+    demo_stage();           // Should call stage init for demo_stage below
+    test1 = demo_stage.test; // Should get the value from the initalized stage below
+}
+
+stage demo_stage () // No arguments
+{
+    test = ask("Test number > "); // Should prompt user for a number and store it in 'test'
 }
