@@ -10,6 +10,8 @@ pub enum SymbolType {
     None,
     /// An integer type.
     Integer,
+    /// A floating-point type.
+    Float,
     /// A string type.
     String,
     /// An array type.
@@ -28,6 +30,8 @@ pub enum SymbolType {
 pub enum InferredType {
     /// An integer type. A whole number.
     Int,
+    /// A floating-point type. A number with a fractional part.
+    Float,
     /// A boolean type. A true/false value.
     Bool,
     /// A string type. A string of Unicode characters.
@@ -47,6 +51,7 @@ impl InferredType {
     pub fn to_symbol_type(self) -> SymbolType {
         match self {
             InferredType::Int => SymbolType::Integer,
+            InferredType::Float => SymbolType::Float,
             InferredType::Bool => SymbolType::Boolean,
             InferredType::Str => SymbolType::String,
             InferredType::Array => SymbolType::Array,

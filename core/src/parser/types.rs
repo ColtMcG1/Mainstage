@@ -75,7 +75,8 @@ pub enum AstType<'a> {
 
     // Expressions
     Identifier { name: Cow<'a, str> },
-    Number     { value: f64 },
+    Integer    { value: i64 },
+    Float      { value: f64 },
     Str        { value: Cow<'a, str> },
     ShellCmd   { shell: Cow<'a, str>, command: Cow<'a, str> },
     Bool       { value: bool },
@@ -112,7 +113,8 @@ impl<'a> AstType<'a> {
         matches!(
             self,
             AstType::Str { .. }
-                | AstType::Number { .. }
+                | AstType::Integer { .. }
+                | AstType::Float { .. }
                 | AstType::Bool { .. }
                 | AstType::Null
         )
@@ -170,7 +172,8 @@ impl<'a> AstType<'a> {
             AstType::Identifier { name } => AstType::Identifier { name: Cow::Owned(name.into_owned()) },
             AstType::ShellCmd { shell, command } => AstType::ShellCmd { shell: Cow::Owned(shell.into_owned()), command: Cow::Owned(command.into_owned()) },
             AstType::Str { value } => AstType::Str { value: Cow::Owned(value.into_owned()) },
-            AstType::Number { value } => AstType::Number { value },
+            AstType::Integer { value } => AstType::Integer { value },
+            AstType::Float { value } => AstType::Float { value },
             AstType::Bool { value } => AstType::Bool { value },
             AstType::Array => AstType::Array,
             AstType::Null => AstType::Null,
@@ -216,7 +219,8 @@ impl<'a> AstType<'a> {
             AstType::Identifier { name } => AstType::Identifier { name: Cow::Owned(name.into_owned()) },
             AstType::ShellCmd { shell, command } => AstType::ShellCmd { shell: Cow::Owned(shell.into_owned()), command: Cow::Owned(command.into_owned()) },
             AstType::Str { value } => AstType::Str { value: Cow::Owned(value.into_owned()) },
-            AstType::Number { value } => AstType::Number { value },
+            AstType::Integer { value } => AstType::Integer { value },
+            AstType::Float { value } => AstType::Float { value },
             AstType::Bool { value } => AstType::Bool { value },
             AstType::Array => AstType::Array,
             AstType::Null => AstType::Null,
@@ -240,7 +244,8 @@ impl<'a> PartialEq for AstType<'a> {
             (AstType::Identifier { name: n1 }, AstType::Identifier { name: n2 }) => n1 == n2,
             (AstType::ShellCmd { shell: s1, command: c1 }, AstType::ShellCmd { shell: s2, command: c2 }) => s1 == s2 && c1 == c2,
             (AstType::Str { value: v1 }, AstType::Str { value: v2 }) => v1 == v2,
-            (AstType::Number { value: v1 }, AstType::Number { value: v2 }) => v1 == v2,
+            (AstType::Integer { value: i1 }, AstType::Integer { value: i2 }) => i1 == i2,
+            (AstType::Float { value: f1 }, AstType::Float { value: f2 }) => f1 == f2,
             (AstType::Bool { value: b1 }, AstType::Bool { value: b2 }) => b1 == b2,
             (AstType::Array, AstType::Array) => true,
             (AstType::Null, AstType::Null) => true,

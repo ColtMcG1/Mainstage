@@ -1,11 +1,13 @@
-pub mod ir;
 pub mod lowering;
-pub mod scheduler;
-pub mod bytecode;
-pub mod generator;
+pub mod op;
+pub mod program;
+pub mod scope;
+pub mod slot;
+pub mod value;
 
-pub use ir::*;
 pub use lowering::*;
-pub use scheduler::*;
-pub use bytecode::*;
-pub use generator::*;
+pub use op::*;
+pub use program::*;
+pub use scope::*;
+pub use slot::*;
+pub use value::*;

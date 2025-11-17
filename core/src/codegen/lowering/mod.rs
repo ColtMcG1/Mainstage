@@ -1,9 +1,7 @@
-//! ./codegen/lowering/mod.rs
-//! Thin facade for lowering. Implementation is split across submodules.
+pub mod context;
+pub mod expr;
+pub mod stmt;
 
-mod expr;
-mod stmt;
-mod discover;
-
-// Re-export the public API
-pub use discover::lower_ast_to_ir;
+pub use context::*;
+pub use expr::*;
+pub use stmt::*;

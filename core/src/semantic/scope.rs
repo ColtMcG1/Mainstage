@@ -4,7 +4,7 @@
 
 use std::collections::HashMap;
 
-use crate::report;
+use crate::{report, semantic::builtin};
 use super::symbol::{Symbol, SymbolKind};
 
 const HOT_PATH_THRESHOLD: usize = 30;
@@ -140,11 +140,7 @@ impl<'a> SymbolTable<'a> {
             let name = symbol.name().to_string();
             let entry = current_scope.entry(name.clone()).or_insert_with(Vec::new);
 
-            let banned_words = vec![
-                "if", "else", "while", "for", "return", "function",
-                "workspace", "project", "stage", "task",
-            ];
-            if banned_words.contains(&name.as_str()) {
+            if builtin::Builtins::new().is(&name) {
                 report!(
                     report::Level::Error,
                     format!("'{}' is a reserved keyword and cannot be used as a symbol name.", name),

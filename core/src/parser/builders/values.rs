@@ -18,14 +18,27 @@ fn number<'a>(pair: pest::iterators::Pair<'a, Rule>, script: &Script) -> AstNode
     let span = AstNode::convert_pest_span_to_span(pair.as_span());
     let location = AstNode::convert_pest_span_to_location(pair.as_span(), script);
     let s = pair.as_str().trim();
-    let value = s.parse::<f64>().unwrap_or(0.0);
-    AstNode {
-        id: AstNode::generate_id(),
-        kind: AstType::Number { value },
-        span: Some(span),
-        location: Some(location),
-        children: vec![],
-        attributes: vec![Attribute::new("value".into(), value.to_string())],
+    if s.contains('.') {
+        let value = s.parse::<f64>().unwrap_or(0.0);
+        return AstNode {
+            id: AstNode::generate_id(),
+            kind: AstType::Float { value },
+            span: Some(span),
+            location: Some(location),
+            children: vec![],
+            attributes: vec![Attribute::new("value".into(), value.to_string())],
+        }
+    }
+    else {
+        let value = s.parse::<i64>().unwrap_or(0);
+        return AstNode {
+            id: AstNode::generate_id(),
+            kind: AstType::Integer { value: value as i64 },
+            span: Some(span),
+            location: Some(location),
+            children: vec![],
+            attributes: vec![Attribute::new("value".into(), value.to_string())],
+        }
     }
 }
 

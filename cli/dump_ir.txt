@@ -1,176 +1,142 @@
-BytecodeModule {
-    const_pool: [
-        Array(
-            [
-                Ref {
-                    scope: "project",
-                    object: "test_pj",
-                },
-            ],
-        ),
-        Int(
-            1.0,
-        ),
-        Str(
-            "test",
-        ),
-        Str(
-            "./",
-        ),
-        Str(
-            "Test number > ",
-        ),
-    ],
-    functions: [
-        BytecodeFunction {
-            name: "workspace:init:demo_ws",
-            code: [
-                1,
-                0,
-                0,
-                0,
-                0,
-                3,
-                0,
-                0,
-                0,
-                0,
-                1,
-                0,
-                0,
-                0,
-                0,
-                3,
-                0,
-                0,
-                0,
-                0,
-                2,
-                0,
-                0,
-                0,
-                0,
-                1,
-                1,
-                0,
-                0,
-                0,
-                1,
-                1,
-                0,
-                0,
-                0,
-                17,
-                129,
-                3,
-                1,
-                0,
-                0,
-                0,
-                2,
-                1,
-                0,
-                0,
-                0,
-                96,
-                2,
-                1,
-                0,
-                0,
-                0,
-                131,
-                2,
-                0,
-                0,
-                0,
-                96,
-                80,
-            ],
-            label_map: {
-                0: 0,
-            },
-            patch_sites: [],
+IRProgram {
+    ops: [
+        CallScope {
+            name: "demo_ws",
         },
-        BytecodeFunction {
-            name: "project:init:test_pj",
-            code: [
-                1,
-                3,
-                0,
-                0,
-                0,
-                3,
-                2,
-                0,
-                0,
-                0,
-                2,
-                4,
-                0,
-                0,
-                0,
-                131,
-                2,
-                0,
-                0,
-                0,
-                3,
-                3,
-                0,
-                0,
-                0,
-                80,
-            ],
-            label_map: {
-                0: 0,
-            },
-            patch_sites: [],
+        Label {
+            name: "scope.demo_ws",
         },
-        BytecodeFunction {
-            name: "stage:init:demo_stage",
-            code: [
+        NewArray {
+            target: Temp(
+                0,
+            ),
+            size: 1,
+        },
+        CallScope {
+            name: "test_pj",
+        },
+        LoadGlobal {
+            target: Temp(
                 1,
-                4,
+            ),
+            name: "test_pj",
+        },
+        LoadConst {
+            target: Temp(
+                2,
+            ),
+            value: Int(
                 0,
+            ),
+        },
+        ISet {
+            target: Temp(
                 0,
-                0,
-                114,
+            ),
+            index: Temp(
+                2,
+            ),
+            value: Temp(
                 1,
+            ),
+        },
+        LoadGlobal {
+            target: Temp(
                 3,
+            ),
+            name: "demo_ws",
+        },
+        MSet {
+            target: Temp(
+                3,
+            ),
+            member: "projects",
+            value: Temp(
+                0,
+            ),
+        },
+        Return {
+            value: None,
+        },
+        Label {
+            name: "scope.test_pj",
+        },
+        CallScope {
+            name: "demo_stage",
+        },
+        LoadGlobal {
+            target: Temp(
+                4,
+            ),
+            name: "demo_stage",
+        },
+        MGet {
+            target: Temp(
                 5,
-                0,
-                0,
-                0,
-                80,
-            ],
-            label_map: {
-                0: 0,
-            },
-            patch_sites: [],
+            ),
+            source: Temp(
+                4,
+            ),
+            member: "test",
         },
-        BytecodeFunction {
-            name: "main",
-            code: [
-                64,
-                0,
-                0,
-                0,
-                0,
-                0,
-                80,
-            ],
-            label_map: {
-                0: 0,
-            },
-            patch_sites: [],
+        LoadGlobal {
+            target: Temp(
+                6,
+            ),
+            name: "test_pj",
+        },
+        MSet {
+            target: Temp(
+                6,
+            ),
+            member: "test1",
+            value: Temp(
+                5,
+            ),
+        },
+        Return {
+            value: None,
+        },
+        Label {
+            name: "scope.demo_stage",
+        },
+        LoadConst {
+            target: Temp(
+                7,
+            ),
+            value: Str(
+                "Test number > ",
+            ),
+        },
+        Ask {
+            question: Temp(
+                7,
+            ),
+            target: Temp(
+                8,
+            ),
+        },
+        LoadGlobal {
+            target: Temp(
+                9,
+            ),
+            name: "demo_stage",
+        },
+        MSet {
+            target: Temp(
+                9,
+            ),
+            member: "test",
+            value: Temp(
+                8,
+            ),
+        },
+        Return {
+            value: None,
         },
     ],
-    name_to_global: {
-        "project:test_pj.root": 2,
-        "project:test_pj.test": 3,
-        "project:test_pj.demo_stage": 4,
-        "stage:demo_stage.test": 5,
-        "workspace:demo_ws.test1": 1,
-        "workspace:demo_ws.projects": 0,
+    meta: IRMeta {
+        max_temp: 10,
+        max_local: 1,
     },
 }

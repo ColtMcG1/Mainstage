@@ -52,7 +52,7 @@ pub struct Pipeline {
     /// The acyclic analyzer used for acyclic analysis.
     acyclic: Option<DirectedAcyclicGraphAnalyzer>,
     /// The IR module generated during code generation.
-    ir: Option<codegen::BytecodeModule>,
+    ir: Option<codegen::IRProgram>,
 }
 
 impl Pipeline {
@@ -318,7 +318,7 @@ impl Pipeline {
     /// ```
     fn ir_generation(&mut self, dump: bool) -> Result<(), ()> {
         if let Some(parser) = &self.parser {
-            let ir = codegen::generate_bytecode(parser.root());
+            let ir = codegen::generate_program_from_ast(parser.root());
             if dump {
                 std::fs::write("dump_ir.txt", format!("{:#?}", ir)).unwrap();
             }

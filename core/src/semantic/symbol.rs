@@ -6,7 +6,7 @@ use std::borrow::Cow;
 
 use super::types::SymbolType;
 
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug, Hash)]
 pub enum SymbolKind {
     Variable,
     Function,
@@ -16,7 +16,7 @@ pub enum SymbolKind {
     Task,
 }
 
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Eq, Clone, Copy, Debug, Hash)]
 pub enum SymbolScope {
     Local,
     Global,

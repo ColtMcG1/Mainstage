@@ -10,7 +10,7 @@
 pub mod symbol;      // Symbol + kinds
 pub mod analyzer;    // SemanticAnalyzer
 pub mod reserved;
-pub mod builtins;
+pub mod builtin;
 
 // Newly active modules:
 pub mod types;       // InferredType, SymbolType

@@ -1,241 +1,150 @@
-//! ./codegen/lowering/expr.rs
-//! Expression lowering helpers (produce values on the stack).
+use crate::parser::ast::AstNode;
+use crate::parser::types::{AstType, BinaryOperator};
+use crate::codegen::value::{literal_from_node, OpValue};
+use crate::codegen::op::Op;
+use crate::codegen::slot::Slot;
+use crate::report;
+use super::context::LowerCtx;
 
-use crate::codegen::ir::*;
-use crate::parser::{AstNode, AstType};
-
-// Convert AST literal into IRConst (supports nested arrays)
-pub(crate) fn value_irconst(node: &AstNode<'_>) -> Option<IRConst> {
+pub fn lower_expr(cx: &mut LowerCtx, node: &AstNode) -> Option<Slot> {
     match &node.kind {
-        AstType::Str { value } => Some(IRConst::Str(value.to_string())),
-        AstType::Bool { value } => Some(IRConst::Bool(*value)),
-        AstType::Number { value } => Some(IRConst::Int(*value)),
-        AstType::Identifier { name } => Some(IRConst::Ident(name.to_string())),
-        AstType::ShellCmd { command, .. } => Some(IRConst::Command(command.to_string())),
+        AstType::Integer { .. }
+        | AstType::Float { .. }
+        | AstType::Bool { .. }
+        | AstType::Str { .. }
+        | AstType::Null => {
+            if let Some(v) = literal_from_node(node) {
+                let t = cx.temp();
+                cx.emit(Op::LoadConst { target: t, value: v });
+                Some(t)
+            } else { None }
+        }
         AstType::Array => {
-            let mut elems = Vec::with_capacity(node.children.len());
-            for child in &node.children {
-                elems.push(value_irconst(child)?);
+            let target = cx.temp();
+            cx.emit(Op::NewArray { target, size: node.children.len() });
+            for (i, ch) in node.children.iter().enumerate() {
+                if let Some(val_slot) = lower_expr(cx, ch) {
+                    let idx = cx.temp();
+                    cx.emit(Op::LoadConst { target: idx, value: OpValue::Int(i as i64) });
+                    cx.emit(Op::ISet { target, index: idx, value: val_slot });
+                }
             }
-            Some(IRConst::Array(elems))
+            Some(target)
         }
-        AstType::Null => Some(IRConst::Null),
-        _ => None,
-    }
-}
 
-// Load a value into the stack, resolving identifiers to variable loads using scope.
-pub(crate) fn emit_value_in_scope(
-    module: &mut ModuleIR,
-    ops: &mut Vec<IROp>,
-    scope_prefix: &str,
-    scope_name: &str,
-    node: &AstNode<'_>,
-) -> bool {
-    match &node.kind {
-        // Identifier -> LoadVar of FQ global (scope:key)
         AstType::Identifier { name } => {
-            let fq = format!("{scope_prefix}:{scope_name}.{name}");
-            let gid = module.intern_global(fq);
-            ops.push(IROp {
-                kind: IROpKind::LoadVar(gid),
-                span: node.span.clone(),
-            });
-            true
-        }
-        // Literals/arrays -> LoadConst as before
-        _ => {
-            if let Some(konst) = value_irconst(node) {
-                let idx = module.intern_const(konst);
-                ops.push(IROp {
-                    kind: IROpKind::LoadConst(idx),
-                    span: node.span.clone(),
-                });
-                true
-            } else {
-                false
+            let n = name.as_ref();
+            // NEW: first-reference init for scopes used as values
+            if cx.scope_names.contains(n) && !cx.has_called_scope(n) {
+                cx.emit(Op::CallScope { name: n.to_string() });
+                cx.note_scope_call(n);
             }
-        }
-    }
-}
 
-// Expression lowering entry point (value position)
-pub(crate) fn emit_expr_value_in_scope(
-    module: &mut ModuleIR,
-    ops: &mut Vec<IROp>,
-    scope_prefix: &str,
-    scope_name: &str,
-    expr: &AstNode<'_>,
-) -> bool {
-    match &expr.kind {
-        AstType::Member { target, member } => {
-            let field = if let AstType::Identifier { name } = &member.kind {
-                name.as_ref()
+            if let Some(loc) = cx.lookup_local(n) {
+                let t = cx.temp();
+                cx.emit(Op::LoadLocal { target: t, source: loc });
+                Some(t)
             } else {
-                return false;
-            };
-            let field_cidx = module.intern_const(IRConst::Str(field.to_string()));
-            if let AstType::Identifier { name: obj } = &target.kind {
-                let fq = format!("{scope_prefix}:{scope_name}.{obj}");
-                let gid = module.intern_global(fq);
-                ops.push(IROp {
-                    kind: IROpKind::LoadVar(gid),
-                    span: target.span.clone(),
-                });
-                ops.push(IROp {
-                    kind: IROpKind::LoadRefMember(field_cidx),
-                    span: expr.span.clone(),
-                });
-                return true;
+                let t = cx.temp();
+                cx.emit(Op::LoadGlobal { target: t, name: n.to_string() });
+                Some(t)
             }
-            if emit_expr_value_in_scope(module, ops, scope_prefix, scope_name, target) {
-                ops.push(IROp {
-                    kind: IROpKind::LoadRefMember(field_cidx),
-                    span: expr.span.clone(),
-                });
-                return true;
-            }
-            false
-        }
-        AstType::Index { target, index } => {
-            if !emit_expr_value_in_scope(module, ops, scope_prefix, scope_name, target) {
-                return false;
-            }
-            if !emit_expr_value_in_scope(module, ops, scope_prefix, scope_name, index) {
-                return false;
-            }
-            ops.push(IROp {
-                kind: IROpKind::Index,
-                span: expr.span.clone(),
-            });
-            true
         }
         AstType::BinaryOp { op, left, right } => {
-            if !emit_expr_value_in_scope(module, ops, scope_prefix, scope_name, left) {
-                return false;
+            let l = lower_expr(cx, left)?;
+            let r = lower_expr(cx, right)?;
+            let t = cx.temp();
+            match op {
+                BinaryOperator::Add => cx.emit(Op::Add { lhs: l, rhs: r, target: t }),
+                BinaryOperator::Sub => cx.emit(Op::Sub { lhs: l, rhs: r, target: t }),
+                BinaryOperator::Mul => cx.emit(Op::Mul { lhs: l, rhs: r, target: t }),
+                BinaryOperator::Div => cx.emit(Op::Div { lhs: l, rhs: r, target: t }),
+                BinaryOperator::Eq => cx.emit(Op::Eq { lhs: l, rhs: r, target: t }),
+                BinaryOperator::Ne => cx.emit(Op::Ne { lhs: l, rhs: r, target: t }),
+                BinaryOperator::Lt => cx.emit(Op::Lt { lhs: l, rhs: r, target: t }),
+                BinaryOperator::Le => cx.emit(Op::Le { lhs: l, rhs: r, target: t }),
+                BinaryOperator::Gt => cx.emit(Op::Gt { lhs: l, rhs: r, target: t }),
+                BinaryOperator::Ge => cx.emit(Op::Ge { lhs: l, rhs: r, target: t }),
             }
-            if !emit_expr_value_in_scope(module, ops, scope_prefix, scope_name, right) {
-                return false;
-            }
-            use crate::parser::types::BinaryOperator;
-            let kind = match op {
-                BinaryOperator::Add => IROpKind::Add,
-                BinaryOperator::Sub => IROpKind::Sub,
-                BinaryOperator::Mul => IROpKind::Mul,
-                BinaryOperator::Div => IROpKind::Div,
-                _ => return false,
-            };
-            ops.push(IROp {
-                kind,
-                span: expr.span.clone(),
-            });
-            true
+            Some(t)
         }
         AstType::Call { target, arguments } => {
-            let name = if let AstType::Identifier { name } = &target.kind {
-                name.as_ref()
-            } else {
-                return false;
-            };
-            if name == "say" {
-                if arguments.len() != 1 {
-                    return false;
-                }
-                let arg = &arguments[0];
-                if !emit_expr_value_in_scope(module, ops, scope_prefix, scope_name, arg) {
-                    return false;
-                }
-                ops.push(IROp {
-                    kind: IROpKind::Say,
-                    span: expr.span.clone(),
-                });
-                return true;
-            }
-            if name == "ask" {
-                if arguments.len() > 1 {
-                    return false;
-                }
-                let argc = arguments.len() as u8;
-                if argc == 1
-                    && !emit_expr_value_in_scope(
-                        module,
-                        ops,
-                        scope_prefix,
-                        scope_name,
-                        &arguments[0],
-                    )
-                {
-                    return false;
-                }
-                ops.push(IROp {
-                    kind: IROpKind::Ask(argc),
-                    span: expr.span.clone(),
-                });
-                return true;
-            }
-            if name == "read" {
-                if arguments.len() != 1 {
-                    return false;
-                }
-                if !emit_expr_value_in_scope(module, ops, scope_prefix, scope_name, &arguments[0]) {
-                    return false;
-                }
-                ops.push(IROp {
-                    kind: IROpKind::Read,
-                    span: expr.span.clone(),
-                });
-                return true;
-            }
-            if name == "write" {
-                if arguments.len() != 2 {
-                    return false;
-                }
-                if !emit_expr_value_in_scope(module, ops, scope_prefix, scope_name, &arguments[0]) {
-                    return false;
-                }
-                if !emit_expr_value_in_scope(module, ops, scope_prefix, scope_name, &arguments[1]) {
-                    return false;
-                }
-                ops.push(IROp {
-                    kind: IROpKind::Write,
-                    span: expr.span.clone(),
-                });
-                return true;
-            }
-            if let Some(fid) = module.get_plain_func(name) {
-                for a in arguments {
-                    if !emit_expr_value_in_scope(module, ops, scope_prefix, scope_name, a) {
-                        return false;
+            // Builtins
+            if let AstType::Identifier { name } = &target.kind {
+                match name.as_ref() {
+                    "say" => {
+                        if let Some(arg) = arguments.get(0).and_then(|a| lower_expr(cx, a)) {
+                            cx.emit(Op::Say { message: arg });
+                        }
+                        return None;
                     }
+                    "ask" => {
+                        if let Some(q) = arguments.get(0).and_then(|a| lower_expr(cx, a)) {
+                            let t = cx.temp();
+                            cx.emit(Op::Ask { question: q, target: t });
+                            return Some(t);
+                        }
+                        return None;
+                    }
+                    "read" => {
+                        if let Some(loc) = arguments.get(0).and_then(|a| lower_expr(cx, a)) {
+                            let t = cx.temp();
+                            cx.emit(Op::Read { location: loc, target: t });
+                            return Some(t);
+                        }
+                        return None;
+                    }
+                    "write" => {
+                        if arguments.len() >= 2 {
+                            if let (Some(loc), Some(content)) = (lower_expr(cx, &arguments[0]), lower_expr(cx, &arguments[1])) {
+                                cx.emit(Op::Write { location: loc, target: content });
+                            }
+                        }
+                        return None;
+                    }
+                    _ => {}
                 }
-                ops.push(IROp {
-                    kind: IROpKind::Call(fid, arguments.len() as u8),
-                    span: expr.span.clone(),
-                });
-                return true;
             }
-            false
+            // Generic call
+            let func_slot = lower_expr(cx, target)?;
+            let mut arg_slots = Vec::new();
+            for a in arguments {
+                if let Some(s) = lower_expr(cx, a) { arg_slots.push(s); }
+            }
+            let ret = cx.temp();
+            cx.emit(Op::Call { target: ret, func: func_slot, args: arg_slots });
+            Some(ret)
         }
-        AstType::Identifier { name } => {
-            let fq = format!("{scope_prefix}:{scope_name}.{name}");
-            let gid = module.intern_global(fq);
-            ops.push(IROp {
-                kind: IROpKind::LoadVar(gid),
-                span: expr.span.clone(),
-            });
-            true
+        AstType::Return => {
+            if let Some(v) = node.children.get(0) {
+                lower_expr(cx, v)
+            } else { None }
+        }
+        AstType::Member { target, member } => {
+            // Auto-init if target is a scope identifier and not yet called (covers demo_stage.test)
+            if let (AstType::Identifier { name: container }, AstType::Identifier { .. }) = (&target.kind, &member.kind) {
+                let c = container.as_ref();
+                if cx.scope_names.contains(c) && !cx.has_called_scope(c) {
+                    cx.emit(Op::CallScope { name: c.to_string() });
+                    cx.note_scope_call(c);
+                }
+            }
+            let src = lower_expr(cx, target)?;
+            if let AstType::Identifier { name: m } = &member.kind {
+                let t = cx.temp();
+                cx.emit(Op::MGet { target: t, source: src, member: m.to_string() });
+                Some(t)
+            } else { None }
         }
         _ => {
-            if let Some(konst) = value_irconst(expr) {
-                let idx = module.intern_const(konst);
-                ops.push(IROp {
-                    kind: IROpKind::LoadConst(idx),
-                    span: expr.span.clone(),
-                });
-                true
-            } else {
-                false
-            }
+            report!(
+                crate::reports::Level::Error,
+                format!("Unsupported expression kind in lowering: {:?}", node.kind),
+                Some("Lowering".into()),
+                node.span.clone(),
+                node.location.clone()
+            );
+            None
         }
     }
 }

@@ -8,6 +8,7 @@ use crate::report;
 use crate::reports::*;
 use super::analyzer::SemanticAnalyzer;
 use super::types::{InferredType, SymbolType};
+use crate::semantic::SymbolKind;
 
 pub fn unify(a: InferredType, b: InferredType) -> InferredType {
     use InferredType::*;
@@ -15,6 +16,8 @@ pub fn unify(a: InferredType, b: InferredType) -> InferredType {
         (Unknown, t) | (t, Unknown) => t,
         (Unit, t) | (t, Unit) => t,
         (Int, Int) => Int,
+        (Float, Float) => Float,
+        (Int, Float) | (Float, Int) => Float,
         (Bool, Bool) => Bool,
         (Str, Str) => Str,
         (Array, Array) => Array,
@@ -29,28 +32,33 @@ pub fn infer_call_expr_type(an: &SemanticAnalyzer<'_>, node: &AstNode<'_>) -> Op
         _ => return None,
     };
 
-    let name = match &target.kind {
-        AstType::Identifier { name } => name.as_ref(),
-        _ => return None,
-    };
+    // Simple identifiers (existing behavior)
+    if let AstType::Identifier { name } = &target.kind {
+        let name = name.as_ref();
 
-    // Builtins: ask/read return a value (string); say/write are statements
-    if an.is_builtin(name) {
-        return Some(match name {
-            "ask" | "read" => InferredType::Str,
-            "say" | "write" => InferredType::Unit,
-            _ => InferredType::Unknown,
-        });
+        if an.is_builtin(name) {
+            return Some(match name {
+                "ask" | "read" => InferredType::Str,
+                "say" | "write" => InferredType::Unit,
+                _ => InferredType::Unknown,
+            });
+        }
+        if an.is_stage_name(name) {
+            return Some(InferredType::Unit);
+        }
+        if an.is_task_name(name) {
+            return an.task_returns.get(name).copied().or(Some(InferredType::Unknown));
+        }
+        return None;
     }
 
-    // Stages: statement-only, no return value
-    if an.is_stage_name(name) {
-        return Some(InferredType::Unit);
-    }
-
-    // Tasks: use precomputed return inference (defaults to Unknown if not found)
-    if an.is_task_name(name) {
-        return an.task_returns.get(name).copied().or(Some(InferredType::Unknown));
+    // Member calls: stage.task(...)
+    if let AstType::Member { target: t, member: m } = &target.kind {
+        if let (AstType::Identifier { name: stage_name }, AstType::Identifier { name: task_name }) = (&t.kind, &m.kind) {
+            if an.is_stage_name(stage_name) && an.is_task_name(task_name) {
+                return an.task_returns.get(task_name.as_ref()).copied().or(Some(InferredType::Unknown));
+            }
+        }
     }
 
     None
@@ -58,7 +66,8 @@ pub fn infer_call_expr_type(an: &SemanticAnalyzer<'_>, node: &AstNode<'_>) -> Op
 
 pub fn infer_expr_type(an: &SemanticAnalyzer<'_>, node: &AstNode<'_>) -> InferredType {
     match &node.kind {
-        AstType::Number { .. } => InferredType::Int,
+        AstType::Integer { .. } => InferredType::Int,
+        AstType::Float { .. } => InferredType::Float,
         AstType::Bool { .. } => InferredType::Bool,
         AstType::Str { .. } => InferredType::Str,
         AstType::Array => InferredType::Array,
@@ -126,7 +135,31 @@ pub fn infer_expr_type(an: &SemanticAnalyzer<'_>, node: &AstNode<'_>) -> Inferre
                 | BinaryOperator::Ge => InferredType::Bool,
             }
         }
-        AstType::Member { .. } => InferredType::Unknown,
+        AstType::Member { target, member } => {
+            let (container_name, member_name) = match (&target.kind, &member.kind) {
+                (AstType::Identifier { name: c }, AstType::Identifier { name: m }) => (c.as_ref(), m.as_ref()),
+                _ => return InferredType::Unknown,
+            };
+            // Resolve kind generically
+            let kind = if an.is_stage_name(container_name) {
+                SymbolKind::Stage
+            } else if let Some(_) = an.symbol_table.get(container_name).filter(|v| v.iter().any(|s| s.kind() == &SymbolKind::Workspace)) {
+                SymbolKind::Workspace
+            } else if let Some(_) = an.symbol_table.get(container_name).filter(|v| v.iter().any(|s| s.kind() == &SymbolKind::Project)) {
+                SymbolKind::Project
+            } else if let Some(_) = an.symbol_table.get(container_name).filter(|v| v.iter().any(|s| s.kind() == &SymbolKind::Task)) {
+                SymbolKind::Task
+            } else {
+                return InferredType::Unknown;
+            };
+            let key = (kind, container_name.to_string());
+            if let Some(map) = an.scope_members.get(&key) {
+                if let Some(t) = map.get(member_name) {
+                    return *t;
+                }
+            }
+            InferredType::Unknown
+        }
         _ => InferredType::Unknown,
     }
 }
@@ -147,7 +180,8 @@ pub fn infer_type(an: &SemanticAnalyzer<'_>, node: &AstNode<'_>) -> Result<Symbo
                 Ok(SymbolType::None)
             }
         }
-        AstType::Number { .. } => Ok(SymbolType::Integer),
+        AstType::Integer { .. } => Ok(SymbolType::Integer),
+        AstType::Float { .. } => Ok(SymbolType::Float),
         AstType::Bool { .. } => Ok(SymbolType::Boolean),
         AstType::Str { .. } => Ok(SymbolType::String),
         AstType::Array => {
@@ -252,6 +286,14 @@ pub fn infer_type(an: &SemanticAnalyzer<'_>, node: &AstNode<'_>) -> Result<Symbo
                 );
                 Err(())
             }
+        }
+        AstType::Member { target: _, member: _ } => {
+            // Map generic member inference result to SymbolType without emitting identifier errors.
+            let it = infer_expr_type(an, node);
+            Ok(match it {
+                InferredType::Unknown | InferredType::Unit => SymbolType::None,
+                _ => it.to_symbol_type(),
+            })
         }
         AstType::Null => Ok(SymbolType::None),
         _ => {

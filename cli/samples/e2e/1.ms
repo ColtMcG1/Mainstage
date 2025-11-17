@@ -1,6 +1,6 @@
 workspace demo_ws {
     projects = [test_pj];  // list of project references; Should call project init for all projects in list since this is their first reference.
-    
+
     for project in projects {
         say(project); // Should print something like: Ref(ProjectId(1))
     }

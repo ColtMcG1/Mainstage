@@ -137,7 +137,8 @@ impl DirectedAcyclicGraphAnalyzer {
                 }
 
                 // Optional: treat literals as producers (comment out to suppress)
-                AstType::Number { .. }
+                AstType::Integer { .. }
+                | AstType::Float { .. }
                 | AstType::Str { .. }
                 | AstType::Bool { .. } => {
                     // Uncomment if you want literal data edges:
