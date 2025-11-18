@@ -94,6 +94,26 @@ IRProgram {
                 5,
             ),
         },
+        LoadGlobal {
+            target: Temp(
+                7,
+            ),
+            name: "test_pj",
+        },
+        MGet {
+            target: Temp(
+                8,
+            ),
+            source: Temp(
+                7,
+            ),
+            member: "test1",
+        },
+        Say {
+            message: Temp(
+                8,
+            ),
+        },
         Return {
             value: None,
         },
@@ -102,7 +122,7 @@ IRProgram {
         },
         LoadConst {
             target: Temp(
-                7,
+                9,
             ),
             value: Str(
                 "Test number > ",
@@ -110,25 +130,25 @@ IRProgram {
         },
         Ask {
             question: Temp(
-                7,
+                9,
             ),
             target: Temp(
-                8,
+                10,
             ),
         },
         LoadGlobal {
             target: Temp(
-                9,
+                11,
             ),
             name: "demo_stage",
         },
         MSet {
             target: Temp(
-                9,
+                11,
             ),
             member: "test",
             value: Temp(
-                8,
+                10,
             ),
         },
         Return {
@@ -136,7 +156,7 @@ IRProgram {
         },
     ],
     meta: IRMeta {
-        max_temp: 10,
+        max_temp: 12,
         max_local: 1,
     },
 }

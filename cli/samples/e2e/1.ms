@@ -8,8 +8,9 @@ workspace demo_ws {
 }
 
 project test_pj {
-    demo_stage();           // Should call stage init for demo_stage below
+    demo_stage();            // Should call stage init for demo_stage below
     test1 = demo_stage.test; // Should get the value from the initalized stage below
+    say(test1);              // Should print the value obtained from demo_stage below
 }
 
 stage demo_stage () // No arguments

@@ -34,7 +34,7 @@ pub fn lower_expr(cx: &mut LowerCtx, node: &AstNode) -> Option<Slot> {
 
         AstType::Identifier { name } => {
             let n = name.as_ref();
-            // NEW: first-reference init for scopes used as values
+
             if cx.scope_names.contains(n) && !cx.has_called_scope(n) {
                 cx.emit(Op::CallScope { name: n.to_string() });
                 cx.note_scope_call(n);
@@ -43,12 +43,23 @@ pub fn lower_expr(cx: &mut LowerCtx, node: &AstNode) -> Option<Slot> {
             if let Some(loc) = cx.lookup_local(n) {
                 let t = cx.temp();
                 cx.emit(Op::LoadLocal { target: t, source: loc });
-                Some(t)
-            } else {
-                let t = cx.temp();
-                cx.emit(Op::LoadGlobal { target: t, name: n.to_string() });
-                Some(t)
+                return Some(t);
             }
+
+            if let Some(scope_name) = cx.current_scope.as_ref() {
+                let scope_name_cloned = scope_name.clone();
+                if cx.is_member_initialized(&scope_name_cloned, n) {
+                    let obj = cx.temp();
+                    cx.emit(Op::LoadGlobal { target: obj, name: scope_name_cloned.clone() });
+                    let t = cx.temp();
+                    cx.emit(Op::MGet { target: t, source: obj, member: n.to_string() });
+                    return Some(t);
+                }
+            }
+
+            let t = cx.temp();
+            cx.emit(Op::LoadGlobal { target: t, name: n.to_string() });
+            Some(t)
         }
         AstType::BinaryOp { op, left, right } => {
             let l = lower_expr(cx, left)?;
