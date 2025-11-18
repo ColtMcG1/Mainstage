@@ -1,101 +1,78 @@
 Some(
     DirectedAcyclicGraphAnalyzer {
         nodes: {
-            "node_2": AcyclicNode {
-                id: "node_2",
-                edges: [
-                    AcyclicEdge {
-                        source: "node_2",
-                        target: "node_4",
-                        kind: Data,
-                    },
-                ],
-                incoming: [
-                    AcyclicEdge {
-                        source: "node_3",
-                        target: "node_2",
-                        kind: Structural,
-                    },
-                ],
-            },
-            "node_18": AcyclicNode {
-                id: "node_18",
-                edges: [
-                    AcyclicEdge {
-                        source: "node_18",
-                        target: "node_14",
-                        kind: Structural,
-                    },
-                    AcyclicEdge {
-                        source: "node_18",
-                        target: "node_17",
-                        kind: Structural,
-                    },
-                ],
-                incoming: [
-                    AcyclicEdge {
-                        source: "node_11",
-                        target: "node_18",
-                        kind: Structural,
-                    },
-                    AcyclicEdge {
-                        source: "node_17",
-                        target: "node_18",
-                        kind: Data,
-                    },
-                ],
-            },
-            "node_24": AcyclicNode {
-                id: "node_24",
-                edges: [
-                    AcyclicEdge {
-                        source: "node_24",
-                        target: "node_20",
-                        kind: Structural,
-                    },
-                    AcyclicEdge {
-                        source: "node_24",
-                        target: "node_23",
-                        kind: Structural,
-                    },
-                ],
-                incoming: [
-                    AcyclicEdge {
-                        source: "node_19",
-                        target: "node_24",
-                        kind: Structural,
-                    },
-                    AcyclicEdge {
-                        source: "node_23",
-                        target: "node_24",
-                        kind: Data,
-                    },
-                ],
-            },
-            "node_10": AcyclicNode {
-                id: "node_10",
+            "node_33": AcyclicNode {
+                id: "node_33",
                 edges: [],
                 incoming: [
                     AcyclicEdge {
-                        source: "node_0",
+                        source: "node_37",
+                        target: "node_33",
+                        kind: Structural,
+                    },
+                ],
+            },
+            "node_28": AcyclicNode {
+                id: "node_28",
+                edges: [],
+                incoming: [
+                    AcyclicEdge {
+                        source: "node_32",
+                        target: "node_28",
+                        kind: Structural,
+                    },
+                ],
+            },
+            "node_37": AcyclicNode {
+                id: "node_37",
+                edges: [
+                    AcyclicEdge {
+                        source: "node_37",
+                        target: "node_33",
+                        kind: Structural,
+                    },
+                    AcyclicEdge {
+                        source: "node_37",
+                        target: "node_36",
+                        kind: Structural,
+                    },
+                ],
+                incoming: [
+                    AcyclicEdge {
+                        source: "node_10",
+                        target: "node_37",
+                        kind: Structural,
+                    },
+                ],
+            },
+            "node_40": AcyclicNode {
+                id: "node_40",
+                edges: [
+                    AcyclicEdge {
+                        source: "node_40",
+                        target: "node_0",
+                        kind: Structural,
+                    },
+                    AcyclicEdge {
+                        source: "node_40",
+                        target: "node_5",
+                        kind: Structural,
+                    },
+                    AcyclicEdge {
+                        source: "node_40",
                         target: "node_10",
                         kind: Structural,
                     },
                 ],
+                incoming: [],
             },
-            "node_3": AcyclicNode {
-                id: "node_3",
-                edges: [
-                    AcyclicEdge {
-                        source: "node_3",
-                        target: "node_2",
-                        kind: Structural,
-                    },
-                ],
+            "node_14": AcyclicNode {
+                id: "node_14",
+                edges: [],
                 incoming: [
                     AcyclicEdge {
-                        source: "node_4",
-                        target: "node_3",
+                        source: "node_21",
+                        target: "node_14",
                         kind: Structural,
                     },
                 ],
@@ -111,80 +88,52 @@ Some(
                     },
                 ],
             },
-            "node_20": AcyclicNode {
-                id: "node_20",
-                edges: [],
+            "node_5": AcyclicNode {
+                id: "node_5",
+                edges: [
+                    AcyclicEdge {
+                        source: "node_5",
+                        target: "node_9",
+                        kind: Structural,
+                    },
+                ],
                 incoming: [
                     AcyclicEdge {
-                        source: "node_24",
+                        source: "node_40",
+                        target: "node_5",
+                        kind: Structural,
+                    },
+                ],
+            },
+            "node_21": AcyclicNode {
+                id: "node_21",
+                edges: [
+                    AcyclicEdge {
+                        source: "node_21",
+                        target: "node_14",
+                        kind: Structural,
+                    },
+                    AcyclicEdge {
+                        source: "node_21",
                         target: "node_20",
                         kind: Structural,
                     },
                 ],
+                incoming: [
+                    AcyclicEdge {
+                        source: "node_10",
+                        target: "node_21",
+                        kind: Structural,
+                    },
+                ],
             },
-            "node_13": AcyclicNode {
-                id: "node_13",
+            "node_38": AcyclicNode {
+                id: "node_38",
                 edges: [],
                 incoming: [
                     AcyclicEdge {
-                        source: "node_11",
-                        target: "node_13",
-                        kind: Structural,
-                    },
-                ],
-            },
-            "node_17": AcyclicNode {
-                id: "node_17",
-                edges: [
-                    AcyclicEdge {
-                        source: "node_17",
-                        target: "node_18",
-                        kind: Data,
-                    },
-                ],
-                incoming: [
-                    AcyclicEdge {
-                        source: "node_18",
-                        target: "node_17",
-                        kind: Structural,
-                    },
-                ],
-            },
-            "node_19": AcyclicNode {
-                id: "node_19",
-                edges: [
-                    AcyclicEdge {
-                        source: "node_19",
-                        target: "node_24",
-                        kind: Structural,
-                    },
-                ],
-                incoming: [
-                    AcyclicEdge {
-                        source: "node_25",
-                        target: "node_19",
-                        kind: Structural,
-                    },
-                ],
-            },
-            "node_0": AcyclicNode {
-                id: "node_0",
-                edges: [
-                    AcyclicEdge {
-                        source: "node_0",
-                        target: "node_4",
-                        kind: Structural,
-                    },
-                    AcyclicEdge {
-                        source: "node_0",
-                        target: "node_10",
-                        kind: Structural,
-                    },
-                ],
-                incoming: [
-                    AcyclicEdge {
-                        source: "node_25",
-                        target: "node_0",
+                        source: "node_39",
+                        target: "node_38",
                         kind: Structural,
                     },
                 ],
@@ -216,80 +165,343 @@ Some(
                     },
                 ],
             },
-            "node_14": AcyclicNode {
-                id: "node_14",
-                edges: [],
+            "node_10": AcyclicNode {
+                id: "node_10",
+                edges: [
+                    AcyclicEdge {
+                        source: "node_10",
+                        target: "node_13",
+                        kind: Structural,
+                    },
+                    AcyclicEdge {
+                        source: "node_10",
+                        target: "node_21",
+                        kind: Structural,
+                    },
+                    AcyclicEdge {
+                        source: "node_10",
+                        target: "node_27",
+                        kind: Structural,
+                    },
+                    AcyclicEdge {
+                        source: "node_10",
+                        target: "node_32",
+                        kind: Structural,
+                    },
+                    AcyclicEdge {
+                        source: "node_10",
+                        target: "node_37",
+                        kind: Structural,
+                    },
+                    AcyclicEdge {
+                        source: "node_10",
+                        target: "node_39",
+                        kind: Structural,
+                    },
+                ],
                 incoming: [
                     AcyclicEdge {
-                        source: "node_18",
-                        target: "node_14",
+                        source: "node_40",
+                        target: "node_10",
                         kind: Structural,
                     },
                 ],
             },
-            "node_23": AcyclicNode {
-                id: "node_23",
+            "node_0": AcyclicNode {
+                id: "node_0",
                 edges: [
                     AcyclicEdge {
-                        source: "node_23",
-                        target: "node_24",
+                        source: "node_0",
+                        target: "node_4",
+                        kind: Structural,
+                    },
+                ],
+                incoming: [
+                    AcyclicEdge {
+                        source: "node_40",
+                        target: "node_0",
+                        kind: Structural,
+                    },
+                ],
+            },
+            "node_31": AcyclicNode {
+                id: "node_31",
+                edges: [
+                    AcyclicEdge {
+                        source: "node_31",
+                        target: "node_32",
                         kind: Data,
                     },
                 ],
                 incoming: [
                     AcyclicEdge {
-                        source: "node_24",
-                        target: "node_23",
+                        source: "node_32",
+                        target: "node_31",
                         kind: Structural,
                     },
                 ],
             },
-            "node_25": AcyclicNode {
-                id: "node_25",
+            "node_20": AcyclicNode {
+                id: "node_20",
                 edges: [
                     AcyclicEdge {
-                        source: "node_25",
-                        target: "node_0",
+                        source: "node_20",
+                        target: "node_15",
                         kind: Structural,
                     },
                     AcyclicEdge {
-                        source: "node_25",
-                        target: "node_11",
+                        source: "node_20",
+                        target: "node_16",
                         kind: Structural,
                     },
                     AcyclicEdge {
-                        source: "node_25",
-                        target: "node_19",
-                        kind: Structural,
-                    },
-                ],
-                incoming: [],
-            },
-            "node_11": AcyclicNode {
-                id: "node_11",
-                edges: [
-                    AcyclicEdge {
-                        source: "node_11",
-                        target: "node_13",
+                        source: "node_20",
+                        target: "node_17",
                         kind: Structural,
                     },
                     AcyclicEdge {
-                        source: "node_11",
+                        source: "node_20",
                         target: "node_18",
+                        kind: Structural,
+                    },
+                    AcyclicEdge {
+                        source: "node_20",
+                        target: "node_19",
                         kind: Structural,
                     },
                 ],
                 incoming: [
                     AcyclicEdge {
-                        source: "node_25",
-                        target: "node_11",
+                        source: "node_21",
+                        target: "node_20",
+                        kind: Structural,
+                    },
+                ],
+            },
+            "node_39": AcyclicNode {
+                id: "node_39",
+                edges: [
+                    AcyclicEdge {
+                        source: "node_39",
+                        target: "node_38",
+                        kind: Structural,
+                    },
+                ],
+                incoming: [
+                    AcyclicEdge {
+                        source: "node_10",
+                        target: "node_39",
+                        kind: Structural,
+                    },
+                ],
+            },
+            "node_3": AcyclicNode {
+                id: "node_3",
+                edges: [
+                    AcyclicEdge {
+                        source: "node_3",
+                        target: "node_2",
+                        kind: Structural,
+                    },
+                ],
+                incoming: [
+                    AcyclicEdge {
+                        source: "node_4",
+                        target: "node_3",
+                        kind: Structural,
+                    },
+                ],
+            },
+            "node_32": AcyclicNode {
+                id: "node_32",
+                edges: [
+                    AcyclicEdge {
+                        source: "node_32",
+                        target: "node_28",
+                        kind: Structural,
+                    },
+                    AcyclicEdge {
+                        source: "node_32",
+                        target: "node_31",
+                        kind: Structural,
+                    },
+                ],
+                incoming: [
+                    AcyclicEdge {
+                        source: "node_10",
+                        target: "node_32",
+                        kind: Structural,
+                    },
+                    AcyclicEdge {
+                        source: "node_31",
+                        target: "node_32",
+                        kind: Data,
+                    },
+                ],
+            },
+            "node_2": AcyclicNode {
+                id: "node_2",
+                edges: [
+                    AcyclicEdge {
+                        source: "node_2",
+                        target: "node_4",
+                        kind: Data,
+                    },
+                ],
+                incoming: [
+                    AcyclicEdge {
+                        source: "node_3",
+                        target: "node_2",
+                        kind: Structural,
+                    },
+                ],
+            },
+            "node_17": AcyclicNode {
+                id: "node_17",
+                edges: [],
+                incoming: [
+                    AcyclicEdge {
+                        source: "node_20",
+                        target: "node_17",
+                        kind: Structural,
+                    },
+                ],
+            },
+            "node_27": AcyclicNode {
+                id: "node_27",
+                edges: [],
+                incoming: [
+                    AcyclicEdge {
+                        source: "node_10",
+                        target: "node_27",
+                        kind: Structural,
+                    },
+                ],
+            },
+            "node_18": AcyclicNode {
+                id: "node_18",
+                edges: [],
+                incoming: [
+                    AcyclicEdge {
+                        source: "node_20",
+                        target: "node_18",
+                        kind: Structural,
+                    },
+                ],
+            },
+            "node_36": AcyclicNode {
+                id: "node_36",
+                edges: [],
+                incoming: [
+                    AcyclicEdge {
+                        source: "node_37",
+                        target: "node_36",
+                        kind: Structural,
+                    },
+                ],
+            },
+            "node_13": AcyclicNode {
+                id: "node_13",
+                edges: [],
+                incoming: [
+                    AcyclicEdge {
+                        source: "node_10",
+                        target: "node_13",
+                        kind: Structural,
+                    },
+                ],
+            },
+            "node_9": AcyclicNode {
+                id: "node_9",
+                edges: [
+                    AcyclicEdge {
+                        source: "node_9",
+                        target: "node_6",
+                        kind: Structural,
+                    },
+                    AcyclicEdge {
+                        source: "node_9",
+                        target: "node_8",
+                        kind: Structural,
+                    },
+                ],
+                incoming: [
+                    AcyclicEdge {
+                        source: "node_5",
+                        target: "node_9",
+                        kind: Structural,
+                    },
+                    AcyclicEdge {
+                        source: "node_8",
+                        target: "node_9",
+                        kind: Data,
+                    },
+                ],
+            },
+            "node_6": AcyclicNode {
+                id: "node_6",
+                edges: [],
+                incoming: [
+                    AcyclicEdge {
+                        source: "node_9",
+                        target: "node_6",
+                        kind: Structural,
+                    },
+                ],
+            },
+            "node_16": AcyclicNode {
+                id: "node_16",
+                edges: [],
+                incoming: [
+                    AcyclicEdge {
+                        source: "node_20",
+                        target: "node_16",
+                        kind: Structural,
+                    },
+                ],
+            },
+            "node_19": AcyclicNode {
+                id: "node_19",
+                edges: [],
+                incoming: [
+                    AcyclicEdge {
+                        source: "node_20",
+                        target: "node_19",
+                        kind: Structural,
+                    },
+                ],
+            },
+            "node_8": AcyclicNode {
+                id: "node_8",
+                edges: [
+                    AcyclicEdge {
+                        source: "node_8",
+                        target: "node_9",
+                        kind: Data,
+                    },
+                ],
+                incoming: [
+                    AcyclicEdge {
+                        source: "node_9",
+                        target: "node_8",
+                        kind: Structural,
+                    },
+                ],
+            },
+            "node_15": AcyclicNode {
+                id: "node_15",
+                edges: [],
+                incoming: [
+                    AcyclicEdge {
+                        source: "node_20",
+                        target: "node_15",
                         kind: Structural,
                     },
                 ],
             },
         },
         entry_point: Some(
-            "node_0",
+            "node_5",
         ),
     },
 )

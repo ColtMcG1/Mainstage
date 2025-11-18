@@ -37,12 +37,12 @@ stage_decl     = { attributes? ~ "stage"     ~ identifier ~ "(" ~ arguments? ~ "
 task_decl      = { attributes? ~ "task"      ~ identifier ~ "(" ~ arguments? ~ ")" ~ block }
 
 // --- Loops (no trailing semicolon; body must be a block) ---
-loop_stmt    = { forin_stmt | for_stmt | while_stmt }
+loop_stmt    = { forin_stmt | forto_stmt | while_stmt }
 forin_stmt   = { "for" ~ identifier ~ "in" ~ expression ~ block }
+forto_stmt   = { "for" ~ assignment_expr ~ "to" ~ expression ~ block }
 while_stmt   = { "while" ~ "(" ~ expression ~ ")" ~ block }
 // Use assignment_expr (no trailing ';') in the for-header
 assignment_expr = { identifier ~ "=" ~ expression }
-for_stmt     = { "for" ~ "(" ~ assignment_expr? ~ ";" ~ expression? ~ ";" ~ assignment_expr? ~ ")" ~ block }
 
 // --- Expressions ---
 // Make calls/members/index postfix ops so chaining works: obj.fn(a).x[i]++.

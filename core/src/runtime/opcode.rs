@@ -41,6 +41,7 @@ pub enum Op {
     BrTrue = 0x31,
     BrFalse = 0x32,
     Return = 0x50,
+    Halt = 0x51,
 
     // Func Calls
     Call = 0x40,
@@ -76,6 +77,7 @@ impl Op {
             0x31 => Op::BrTrue,
             0x32 => Op::BrFalse,
             0x50 => Op::Return,
+            0x51 => Op::Halt,
             0x40 => Op::Call,
             0x60 => Op::Say,
             0x70 => Op::Write,

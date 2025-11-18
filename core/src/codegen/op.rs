@@ -65,16 +65,19 @@ pub enum Op {
     Jump { target: String },
     BrTrue { condition: Slot, target: String },
     BrFalse { condition: Slot, target: String },
+    Halt,
 
     // --- Func Calls ---
 
     /// 
     Call { target: Slot, func: Slot, args: Vec<Slot> },
-    CallScope { name: String },
     Return { value: Option<Slot> },
 
     Say { message: Slot },
     Write { location: Slot, target: Slot },
     Read { location: Slot, target: Slot },
     Ask { question: Slot, target: Slot },
+
+    Inc { target: Slot }, // target = target + 1
+    Dec { target: Slot }, // target = target - 1
 }

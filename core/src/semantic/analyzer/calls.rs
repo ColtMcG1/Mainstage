@@ -15,7 +15,6 @@ pub(crate) fn analyze_call<'a>(
         _ => return Ok(()),
     };
 
-    // Simple identifier calls
     if let AstType::Identifier { name } = &target.kind {
         let name = name.as_ref();
 
@@ -35,31 +34,44 @@ pub(crate) fn analyze_call<'a>(
             return Ok(());
         }
 
-        // scope init calls: workspace/project/stage/task
-        let mut handled_scope_call = false;
+        // scope calls (workspace/project/stage/task)
         for kind in [SymbolKind::Workspace, SymbolKind::Project, SymbolKind::Stage, SymbolKind::Task] {
             if util::is_kind(&an.symbol_table, name, kind.clone()) {
-                an.mark_scope_initialized(kind, name);
-                handled_scope_call = true;
-                break;
+                // mark as initialized if you track it
+                an.mark_scope_initialized(kind.clone(), name);
+                // NEW: bump reference count for the called scope symbol
+                util::mark_kind(&mut an.symbol_table, name, kind.clone());
+
+                for a in arguments { an.analyze_expression(a)?; }
+
+                let returns_value = scope_has_value_return(an, &kind, name);
+
+                if in_expression {
+                    if returns_value { return Ok(()); }
+                    report!(
+                        Level::Error,
+                        format!("Scope '{}' call returns no value.", name),
+                        Some("SemanticAnalyzer".into()),
+                        node.span.clone(),
+                        node.location.clone()
+                    );
+                    return Err(());
+                } else {
+                    if returns_value {
+                        report!(
+                            Level::Warning,
+                            format!("Return value of scope '{}' discarded.", name),
+                            Some("SemanticAnalyzer".into()),
+                            node.span.clone(),
+                            node.location.clone()
+                        );
+                    }
+                    return Ok(());
+                }
             }
-        }
-        if handled_scope_call {
-            for a in arguments { an.analyze_expression(a)?; }
-            if in_expression {
-                report!(
-                    Level::Error,
-                    format!("Scope '{}' call returns no value.", name),
-                    Some("SemanticAnalyzer".into()),
-                    node.span.clone(),
-                    node.location.clone()
-                );
-                return Err(());
-            }
-            return Ok(());
         }
 
-        // tasks by bare name
+        // tasks by bare name (unchanged)
         if an.is_task_name(name) {
             util::mark_kind(&mut an.symbol_table, name, SymbolKind::Task);
             for a in arguments { an.analyze_expression(a)?; }
@@ -86,7 +98,7 @@ pub(crate) fn analyze_call<'a>(
         return Err(());
     }
 
-    // Member call targets: not supported as callable by default; analyze args for errors anyway.
+    // Member call targets not supported
     for a in arguments { an.analyze_expression(a)?; }
     report!(
         Level::Error,
@@ -96,6 +108,49 @@ pub(crate) fn analyze_call<'a>(
         node.location.clone()
     );
     Err(())
+}
+
+// Walk the AST for the named scope and check if any Return has a value.
+fn scope_has_value_return<'a>(an: &SemanticAnalyzer<'a>, kind: &SymbolKind, name: &str) -> bool {
+    if let Some(scope_node) = find_scope_node(an, kind, name) {
+        return has_value_return(scope_node);
+    }
+    false
+}
+
+fn find_scope_node<'a>(an: &'a SemanticAnalyzer<'a>, kind: &SymbolKind, name: &str) -> Option<&'a AstNode<'a>> {
+    fn matches(node: &AstNode<'_>, kind: &SymbolKind, name: &str) -> bool {
+        match (kind, &node.kind) {
+            (SymbolKind::Workspace, AstType::Workspace { name: n }) => n.as_ref() == name,
+            (SymbolKind::Project,   AstType::Project   { name: n }) => n.as_ref() == name,
+            (SymbolKind::Stage,     AstType::Stage     { name: n, .. }) => n.as_ref() == name,
+            (SymbolKind::Task,      AstType::Task      { name: n, .. }) => n.as_ref() == name,
+            _ => false,
+        }
+    }
+
+    let mut stack: Vec<&AstNode<'a>> = vec![an.ast.root()];
+    while let Some(n) = stack.pop() {
+        if matches(n, kind, name) {
+            return Some(n);
+        }
+        for c in &n.children {
+            stack.push(c);
+        }
+    }
+    None
+}
+
+fn has_value_return<'a>(node: &'a AstNode<'a>) -> bool {
+    if let AstType::Return = node.kind {
+        return node.children.get(0).is_some();
+    }
+    for c in &node.children {
+        if has_value_return(c) {
+            return true;
+        }
+    }
+    false
 }
 
 fn check_builtin_arity<'a>(node: &AstNode<'a>, name: &str, args: &[AstNode<'a>]) -> Result<(), ()> {

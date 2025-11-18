@@ -10,6 +10,7 @@ pub type ExecutionResult = Result<(), String>;
 struct CallFrame {
     locals: Vec<RTValue>,
     ret_ip: usize,
+    ret_target: Option<Slot>,
 }
 
 /// Register-IR VM (linear interpreter with frames).
@@ -30,6 +31,13 @@ pub struct VmIR<'a> {
 }
 
 impl<'a> VmIR<'a> {
+    // helper to grow arrays
+    fn ensure_len(v: &mut Vec<RTValue>, n: usize) {
+        if v.len() < n {
+            v.resize(n, RTValue::Null);
+        }
+    }
+
     pub fn new(program: &'a IRProgram) -> Self {
         let ops = &program.ops;
 
@@ -53,6 +61,7 @@ impl<'a> VmIR<'a> {
         let first_frame = CallFrame {
             locals: vec![RTValue::Null; max_local],
             ret_ip: usize::MAX,
+            ret_target: None,
         };
 
         Self {
@@ -99,6 +108,24 @@ impl<'a> VmIR<'a> {
             Slot::Captured(_) => { /* ignore for now */ }
         }
     }
+    fn get_mut(&mut self, slot: &Slot) -> &mut RTValue {
+        match slot {
+            Slot::Temp(i) => {
+                if *i >= self.temps.len() {
+                    self.temps.resize(*i + 1, RTValue::Null);
+                }
+                &mut self.temps[*i]
+            }
+            Slot::Local(i) => {
+                let frame = self.current_frame_mut();
+                if *i >= frame.locals.len() {
+                    frame.locals.resize(*i + 1, RTValue::Null);
+                }
+                &mut frame.locals[*i]
+            }
+            Slot::Captured(_) => panic!("Captured not implemented"),
+        }
+    }
 
     // Helpers
     fn truthy(v: &RTValue) -> bool {
@@ -110,12 +137,20 @@ impl<'a> VmIR<'a> {
             .entry(name.to_string())
             .or_insert(RTValue::Ref { scope: "scope".into(), object: name.to_string() });
     }
+    fn func_name_from(&self, v: &RTValue) -> Option<String> {
+        match v {
+            RTValue::Str(s) => Some(s.clone()),
+            RTValue::Identifier(s) => Some(s.clone()),
+            // If you have a function/object ref variant, support it here:
+            RTValue::Ref { object, .. } => Some(object.clone()),
+            _ => None,
+        }
+    }
 
     pub fn run(&mut self) -> ExecutionResult {
         while self.ip < self.ops.len() {
             let op = &self.ops[self.ip];
             self.ip += 1;
-
             match op {
                 // Registers / Globals
                 Op::LoadConst { target, value } => {
@@ -140,38 +175,41 @@ impl<'a> VmIR<'a> {
 
                 // Arrays
                 Op::NewArray { target, size } => {
-                    self.set(target, RTValue::Array(vec![RTValue::Null; *size]));
-                }
-                Op::IGet { target, source, index } => {
-                    let arr = self.get(source);
-                    let idx = self.get(index).as_int().unwrap_or(0) as usize;
-                    let val = match arr {
-                        RTValue::Array(a) => a.get(idx).cloned().unwrap_or(RTValue::Null),
-                        _ => RTValue::Null,
-                    };
-                    self.set(target, val);
+                    let sz = *size as usize;
+                    println!("Creating new array of size {}", sz);
+                    self.set(target, RTValue::Array(vec![RTValue::Null; sz]));
                 }
                 Op::ISet { target, index, value } => {
-                    let idx = self.get(index).as_int().unwrap_or(0) as usize;
+                    let idx = match self.get(index) {
+                        RTValue::Int(i) if i >= 0 => i as usize,
+                        _ => return Err("ISet: non-integer index".into()),
+                    };
                     let val = self.get(value);
-                    let current = self.get(target);
-                    match current {
-                        RTValue::Array(mut a) => {
-                            if idx >= a.len() {
-                                a.resize(idx + 1, RTValue::Null);
-                            }
+                    match self.get_mut(target) {
+                        RTValue::Array(a) => {
+                            Self::ensure_len(a, idx + 1);
                             a[idx] = val;
-                            self.set(target, RTValue::Array(a));
                         }
-                        _ => return Err("ISet on non-array".into()),
+                        _ => return Err("ISet: target is not an array".into()),
                     }
+                }
+                Op::IGet { target, source, index } => {
+                    let idx = match self.get(index) {
+                        RTValue::Int(i) if i >= 0 => i as usize,
+                        _ => return Err("IGet: non-integer index".into()),
+                    };
+                    let out = match self.get(source) {
+                        RTValue::Array(ref a) => a.get(idx).cloned().unwrap_or(RTValue::Null),
+                        _ => RTValue::Null,
+                    };
+                    self.set(target, out);
                 }
                 Op::Length { target, array } => {
                     let len = match self.get(array) {
-                        RTValue::Array(a) => a.len(),
+                        RTValue::Array(ref a) => a.len() as i64,
                         _ => 0,
                     };
-                    self.set(target, RTValue::Int(len as i64));
+                    self.set(target, RTValue::Int(len));
                 }
 
                 // Members
@@ -207,6 +245,23 @@ impl<'a> VmIR<'a> {
                     let a = self.get(lhs);
                     let b = self.get(rhs);
 
+                    // String concatenation for Add
+                    if matches!(op, Op::Add { .. }) {
+                        if let (Some(sa), Some(sb)) = (a.as_str(), b.as_str()) {
+                            self.set(target, RTValue::Str(format!("{}{}", sa, sb)));
+                            continue;
+                        }
+                        // One side string: coerce other
+                        if let Some(sa) = a.as_str() {
+                            self.set(target, RTValue::Str(format!("{}{}", sa, b.to_string())));
+                            continue;
+                        }
+                        if let Some(sb) = b.as_str() {
+                            self.set(target, RTValue::Str(format!("{}{}", a.to_string(), sb)));
+                            continue;
+                        }
+                    }
+
                     let (af, bf) = (
                         a.as_float().or(a.as_int().map(|i| i as f64)),
                         b.as_float().or(b.as_int().map(|i| i as f64)),
@@ -220,14 +275,11 @@ impl<'a> VmIR<'a> {
                         Op::Sub { .. } => af - bf,
                         Op::Mul { .. } => af * bf,
                         Op::Div { .. } => {
-                            if bf == 0.0 {
-                                return Err("Division by zero".into());
-                            }
+                            if bf == 0.0 { return Err("Division by zero".into()); }
                             af / bf
                         }
                         _ => unreachable!(),
                     };
-                    // Preserve int if both were ints
                     let out = match (a.as_int(), b.as_int()) {
                         (Some(_), Some(_)) if res.fract() == 0.0 => RTValue::Int(res as i64),
                         _ => RTValue::Float(res),
@@ -271,31 +323,53 @@ impl<'a> VmIR<'a> {
                         self.ip = *self.labels.get(target).ok_or_else(|| format!("Unknown label {}", target))?;
                     }
                 }
+                Op::Halt => {
+                    self.ip = self.ops.len();
+                }
 
                 // Calls
-                Op::CallScope { name } => {
-                    // Create scope object if needed and set as a global Ref
-                    self.ensure_scope_object(name);
+                Op::Call { target, func, args } => {
+                    let func_val = self.get(func);
+                    let Some(func_name) = self.func_name_from(&func_val) else {
+                        return Err("Call on non-function".into());
+                    };
 
+                    // Prepare new frame
                     let ret_ip = self.ip;
                     let locals_len = self.current_frame().locals.len();
-                    self.frames.push(CallFrame {
+                    let mut new_frame = CallFrame {
                         locals: vec![RTValue::Null; locals_len],
                         ret_ip,
-                    });
+                        ret_target: Some(*target),
+                    };
 
-                    let label = format!("scope.{}", name);
-                    self.ip = *self.labels.get(&label).ok_or_else(|| format!("Unknown scope label {}", label))?;
-                }
-                Op::Call { .. } => {
-                    return Err("Generic Call not implemented".into());
+                    // Pass arguments into callee locals[0..N]
+                    for (i, arg_slot) in args.iter().enumerate() {
+                        if i < new_frame.locals.len() {
+                            new_frame.locals[i] = self.get(arg_slot);
+                        }
+                    }
+                    self.frames.push(new_frame);
+
+                    // Resolve destination label. Prefer function label; fall back to scope label.
+                    if let Some(&addr) = self.labels.get(&format!("func.{}", func_name)) {
+                        self.ip = addr;
+                    } else if let Some(&addr) = self.labels.get(&format!("scope.{}", func_name)) {
+                        // Scope call: ensure object exists before entering
+                        self.ensure_scope_object(&func_name);
+                        self.ip = addr;
+                    } else {
+                        return Err(format!("Unknown function/scope '{}'", func_name));
+                    }
                 }
                 Op::Return { value } => {
-                    // If return has a value, you can choose to store it in a temp/global if needed
-                    let _ret_val = value.as_ref().map(|s| self.get(s));
+                    let ret_val = value.as_ref().map(|s| self.get(s)).unwrap_or(RTValue::Null);
                     if let Some(frame) = self.frames.pop() {
+                        if let Some(slot) = frame.ret_target {
+                            // store in caller
+                            self.set(&slot, ret_val);
+                        }
                         if self.frames.is_empty() {
-                            // Exit program on returning from the base frame
                             self.ip = self.ops.len();
                         } else {
                             self.ip = frame.ret_ip;
@@ -328,6 +402,20 @@ impl<'a> VmIR<'a> {
                     let path = self.get(location).as_str().unwrap_or_else(|| "".to_string());
                     let data = self.get(content).as_str().unwrap_or_else(|| "".to_string());
                     fs::write(&path, data).map_err(|e| e.to_string())?;
+                }
+                Op::Inc { target } => {
+                    let v = self.get(target);
+                    match v {
+                        RTValue::Int(i) => self.set(target, RTValue::Int(i + 1)),
+                        _ => return Err("Inc: target is not an integer".into()),
+                    }
+                }
+                Op::Dec { target } => {
+                    let v = self.get(target);
+                    match v {
+                        RTValue::Int(i) => self.set(target, RTValue::Int(i - 1)),
+                        _ => return Err("Dec: target is not an integer".into()),
+                    }
                 }
 
                 _ => {

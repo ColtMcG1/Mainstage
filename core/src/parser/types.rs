@@ -61,11 +61,10 @@ pub enum AstType<'a> {
         cond: Box<super::ast::AstNode<'a>>, 
         body: Box<super::ast::AstNode<'a>> 
     },
-    For   {
-        init: Option<Box<super::ast::AstNode<'a>>>,
-        cond: Option<Box<super::ast::AstNode<'a>>>,
-        step: Option<Box<super::ast::AstNode<'a>>>,
-        body: Box<super::ast::AstNode<'a>>,
+    Forto {
+        init: Box<super::ast::AstNode<'a>>, // Assignment node x = ...
+        limt: Box<super::ast::AstNode<'a>>, // Expression node ...
+        body: Box<super::ast::AstNode<'a>>, // Body block { ... }
     },
     Forin {
         iden: Cow<'a, str>,
@@ -154,10 +153,9 @@ impl<'a> AstType<'a> {
             AstType::Index { target, index } => AstType::Index { target: Box::new(target.into_lifetime()), index: Box::new(index.into_lifetime()) },
             AstType::Member { target, member } => AstType::Member { target: Box::new(target.into_lifetime()), member: Box::new(member.into_lifetime()) },
             AstType::Call { target, arguments } => AstType::Call { target: Box::new(target.into_lifetime()), arguments: arguments.into_iter().map(|a| a.into_lifetime()).collect() },
-            AstType::For { init, cond, step, body } => AstType::For {
-                init: Some(Box::new(init.unwrap().into_lifetime())),
-                cond: Some(Box::new(cond.unwrap().into_lifetime())),
-                step: Some(Box::new(step.unwrap().into_lifetime())),
+            AstType::Forto { init, limt, body } => AstType::Forto {
+                init: Box::new(init.into_lifetime()),
+                limt: Box::new(limt.into_lifetime()),
                 body: Box::new(body.into_lifetime()),
             },
             AstType::Forin { iden, iter, body } => AstType::Forin {
@@ -201,10 +199,9 @@ impl<'a> AstType<'a> {
             AstType::Index { target, index } => AstType::Index { target: Box::new(target.into_owned()), index: Box::new(index.into_owned()) },
             AstType::Member { target, member } => AstType::Member { target: Box::new(target.into_owned()), member: Box::new(member.into_owned()) },
             AstType::Call { target, arguments } => AstType::Call { target: Box::new(target.into_owned()), arguments: arguments.into_iter().map(|a| a.into_owned()).collect() },
-            AstType::For { init, cond, step, body } => AstType::For {
-                init: init.map(|n| Box::new(n.into_owned())),
-                cond: cond.map(|n| Box::new(n.into_owned())),
-                step: step.map(|n| Box::new(n.into_owned())),
+            AstType::Forto { init, limt, body } => AstType::Forto {
+                init: Box::new(init.into_owned()),
+                limt: Box::new(limt.into_owned()),
                 body: Box::new(body.into_owned()),
             },
             AstType::Forin { iden, iter, body } => AstType::Forin {
@@ -256,7 +253,7 @@ impl<'a> PartialEq for AstType<'a> {
             (AstType::Index { target: t1, index: i1 }, AstType::Index { target: t2, index: i2 }) => t1 == t2 && i1 == i2,
             (AstType::Member { target: t1, member: m1 }, AstType::Member { target: t2, member: m2 }) => t1 == t2 && m1 == m2,
             (AstType::Call { target: t1, arguments: a1 }, AstType::Call { target: t2, arguments: a2 }) => t1 == t2 && a1 == a2,
-            (AstType::For { init: i1, cond: c1, step: s1, body: b1 }, AstType::For { init: i2, cond: c2, step: s2, body: b2 }) => i1 == i2 && c1 == c2 && s1 == s2 && b1 == b2,
+            (AstType::Forto { init: i1, limt: l1, body: b1 }, AstType::Forto { init: i2, limt: l2, body: b2 }) => i1 == i2 && l1 == l2 && b1 == b2,
             (AstType::Forin { iden: v1, iter: i1, body: b1 }, AstType::Forin { iden: v2, iter: i2, body: b2 }) => v1 == v2 && i1 == i2 && b1 == b2,
             (AstType::While { cond: c1, body: b1 }, AstType::While { cond: c2, body: b2 }) => c1 == c2 && b1 == b2,
             _ => false,

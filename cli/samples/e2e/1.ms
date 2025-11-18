@@ -1,19 +1,13 @@
-workspace demo_ws {
-    projects = [test_pj];  // list of project references; Should call project init for all projects in list since this is their first reference.
+workspace demo_ws {}
 
-    for project in projects {
-        say(project); // Should print something like: Ref(ProjectId(1))
-    }
-
-}
-
+[entrypoint]
 project test_pj {
-    demo_stage();            // Should call stage init for demo_stage below
-    test1 = demo_stage.test; // Should get the value from the initalized stage below
-    say(test1);              // Should print the value obtained from demo_stage below
+    demo_stage(); // Should get the value from the initalized stage below
 }
 
 stage demo_stage () // No arguments
 {
-    test = ask("Test number > "); // Should prompt user for a number and store it in 'test'
+    for i=0 to 2 {
+        say("Iteration " + i);
+    }
 }

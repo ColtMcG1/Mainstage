@@ -20,6 +20,20 @@ impl<'a> SemanticAnalyzer<'a> {
                 _ => {}
             }
         }
+
+        // NEW: bump reference count on the selected entrypoint (attribute first, fallback to first workspace)
+        if let Ok(entry) = self.detect_entrypoint() {
+            let name = match &entry.kind {
+                AstType::Workspace { name }
+                | AstType::Project { name }
+                | AstType::Stage { name, .. }
+                | AstType::Task { name, .. } => name.as_ref(),
+                _ => return,
+            };
+            if let Some(vec) = self.symbol_table.get_mut(name) {
+                for s in vec { s.increment_reference_count(); }
+            }
+        }
     }
 
     fn insert_unique(&mut self, sym: Symbol<'a>) {

@@ -219,7 +219,7 @@ fn process_loop_stmt<'a>(
     let inner = pair.into_inner().next().unwrap();
     match inner.as_rule() {
         Rule::forin_stmt => process_forin_stmt(inner, script),
-        Rule::for_stmt => process_for_stmt(inner, script),
+        Rule::forto_stmt => process_forto_stmt(inner, script),
         Rule::while_stmt => process_while_stmt(inner, script),
         _ => builders::utils::unhandled_rule(inner, script),
     }
@@ -265,11 +265,10 @@ fn process_forin_stmt<'a>(pair: pest::iterators::Pair<'a, Rule>, script: &Script
     }
 }
 
-fn process_for_stmt<'a>(pair: pest::iterators::Pair<'a, Rule>, script: &Script) -> AstNode<'a> {
-    // for "(" assignment_expr? ";" expression? ";" assignment_expr? ")" block
+fn process_forto_stmt<'a>(pair: pest::iterators::Pair<'a, Rule>, script: &Script) -> AstNode<'a> {
+    // for assignment to expression block
     let mut init = None;
-    let mut cond = None;
-    let mut step = None;
+    let mut limt = None;
     let mut body = None;
     
     let mut inner_rules = pair.into_inner();
@@ -282,19 +281,11 @@ fn process_for_stmt<'a>(pair: pest::iterators::Pair<'a, Rule>, script: &Script) 
         }
     }
 
-    // Check for condition
+    // Check for expression (limit)
     if let Some(next) = inner_rules.peek() {
         if next.as_rule() == Rule::expression {
             let expr_pair = inner_rules.next().unwrap();
-            cond = Some(Box::new(builders::expressions::process_expression_rule(expr_pair, script)));
-        }
-    }
-
-    // Check for step
-    if let Some(next) = inner_rules.peek() {
-        if next.as_rule() == Rule::assignment_expr {
-            let assignment_pair = inner_rules.next().unwrap();
-            step = Some(Box::new(process_assignment_stmt(assignment_pair, script)));
+            limt = Some(Box::new(builders::expressions::process_expression_rule(expr_pair, script)));
         }
     }
 
@@ -307,10 +298,9 @@ fn process_for_stmt<'a>(pair: pest::iterators::Pair<'a, Rule>, script: &Script) 
 
     AstNode {
         id: AstNode::generate_id(),
-        kind: AstType::For {
-            init,
-            cond,
-            step,
+        kind: AstType::Forto {
+            init: init.expect("For loop must have initialization assignment"),
+            limt: limt.expect("For loop must have limit expression"),
             body: body.expect("For loop must have body"),
         },
         span: None,

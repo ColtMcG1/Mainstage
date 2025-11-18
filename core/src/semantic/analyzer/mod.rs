@@ -10,6 +10,7 @@ mod predeclare;
 mod tasks;
 mod calls;
 mod expressions;
+mod diagnostics;
 mod assign;
 mod util;
 
@@ -38,6 +39,7 @@ impl<'a> SemanticAnalyzer<'a> {
         analyzer.predeclare_top_level();
         analyzer.predeclare_scope_members(); // generic member discovery
         analyzer.run()?;
+        diagnostics::warn_empty_bodies(analyzer.ast.root());
         Ok(analyzer)
     }
 

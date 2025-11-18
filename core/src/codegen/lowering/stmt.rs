@@ -1,239 +1,206 @@
-use crate::parser::ast::AstNode;
-use crate::parser::types::AstType;
 use super::context::LowerCtx;
 use super::expr::lower_expr;
 use crate::codegen::op::Op;
 use crate::codegen::value::OpValue;
+use crate::parser::ast::AstNode;
+use crate::parser::types::AstType;
 
-pub fn lower_ast_to_ir(root: &AstNode) -> LowerCtx {
-    let mut cx = LowerCtx::new();
-
-    // Pass 1: record scope nodes (do not inline bodies)
-    for child in &root.children {
-        record_scopes_recursive(&mut cx, child);
-    }
-
-    if let Some(ws) = cx.entry_workspace.clone() {
-        cx.emit(Op::CallScope { name: ws.clone() });
-        cx.note_scope_call(&ws);
-    }
-
-    // Pass 2: lower top-level statements (excluding scope body emission)
-    for child in &root.children {
-        lower_toplevel(&mut cx, child);
-    }
-
-    // Emit scope regions at end
-    cx.emit_scope_regions(|ctx, node| lower_stmt(ctx, node));
-
-    cx
-}
-
+// Collect scopes from the whole tree
 fn record_scopes_recursive(cx: &mut LowerCtx, node: &AstNode) {
-    match &node.kind {
-        AstType::Workspace { .. }
-        | AstType::Project { .. }
-        | AstType::Stage { .. }
-        | AstType::Task { .. } => {
-            cx.record_scope(node);
-        }
-        _ => {}
-    }
+    cx.record_scope(node);
     for c in &node.children {
         record_scopes_recursive(cx, c);
     }
 }
 
+pub fn lower_ast_to_ir(root: &AstNode) -> LowerCtx {
+    let mut cx = LowerCtx::new();
+
+    // 1) Discover all scopes and entrypoint
+    record_scopes_recursive(&mut cx, root);
+
+    // 2) If an explicit [entrypoint] exists, emit an entry Call and then Halt
+    if let Some(entry) = cx.entry.clone() {
+        let f = cx.temp();
+        cx.emit(Op::LoadConst { target: f, value: OpValue::Str(entry.clone()) });
+        let sink = cx.temp(); // discard return
+        cx.emit(Op::Call { target: sink, func: f, args: vec![] });
+        cx.emit(Op::Halt);
+    }
+
+    // 3) Lower any non-scope top-level statements if needed (optional)
+    for child in &root.children {
+        lower_toplevel(&mut cx, child);
+    }
+
+    // 4) Emit scope regions; entry returns to Halt above
+    cx.emit_scope_regions(|ctx, n| lower_stmt(ctx, n));
+
+    cx
+}
+
 fn lower_toplevel(cx: &mut LowerCtx, node: &AstNode) {
+    // Treat all top-level non-scope statements as statements
     match &node.kind {
         AstType::Workspace { .. }
         | AstType::Project { .. }
         | AstType::Stage { .. }
-        | AstType::Task { .. } => { /* emitted as regions later */ }
-
-        AstType::Call { target, arguments } => {
-            if let AstType::Identifier { name } = &target.kind {
-                if cx.scope_names.contains(name.as_ref()) && arguments.is_empty() {
-                    cx.emit(Op::CallScope { name: name.to_string() });
-                    cx.note_scope_call(name.as_ref());
-                    return;
-                }
-            }
-            let _ = lower_expr(cx, node);
-        }
-
+        | AstType::Task { .. } => { /* regions emitted later */ }
         _ => lower_stmt(cx, node),
     }
 }
 
 fn lower_stmt(cx: &mut LowerCtx, node: &AstNode) {
     match &node.kind {
-        AstType::Assignment => {
-            if node.children.len() < 2 { return; }
-            let lhs = &node.children[0];
-            let rhs = &node.children[1];
-            match &lhs.kind {
-                // Inside a scope region, treat plain "x = expr" as member write on current scope.
-                AstType::Identifier { name: member } => {
-                    if let Some(val) = lower_expr(cx, rhs) {
-                        if let Some(scope_name) = cx.current_scope.clone() {
-                            // Load scope object then MSet
-                            let obj = cx.temp();
-                            cx.emit(Op::LoadGlobal { target: obj, name: scope_name.clone() });
-                            cx.emit(Op::MSet { target: obj, member: member.to_string(), value: val });
-                            cx.note_member_init(&scope_name, member.as_ref());
-                        } else {
-                            // Not in a scope region: regular global/local store
-                            if cx.is_root() {
-                                cx.emit(Op::StoreGlobal { source: val, name: member.to_string() });
-                            } else {
-                                let local = cx.lookup_local(member.as_ref()).unwrap_or_else(|| cx.ensure_local(member.as_ref()));
-                                cx.emit(Op::StoreLocal { source: val, target: local });
-                            }
-                        }
-                    }
-                }
+        // While
+        AstType::While { .. } => lower_while(cx, node),
 
-                // Explicit member assignment: container.member = expr
-                AstType::Member { target, member } => {
-                    let obj = lower_expr(cx, target);
-                    if let (Some(o), AstType::Identifier { name: m }) = (obj, &member.kind) {
-                        if let Some(v) = lower_expr(cx, rhs) {
-                            cx.emit(Op::MSet { target: o, member: m.to_string(), value: v });
-                            // If container is a simple identifier, record init for that scope name
-                            if let AstType::Identifier { name: container } = &target.kind {
-                                cx.note_member_init(container.as_ref(), m.as_ref());
-                            }
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
+        // For-in and For-to handled separately
+        AstType::Forin { .. } => lower_for_in(cx, node),
+        AstType::Forto { .. } => lower_for_to(cx, node),
 
-        // Treat calls to scope names anywhere (not just at top-level) as CallScope
-        AstType::Call { target, arguments } => {
-            if let AstType::Identifier { name } = &target.kind {
-                if cx.scope_names.contains(name.as_ref()) && arguments.is_empty() {
-                    cx.emit(Op::CallScope { name: name.to_string() });
-                    cx.note_scope_call(name.as_ref());
-                    return;
-                }
-            }
-            let _ = lower_expr(cx, node);
-        }
-
+        // Return (value optional)
         AstType::Return => {
             let val = node.children.get(0).and_then(|c| lower_expr(cx, c));
             cx.emit(Op::Return { value: val });
         }
 
+        // Block
         AstType::Block => {
             cx.push_frame();
-            for c in &node.children { lower_stmt(cx, c); }
+            for c in &node.children {
+                lower_stmt(cx, c);
+            }
             cx.pop_frame();
         }
 
-        AstType::For { .. } => lower_for(cx, node),
-        AstType::Forin { .. } => lower_forin(cx, node),
-        AstType::While { .. } => lower_while(cx, node),
-
+        // Default: expression statement
         _ => {
             let _ = lower_expr(cx, node);
         }
     }
 }
 
-// robust for-loop lowering: for <var> in <iterable> { <body> }
-fn lower_for(cx: &mut LowerCtx, node: &AstNode) {
-    // children: [var, iterable, body] (fallbacks tolerated)
-    let (var_node, iterable_node, body_node) = if node.children.len() >= 3 {
-        (&node.children[0], &node.children[1], &node.children[2])
-    } else if node.children.len() >= 2 {
-        (&node.children[0], &node.children[0], &node.children[1])
-    } else {
-        return;
+// While lowering: children[0]=cond, children[1]=body
+fn lower_while(cx: &mut LowerCtx, node: &AstNode) {
+    if node.children.is_empty() { return; }
+    let cond = &node.children[0];
+    let body = node.children.get(1);
+
+    let l_start = format!("while.start.{}", node.id);
+    let l_end = format!("while.end.{}", node.id);
+
+    cx.emit(Op::Label { name: l_start.clone() });
+    if let Some(c) = lower_expr(cx, cond) {
+        cx.emit(Op::BrFalse { condition: c, target: l_end.clone() });
+        if let Some(b) = body { lower_stmt(cx, b); }
+        cx.emit(Op::Jump { target: l_start });
+        cx.emit(Op::Label { name: l_end });
+    }
+}
+
+// for i in <iterable> { body }
+fn lower_for_in(cx: &mut LowerCtx, node: &AstNode) {
+    use AstType::*;
+    let (var_name, iterable_node, body_opt) = match &node.kind {
+        Forin { iden, iter, body } => (
+            iden.as_ref().to_string(),
+            iter.as_ref(),
+            Some(body.as_ref()),
+        ),
+        _ => return,
     };
 
-    let var_name = match &var_node.kind {
-        AstType::Identifier { name } => name.as_ref().to_string(),
-        _ => "$for_item".to_string(),
-    };
+    let arr = match lower_expr(cx, iterable_node) { Some(s) => s, None => return };
 
-    let arr_slot = match lower_expr(cx, iterable_node) { Some(s) => s, None => return };
-
-    // idx local = 0
+    // idx = 0
     let idx_name = format!("$idx#{}", node.id);
     let idx_slot = cx.lookup_local(&idx_name).unwrap_or_else(|| cx.ensure_local(&idx_name));
-    let zero = cx.temp();
-    cx.emit(Op::LoadConst { target: zero, value: OpValue::Int(0) });
-    cx.emit(Op::StoreLocal { source: zero, target: idx_slot });
+    let z = cx.temp();
+    cx.emit(Op::LoadConst { target: z, value: OpValue::Int(0) });
+    cx.emit(Op::StoreLocal { source: z, target: idx_slot });
 
     // len = Length(arr)
-    let len_slot = cx.temp();
-    cx.emit(Op::Length { target: len_slot, array: arr_slot });
+    let len = cx.temp();
+    cx.emit(Op::Length { target: len, array: arr });
 
-    // Labels
-    let start_label = format!("for.start.{}", node.id);
-    let end_label = format!("for.end.{}", node.id);
-    cx.emit(Op::Label { name: start_label.clone() });
+    // labels
+    let l_start = format!("for.start.{}", node.id);
+    let l_end = format!("for.end.{}", node.id);
+    cx.emit(Op::Label { name: l_start.clone() });
 
     // cond: idx < len
     let idx_val = cx.temp();
     cx.emit(Op::LoadLocal { target: idx_val, source: idx_slot });
     let cond = cx.temp();
-    cx.emit(Op::Lt { lhs: idx_val, rhs: len_slot, target: cond });
-    cx.emit(Op::BrFalse { condition: cond, target: end_label.clone() });
+    cx.emit(Op::Lt { lhs: idx_val, rhs: len, target: cond });
+    cx.emit(Op::BrFalse { condition: cond, target: l_end.clone() });
 
     // item = arr[idx]
     let idx_cur = cx.temp();
     cx.emit(Op::LoadLocal { target: idx_cur, source: idx_slot });
-    let item_slot = cx.temp();
-    cx.emit(Op::IGet { target: item_slot, source: arr_slot, index: idx_cur });
+    let item = cx.temp();
+    cx.emit(Op::IGet { target: item, source: arr, index: idx_cur });
 
-    // bind loop variable
-    let loop_var_slot = cx.lookup_local(&var_name).unwrap_or_else(|| cx.ensure_local(&var_name));
-    cx.emit(Op::StoreLocal { source: item_slot, target: loop_var_slot });
+    // bind loop var
+    let var_slot = cx.lookup_local(&var_name).unwrap_or_else(|| cx.ensure_local(&var_name));
+    cx.emit(Op::StoreLocal { source: item, target: var_slot });
+
+    // body
+    if let Some(b) = body_opt { lower_stmt(cx, b); }
+
+    // idx++
+    cx.emit(Op::Inc { target: idx_slot });
+
+    cx.emit(Op::Jump { target: l_start });
+    cx.emit(Op::Label { name: l_end });
+}
+
+// for i = <start> to <limit> { body }  (inclusive)
+fn lower_for_to(cx: &mut LowerCtx, node: &AstNode) {
+    use AstType::*;
+    let (var_name, start_node, limit_node, body_node) = match &node.kind {
+        // Forto carries: init (Assignment), limt (end expr), body
+        Forto { init, limt, body } => {
+            if init.children.len() < 2 { return; }
+            let lhs = &init.children[0];
+            let rhs = &init.children[1];
+            let var_name = if let Identifier { name } = &lhs.kind {
+                name.as_ref().to_string()
+            } else {
+                return;
+            };
+            (var_name, rhs, limt.as_ref(), body.as_ref())
+        }
+        _ => return,
+    };
+
+    // Evaluate start and limit
+    let start = match lower_expr(cx, start_node) { Some(s) => s, None => return };
+    let limit = match lower_expr(cx, limit_node) { Some(s) => s, None => return };
+
+    // i = start
+    let i_slot = cx.lookup_local(&var_name).unwrap_or_else(|| cx.ensure_local(&var_name));
+    cx.emit(Op::StoreLocal { source: start, target: i_slot });
+
+    // labels
+    let l_start = format!("for.start.{}", node.id);
+    let l_end = format!("for.end.{}", node.id);
+    cx.emit(Op::Label { name: l_start.clone() });
+
+    // cond: i <= limit
+    let i_now = cx.temp();
+    cx.emit(Op::LoadLocal { target: i_now, source: i_slot });
+    let cond = cx.temp();
+    cx.emit(Op::Le { lhs: i_now, rhs: limit, target: cond });
+    cx.emit(Op::BrFalse { condition: cond, target: l_end.clone() });
 
     // body
     lower_stmt(cx, body_node);
 
-    // idx++
-    let idx_before = cx.temp();
-    cx.emit(Op::LoadLocal { target: idx_before, source: idx_slot });
-    let one = cx.temp();
-    cx.emit(Op::LoadConst { target: one, value: OpValue::Int(1) });
-    let idx_next = cx.temp();
-    cx.emit(Op::Add { lhs: idx_before, rhs: one, target: idx_next });
-    cx.emit(Op::StoreLocal { source: idx_next, target: idx_slot });
+    // i++
+    cx.emit(Op::Inc { target: i_slot });
 
-    cx.emit(Op::Jump { target: start_label });
-    cx.emit(Op::Label { name: end_label });
-}
-
-// forin lowering: same as for; alias to lower_for with tolerant shape
-fn lower_forin(cx: &mut LowerCtx, node: &AstNode) {
-    // Typically also [var, iterable, body]; reuse lower_for
-    lower_for(cx, node);
-}
-
-// while lowering: while <cond> { <body> }
-fn lower_while(cx: &mut LowerCtx, node: &AstNode) {
-    // children: [cond, body] preferred
-    if node.children.is_empty() { return; }
-    let cond_node = &node.children[0];
-    let body_node = node.children.get(1);
-
-    let start = format!("while.start.{}", node.id);
-    let end = format!("while.end.{}", node.id);
-    cx.emit(Op::Label { name: start.clone() });
-
-    if let Some(cond_slot) = lower_expr(cx, cond_node) {
-        cx.emit(Op::BrFalse { condition: cond_slot, target: end.clone() });
-        if let Some(b) = body_node {
-            lower_stmt(cx, b);
-        }
-        cx.emit(Op::Jump { target: start });
-        cx.emit(Op::Label { name: end });
-    }
+    cx.emit(Op::Jump { target: l_start });
+    cx.emit(Op::Label { name: l_end });
 }

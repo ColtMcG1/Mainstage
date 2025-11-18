@@ -4,20 +4,22 @@ use crate::parser::ast::AstNode;
 use crate::parser::types::AstType;
 use std::collections::{HashMap, HashSet};
 
+#[derive(Debug)]
 pub struct LowerCtx {
     pub ops: Vec<Op>,
     pub(crate) frames: Vec<HashMap<String, Slot>>,
     pub(crate) next_local: usize,
     pub(crate) next_temp: usize,
+
+    // scopes
     pub(crate) pending_scopes: Vec<(String, AstNode<'static>)>,
     pub(crate) scope_names: HashSet<String>,
-
     pub(crate) current_scope: Option<String>,
     pub(crate) initialized_members: HashMap<String, HashSet<String>>,
-
-    // NEW: first-reference init tracking + entry
     pub(crate) called_scopes: HashSet<String>,
-    pub(crate) entry_workspace: Option<String>,
+
+    // NEW: selected entry scope name (from [entrypoint])
+    pub(crate) entry: Option<String>,
 }
 
 impl LowerCtx {
@@ -32,90 +34,68 @@ impl LowerCtx {
             current_scope: None,
             initialized_members: HashMap::new(),
             called_scopes: HashSet::new(),
-            entry_workspace: None,
+            entry: None,
         }
     }
 
-    pub fn push_frame(&mut self) {
-        self.frames.push(HashMap::new());
-    }
-    pub fn pop_frame(&mut self) {
-        self.frames.pop();
-    }
-    pub fn is_root(&self) -> bool {
-        self.frames.len() == 1
-    }
-
+    pub fn emit(&mut self, op: Op) { self.ops.push(op); }
+    pub fn temp(&mut self) -> Slot { let s = Slot::Temp(self.next_temp); self.next_temp += 1; s }
     pub fn ensure_local(&mut self, name: &str) -> Slot {
-        let frame = self.frames.last_mut().unwrap();
-        if let Some(s) = frame.get(name) {
-            return *s;
-        }
-        let slot = Slot::Local(self.next_local);
+        let idx = self.next_local;
         self.next_local += 1;
-        frame.insert(name.to_string(), slot);
+        let slot = Slot::Local(idx);
+        self.frames.last_mut().unwrap().insert(name.to_string(), slot);
         slot
     }
     pub fn lookup_local(&self, name: &str) -> Option<Slot> {
         for f in self.frames.iter().rev() {
-            if let Some(s) = f.get(name) {
-                return Some(*s);
-            }
+            if let Some(s) = f.get(name) { return Some(*s); }
         }
         None
     }
-    pub fn temp(&mut self) -> Slot {
-        let t = Slot::Temp(self.next_temp);
-        self.next_temp += 1;
-        t
-    }
-    pub fn emit(&mut self, op: Op) {
-        self.ops.push(op);
-    }
+    pub fn push_frame(&mut self) { self.frames.push(HashMap::new()); }
+    pub fn pop_frame(&mut self) { let _ = self.frames.pop(); }
 
     pub fn has_called_scope(&self, name: &str) -> bool { self.called_scopes.contains(name) }
     pub fn note_scope_call(&mut self, name: &str) { self.called_scopes.insert(name.to_string()); }
+    pub fn is_member_initialized(&self, scope: &str, member: &str) -> bool {
+        self.initialized_members.get(scope).map(|s| s.contains(member)).unwrap_or(false)
+    }
+
+    pub fn note_member_init(&mut self, scope: &str, member: &str) {
+        self.initialized_members
+            .entry(scope.to_string())
+            .or_insert_with(HashSet::new)
+            .insert(member.to_string());
+    }
 
     pub fn record_scope(&mut self, node: &AstNode) {
         let name = match &node.kind {
-            AstType::Workspace { name } => {
-                if self.entry_workspace.is_none() {
-                    self.entry_workspace = Some(name.as_ref().to_string());
-                }
-                name.as_ref()
-            }
-            AstType::Project { name }
+            AstType::Workspace { name }
+            | AstType::Project { name }
             | AstType::Stage { name, .. }
             | AstType::Task { name, .. } => name.as_ref(),
             _ => return,
         };
+
         if self.scope_names.insert(name.to_string()) {
-            let owned: AstNode<'static> = unsafe { std::mem::transmute::<AstNode<'_>, AstNode<'static>>(node.clone()) };
+            let owned: AstNode<'static> =
+                unsafe { std::mem::transmute::<AstNode<'_>, AstNode<'static>>(node.clone()) };
             self.pending_scopes.push((name.to_string(), owned));
+        }
+
+        // If node has an [entrypoint] attribute, make it the entry
+        if node.attributes.iter().any(|a| a.name == "entrypoint") {
+            self.entry = Some(name.to_string());
         }
     }
 
-    pub fn note_member_init(&mut self, container: &str, member: &str) {
-        self.initialized_members
-            .entry(container.to_string())
-            .or_default()
-            .insert(member.to_string());
-    }
-
-    pub fn is_member_initialized(&self, container: &str, member: &str) -> bool {
-        self.initialized_members
-            .get(container)
-            .map(|set| set.contains(member))
-            .unwrap_or(false)
-    }
-
-    pub fn emit_scope_regions<F>(&mut self, mut lower_body: F)
+    pub fn emit_scope_regions<F>(&mut self, mut lower_stmt_entry: F)
     where
         F: FnMut(&mut LowerCtx, &AstNode),
     {
-        let pending_scopes: Vec<_> = self.pending_scopes.drain(..).collect();
-        for (name, node) in pending_scopes {
-            // Save outer state
+        let pending: Vec<_> = self.pending_scopes.drain(..).collect();
+        for (name, node) in pending {
             let saved_scope = self.current_scope.clone();
             let saved_inits = std::mem::take(&mut self.initialized_members);
             let saved_called = std::mem::take(&mut self.called_scopes);
@@ -126,13 +106,13 @@ impl LowerCtx {
 
             self.emit(Op::Label { name: format!("scope.{}", name) });
             self.push_frame();
-            for child in &node.children {
-                lower_body(self, child);
+            // Walk direct children of the scope node
+            for stmt in &node.children {
+                lower_stmt_entry(self, stmt);
             }
             self.pop_frame();
             self.emit(Op::Return { value: None });
 
-            // Restore outer state
             self.current_scope = saved_scope;
             self.initialized_members = saved_inits;
             self.called_scopes = saved_called;
@@ -188,7 +168,8 @@ pub fn analyze_meta(ops: &[Op]) -> IRMeta {
             Call { target, func, args } => { visit(target); visit(func); for a in args { visit(a); } }
             BrTrue { condition, .. } | BrFalse { condition, .. } => visit(condition),
             Return { value } => { if let Some(v) = value { visit(v); } }
-            Label { .. } | Jump { .. } | CallScope { .. } => {}
+            Label { .. } | Jump { .. } | Halt => {}
+            Inc { target } | Dec { target } => visit(target),
         }
     }
     IRMeta { max_temp: max_temp + 1, max_local: max_local + 1 }

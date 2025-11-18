@@ -1,59 +1,25 @@
 IRProgram {
     ops: [
-        CallScope {
-            name: "demo_ws",
-        },
-        Label {
-            name: "scope.demo_ws",
-        },
-        NewArray {
-            target: Temp(
-                0,
-            ),
-            size: 1,
-        },
-        CallScope {
-            name: "test_pj",
-        },
-        LoadGlobal {
-            target: Temp(
-                1,
-            ),
-            name: "test_pj",
-        },
         LoadConst {
             target: Temp(
-                2,
-            ),
-            value: Int(
                 0,
+            ),
+            value: Str(
+                "test_pj",
             ),
         },
-        ISet {
+        Call {
             target: Temp(
-                0,
-            ),
-            index: Temp(
-                2,
-            ),
-            value: Temp(
                 1,
             ),
-        },
-        LoadGlobal {
-            target: Temp(
-                3,
-            ),
-            name: "demo_ws",
-        },
-        MSet {
-            target: Temp(
-                3,
-            ),
-            member: "projects",
-            value: Temp(
+            func: Temp(
                 0,
             ),
+            args: [],
+        },
+        Halt,
+        Label {
+            name: "scope.demo_ws",
         },
         Return {
             value: None,
@@ -61,58 +27,22 @@ IRProgram {
         Label {
             name: "scope.test_pj",
         },
-        CallScope {
-            name: "demo_stage",
-        },
-        LoadGlobal {
+        LoadConst {
             target: Temp(
-                4,
+                2,
             ),
-            name: "demo_stage",
+            value: Str(
+                "demo_stage",
+            ),
         },
-        MGet {
+        Call {
             target: Temp(
-                5,
+                3,
             ),
-            source: Temp(
-                4,
+            func: Temp(
+                2,
             ),
-            member: "test",
-        },
-        LoadGlobal {
-            target: Temp(
-                6,
-            ),
-            name: "test_pj",
-        },
-        MSet {
-            target: Temp(
-                6,
-            ),
-            member: "test1",
-            value: Temp(
-                5,
-            ),
-        },
-        LoadGlobal {
-            target: Temp(
-                7,
-            ),
-            name: "test_pj",
-        },
-        MGet {
-            target: Temp(
-                8,
-            ),
-            source: Temp(
-                7,
-            ),
-            member: "test1",
-        },
-        Say {
-            message: Temp(
-                8,
-            ),
+            args: [],
         },
         Return {
             value: None,
@@ -122,41 +52,105 @@ IRProgram {
         },
         LoadConst {
             target: Temp(
-                9,
+                4,
+            ),
+            value: Int(
+                0,
+            ),
+        },
+        LoadConst {
+            target: Temp(
+                5,
+            ),
+            value: Int(
+                2,
+            ),
+        },
+        StoreLocal {
+            source: Temp(
+                4,
+            ),
+            target: Local(
+                0,
+            ),
+        },
+        Label {
+            name: "for.start.node_15",
+        },
+        LoadLocal {
+            target: Temp(
+                6,
+            ),
+            source: Local(
+                0,
+            ),
+        },
+        Le {
+            lhs: Temp(
+                6,
+            ),
+            rhs: Temp(
+                5,
+            ),
+            target: Temp(
+                7,
+            ),
+        },
+        BrFalse {
+            condition: Temp(
+                7,
+            ),
+            target: "for.end.node_15",
+        },
+        LoadConst {
+            target: Temp(
+                8,
             ),
             value: Str(
-                "Test number > ",
+                "Iteration ",
             ),
         },
-        Ask {
-            question: Temp(
+        LoadLocal {
+            target: Temp(
+                9,
+            ),
+            source: Local(
+                0,
+            ),
+        },
+        Add {
+            lhs: Temp(
+                8,
+            ),
+            rhs: Temp(
                 9,
             ),
             target: Temp(
                 10,
             ),
         },
-        LoadGlobal {
-            target: Temp(
-                11,
-            ),
-            name: "demo_stage",
-        },
-        MSet {
-            target: Temp(
-                11,
-            ),
-            member: "test",
-            value: Temp(
+        Say {
+            message: Temp(
                 10,
             ),
+        },
+        Inc {
+            target: Local(
+                0,
+            ),
+        },
+        Jump {
+            target: "for.start.node_15",
+        },
+        Label {
+            name: "for.end.node_15",
         },
         Return {
             value: None,
         },
     ],
     meta: IRMeta {
-        max_temp: 12,
+        max_temp: 11,
         max_local: 1,
     },
 }
