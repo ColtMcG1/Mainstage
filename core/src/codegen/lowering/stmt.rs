@@ -52,6 +52,25 @@ fn lower_toplevel(cx: &mut LowerCtx, node: &AstNode) {
 
 fn lower_stmt(cx: &mut LowerCtx, node: &AstNode) {
     match &node.kind {
+        // Assignment
+        AstType::Assignment => {
+            if node.children.len() < 2 { return; }
+            let lhs = &node.children[0];
+            let rhs = &node.children[1];
+            let value = match lower_expr(cx, rhs) { Some(s) => s, None => return };
+            if let AstType::Identifier { name } = &lhs.kind {
+                let ident = name.as_ref();
+                if let Some(scope) = cx.current_scope.clone() {
+                    // store as a local (simplest); mark member initialized if you want member semantics
+                    let slot = cx.lookup_local(ident).unwrap_or_else(|| cx.ensure_local(ident));
+                    cx.emit(Op::StoreLocal { source: value, target: slot });
+                    cx.note_member_init(&scope, ident);
+                } else {
+                    // global assignment
+                    cx.emit(Op::StoreGlobal { source: value, name: ident.to_string() });
+                }
+            }
+        }
         // While
         AstType::While { .. } => lower_while(cx, node),
 
@@ -112,7 +131,7 @@ fn lower_for_in(cx: &mut LowerCtx, node: &AstNode) {
     };
 
     let arr = match lower_expr(cx, iterable_node) { Some(s) => s, None => return };
-
+    
     // idx = 0
     let idx_name = format!("$idx#{}", node.id);
     let idx_slot = cx.lookup_local(&idx_name).unwrap_or_else(|| cx.ensure_local(&idx_name));

@@ -86,3 +86,37 @@
   - Fixed number parsing by trimming tokens before parse; added debug logging removal readiness.
 - Sample
   - say(test1) prints project name; say(test1.test) now resolves (after auto-init).
+
+### 11/15/2025 - Launch config, ref-based initialization cleanup
+- Added VS Code launch configuration (lldb) for debugging CLI.
+- Introduced IRConst::Ref and LoadRefMember usage refinements.
+- Added workspace project reference array serialization as Ref entries.
+- Updated sample to exercise ref auto-initialization.
+
+### 11/16/2025 - Migration off old IR/bytecode to linear Op IR
+- Removed legacy IRFunction / bytecode emitter / scheduler modules.
+- Introduced unified IRProgram { ops, meta } with register-style Slot usage.
+- Added lowering context (LowerCtx) tracking scopes, first-call initialization, member init.
+- Reworked expression and statement lowering to emit direct Ops (LoadConst, MSet, etc.).
+- Simplified entrypoint handling: [entrypoint] attribute drives initial Call + Halt.
+- Updated parser node kinds (CallExpression -> Call, MemberAccess -> Member).
+- Removed obsolete end-to-end bytecode test.
+
+### 11/17/2025 - Enhanced scope/member resolution & expression lowering
+- Added member read via MGet when initialized inside current scope.
+- First-reference scope auto-init converted to emitting Call with Str func operand.
+- Added semantic adjustments for scope call reference counting (reduces false “never referenced” warnings).
+- Added runtime string Display implementations for RTValue.
+
+### 11/18/2025 - Loop model, Forto (for-to) syntax, control flow & VM improvements
+- Grammar: added forto_stmt (for i=0 to N) replacing generic parentheses for-ranges.
+- Parser: new AstType::Forto { init, limt, body }; removed old For triple (init/cond/step).
+- Lowering: distinct lowering paths for Forin and Forto, emitting Inc op for counters.
+- Added Halt, Inc, Dec ops; meta analysis updated to track them.
+- Runtime VM: 
+  - Proper array growth (ensure_len), in-place mutation via get_mut.
+  - Call now supports dynamic resolution of function/scope labels (func.<name> / scope.<name>).
+  - Return propagates value to caller’s target slot; Halt terminates cleanly.
+  - Added safe string concatenation path in Add when operands are (partially) strings.
+- Entry selection now respects [entrypoint] across any scope (project, workspace, etc.).
+- Refined semantic call analysis (scope calls treated as non-value procedures unless task-like).

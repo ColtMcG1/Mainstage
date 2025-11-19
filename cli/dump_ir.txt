@@ -44,113 +44,298 @@ IRProgram {
             ),
             args: [],
         },
+        StoreLocal {
+            source: Temp(
+                3,
+            ),
+            target: Local(
+                0,
+            ),
+        },
+        LoadLocal {
+            target: Temp(
+                4,
+            ),
+            source: Local(
+                0,
+            ),
+        },
+        Say {
+            message: Temp(
+                4,
+            ),
+        },
         Return {
             value: None,
         },
         Label {
             name: "scope.demo_stage",
         },
+        NewArray {
+            target: Temp(
+                5,
+            ),
+            size: 3,
+        },
         LoadConst {
             target: Temp(
-                4,
+                6,
+            ),
+            value: Str(
+                "Hello",
+            ),
+        },
+        LoadConst {
+            target: Temp(
+                7,
             ),
             value: Int(
                 0,
             ),
         },
-        LoadConst {
+        ISet {
             target: Temp(
                 5,
             ),
-            value: Int(
-                2,
-            ),
-        },
-        StoreLocal {
-            source: Temp(
-                4,
-            ),
-            target: Local(
-                0,
-            ),
-        },
-        Label {
-            name: "for.start.node_15",
-        },
-        LoadLocal {
-            target: Temp(
-                6,
-            ),
-            source: Local(
-                0,
-            ),
-        },
-        Le {
-            lhs: Temp(
-                6,
-            ),
-            rhs: Temp(
-                5,
-            ),
-            target: Temp(
+            index: Temp(
                 7,
             ),
-        },
-        BrFalse {
-            condition: Temp(
-                7,
+            value: Temp(
+                6,
             ),
-            target: "for.end.node_15",
         },
         LoadConst {
             target: Temp(
                 8,
             ),
             value: Str(
-                "Iteration ",
+                " ",
+            ),
+        },
+        LoadConst {
+            target: Temp(
+                9,
+            ),
+            value: Int(
+                1,
+            ),
+        },
+        ISet {
+            target: Temp(
+                5,
+            ),
+            index: Temp(
+                9,
+            ),
+            value: Temp(
+                8,
+            ),
+        },
+        LoadConst {
+            target: Temp(
+                10,
+            ),
+            value: Str(
+                "world",
+            ),
+        },
+        LoadConst {
+            target: Temp(
+                11,
+            ),
+            value: Int(
+                2,
+            ),
+        },
+        ISet {
+            target: Temp(
+                5,
+            ),
+            index: Temp(
+                11,
+            ),
+            value: Temp(
+                10,
+            ),
+        },
+        StoreLocal {
+            source: Temp(
+                5,
+            ),
+            target: Local(
+                1,
+            ),
+        },
+        LoadConst {
+            target: Temp(
+                12,
+            ),
+            value: Int(
+                0,
+            ),
+        },
+        StoreLocal {
+            source: Temp(
+                12,
+            ),
+            target: Local(
+                2,
             ),
         },
         LoadLocal {
             target: Temp(
-                9,
+                13,
             ),
             source: Local(
+                1,
+            ),
+        },
+        LoadConst {
+            target: Temp(
+                14,
+            ),
+            value: Int(
                 0,
+            ),
+        },
+        StoreLocal {
+            source: Temp(
+                14,
+            ),
+            target: Local(
+                3,
+            ),
+        },
+        Length {
+            target: Temp(
+                15,
+            ),
+            array: Temp(
+                13,
+            ),
+        },
+        Label {
+            name: "for.start.node_26",
+        },
+        LoadLocal {
+            target: Temp(
+                16,
+            ),
+            source: Local(
+                3,
+            ),
+        },
+        Lt {
+            lhs: Temp(
+                16,
+            ),
+            rhs: Temp(
+                15,
+            ),
+            target: Temp(
+                17,
+            ),
+        },
+        BrFalse {
+            condition: Temp(
+                17,
+            ),
+            target: "for.end.node_26",
+        },
+        LoadLocal {
+            target: Temp(
+                18,
+            ),
+            source: Local(
+                3,
+            ),
+        },
+        IGet {
+            target: Temp(
+                19,
+            ),
+            source: Temp(
+                13,
+            ),
+            index: Temp(
+                18,
+            ),
+        },
+        StoreLocal {
+            source: Temp(
+                19,
+            ),
+            target: Local(
+                4,
+            ),
+        },
+        LoadLocal {
+            target: Temp(
+                20,
+            ),
+            source: Local(
+                2,
+            ),
+        },
+        LoadLocal {
+            target: Temp(
+                21,
+            ),
+            source: Local(
+                4,
             ),
         },
         Add {
             lhs: Temp(
-                8,
+                20,
             ),
             rhs: Temp(
-                9,
+                21,
             ),
             target: Temp(
-                10,
+                22,
             ),
         },
-        Say {
-            message: Temp(
-                10,
+        StoreLocal {
+            source: Temp(
+                22,
+            ),
+            target: Local(
+                2,
             ),
         },
         Inc {
             target: Local(
-                0,
+                3,
             ),
         },
         Jump {
-            target: "for.start.node_15",
+            target: "for.start.node_26",
         },
         Label {
-            name: "for.end.node_15",
+            name: "for.end.node_26",
+        },
+        LoadLocal {
+            target: Temp(
+                23,
+            ),
+            source: Local(
+                2,
+            ),
+        },
+        Return {
+            value: Some(
+                Temp(
+                    23,
+                ),
+            ),
         },
         Return {
             value: None,
         },
     ],
     meta: IRMeta {
-        max_temp: 11,
-        max_local: 1,
+        max_temp: 24,
+        max_local: 5,
     },
 }

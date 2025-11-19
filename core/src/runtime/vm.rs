@@ -176,7 +176,6 @@ impl<'a> VmIR<'a> {
                 // Arrays
                 Op::NewArray { target, size } => {
                     let sz = *size as usize;
-                    println!("Creating new array of size {}", sz);
                     self.set(target, RTValue::Array(vec![RTValue::Null; sz]));
                 }
                 Op::ISet { target, index, value } => {
