@@ -40,6 +40,8 @@ pub enum InferredType {
     Array,
     /// A unit type. Represents a value that carries no information.
     Unit,
+    /// A dynamic type. The type is determined at runtime.
+    Dynamic,
     /// An unknown type. The type could not be inferred.
     Unknown,
 }
@@ -56,7 +58,20 @@ impl InferredType {
             InferredType::Str => SymbolType::String,
             InferredType::Array => SymbolType::Array,
             InferredType::Unit => SymbolType::None,
+            InferredType::Dynamic => SymbolType::None,
             InferredType::Unknown => SymbolType::None,
+        }
+    }
+    pub fn from_ast_kind(kind: &crate::parser::types::AstType) -> Self {
+        use crate::parser::types::AstType;
+        match kind {
+            AstType::Integer { .. } => InferredType::Int,
+            AstType::Float { .. } => InferredType::Float,
+            AstType::Str { .. } => InferredType::Str,
+            AstType::Bool { .. } => InferredType::Bool,
+            AstType::Array { .. } => InferredType::Array,
+            AstType::Return { .. } => InferredType::Unit,
+            _ => InferredType::Unknown,
         }
     }
 }

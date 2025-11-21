@@ -4,8 +4,8 @@
 
 use std::collections::HashMap;
 
-use crate::{report, semantic::builtin};
 use super::symbol::{Symbol, SymbolKind};
+use crate::{report, semantic::builtin};
 
 const HOT_PATH_THRESHOLD: usize = 30;
 
@@ -88,6 +88,28 @@ impl<'a> SymbolTable<'a> {
         false
     }
 
+    pub fn contains_stage(&self, name: &str) -> bool {
+        for scope in self.scopes.iter() {
+            if let Some(symbols) = scope.get(name) {
+                if symbols.iter().any(|s| s.kind() == &SymbolKind::Stage) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    pub fn contains_task(&self, name: &str) -> bool {
+        for scope in self.scopes.iter() {
+            if let Some(symbols) = scope.get(name) {
+                if symbols.iter().any(|s| s.kind() == &SymbolKind::Task) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     /// Get only global symbols (scope index 0).
     pub fn get_global(&self, name: &str) -> Option<&Vec<Symbol<'a>>> {
         self.scopes.first().and_then(|s| s.get(name))
@@ -140,10 +162,15 @@ impl<'a> SymbolTable<'a> {
             let name = symbol.name().to_string();
             let entry = current_scope.entry(name.clone()).or_insert_with(Vec::new);
 
-            if builtin::Builtins::new().is(&name) {
+            if builtin::BUILTIN_FUNCS.contains_key(name.as_str())
+                || builtin::BUILTIN_METHODS.contains_key(name.as_str())
+            {
                 report!(
                     report::Level::Error,
-                    format!("'{}' is a reserved keyword and cannot be used as a symbol name.", name),
+                    format!(
+                        "'{}' is a reserved keyword and cannot be used as a symbol name.",
+                        name
+                    ),
                     Some("SemanticAnalyzer".into()),
                     None,
                     None
@@ -159,7 +186,10 @@ impl<'a> SymbolTable<'a> {
                     }) {
                         report!(
                             report::Level::Error,
-                            format!("Function '{}' is already defined with the same signature.", name),
+                            format!(
+                                "Function '{}' is already defined with the same signature.",
+                                name
+                            ),
                             Some("SemanticAnalyzer".into()),
                             None,
                             None
@@ -169,7 +199,10 @@ impl<'a> SymbolTable<'a> {
                     entry.push(symbol);
                 }
                 _ => {
-                    if entry.iter().any(|existing| existing.kind() != &SymbolKind::Function) {
+                    if entry
+                        .iter()
+                        .any(|existing| existing.kind() != &SymbolKind::Function)
+                    {
                         report!(
                             report::Level::Error,
                             format!("Symbol '{}' is already defined in this scope.", name),
@@ -198,7 +231,9 @@ impl<'a> SymbolTable<'a> {
     /// Inserts a reserved symbol into the existing scope.
     pub fn insert_reserved(&mut self, name: &str) {
         if let Some(current_scope) = self.scopes.last_mut() {
-            let entry = current_scope.entry(name.to_string()).or_insert_with(Vec::new);
+            let entry = current_scope
+                .entry(name.to_string())
+                .or_insert_with(Vec::new);
             entry.push(Symbol::reserved(name));
         }
     }

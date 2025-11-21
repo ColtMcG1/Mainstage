@@ -15,99 +15,107 @@ pub(crate) fn analyze_call<'a>(
         _ => return Ok(()),
     };
 
+    // 1) Identifier targets (functions / scopes)
     if let AstType::Identifier { name } = &target.kind {
         let name = name.as_ref();
 
-        // builtins
-        if an.is_builtin(name) {
+        if an.is_builtin_function(name) {
             check_builtin_arity(node, name, arguments)?;
             for a in arguments { an.analyze_expression(a)?; }
-            if !in_expression && an.is_value_builtin(name) {
-                report!(
-                    Level::Warning,
+            if !in_expression && an.get_builtin_function(name).map_or(false, |f| f.returns != crate::InferredType::Unit) {
+                report!(Level::Warning,
                     format!("Return value of builtin '{}' discarded.", name),
                     Some("SemanticAnalyzer".into()),
-                    node.span.clone(),
-                    node.location.clone()
-                );
+                    node.span.clone(), node.location.clone());
             }
             return Ok(());
         }
 
-        // scope calls (workspace/project/stage/task)
         for kind in [SymbolKind::Workspace, SymbolKind::Project, SymbolKind::Stage, SymbolKind::Task] {
             if util::is_kind(&an.symbol_table, name, kind.clone()) {
-                // mark as initialized if you track it
                 an.mark_scope_initialized(kind.clone(), name);
-                // NEW: bump reference count for the called scope symbol
                 util::mark_kind(&mut an.symbol_table, name, kind.clone());
-
                 for a in arguments { an.analyze_expression(a)?; }
 
                 let returns_value = scope_has_value_return(an, &kind, name);
-
                 if in_expression {
                     if returns_value { return Ok(()); }
-                    report!(
-                        Level::Error,
+                    report!(Level::Error,
                         format!("Scope '{}' call returns no value.", name),
                         Some("SemanticAnalyzer".into()),
-                        node.span.clone(),
-                        node.location.clone()
-                    );
+                        node.span.clone(), node.location.clone());
                     return Err(());
                 } else {
                     if returns_value {
-                        report!(
-                            Level::Warning,
+                        report!(Level::Warning,
                             format!("Return value of scope '{}' discarded.", name),
                             Some("SemanticAnalyzer".into()),
-                            node.span.clone(),
-                            node.location.clone()
-                        );
+                            node.span.clone(), node.location.clone());
                     }
                     return Ok(());
                 }
             }
         }
 
-        // tasks by bare name (unchanged)
         if an.is_task_name(name) {
             util::mark_kind(&mut an.symbol_table, name, SymbolKind::Task);
             for a in arguments { an.analyze_expression(a)?; }
             let returns_value = an.task_returns.get(name).is_some();
             if !in_expression && returns_value {
-                report!(
-                    Level::Warning,
+                report!(Level::Warning,
                     format!("Return value of task '{}' discarded.", name),
                     Some("SemanticAnalyzer".into()),
-                    node.span.clone(),
-                    node.location.clone()
-                );
+                    node.span.clone(), node.location.clone());
             }
             return Ok(());
         }
 
-        report!(
-            Level::Error,
+        report!(Level::Error,
             format!("Unknown callable '{}'", name),
             Some("SemanticAnalyzer".into()),
-            node.span.clone(),
-            node.location.clone()
-        );
+            node.span.clone(), node.location.clone());
         return Err(());
     }
 
-    // Member call targets not supported
+    // 2) Member call targets
+    if let AstType::Member { target: recv, member } = &target.kind {
+        // Analyze receiver expression first
+        an.analyze_expression(recv)?;
+        // Member must be simple identifier
+        if let AstType::Identifier { name: mname } = &member.kind {
+            let m = mname.as_ref();
+            // Builtin method?
+            if an.is_builtin_method(m) {
+                if let Some(def) = an.get_builtin_method(m).cloned() {
+                    if !def.variadic && arguments.len() != def.arity {
+                        report!(Level::Error,
+                            format!("Builtin method '{}' expects {} argument(s).", def.name, def.arity),
+                            Some("SemanticAnalyzer".into()),
+                            node.span.clone(), node.location.clone());
+                        return Err(());
+                    }
+                    for a in arguments { an.analyze_expression(a)?; }
+                    if !in_expression && def.returns != crate::InferredType::Unit {
+                        report!(Level::Warning,
+                            format!("Return value of method '{}' discarded.", def.name),
+                            Some("SemanticAnalyzer".into()),
+                            node.span.clone(), node.location.clone());
+                    }
+                    return Ok(());
+                }
+            }
+            // Generic member call: analyze args; treat as unknown value if used in expression
+            for a in arguments { an.analyze_expression(a)?; }
+            return Ok(());
+        }
+        // Complex member expression (fallback)
+        for a in arguments { an.analyze_expression(a)?; }
+        return Ok(());
+    }
+
+    // 3) Fallback (unsupported complex targets) – analyze args, no hard error
     for a in arguments { an.analyze_expression(a)?; }
-    report!(
-        Level::Error,
-        "Member calls are not supported here.".into(),
-        Some("SemanticAnalyzer".into()),
-        node.span.clone(),
-        node.location.clone()
-    );
-    Err(())
+    Ok(())
 }
 
 // Walk the AST for the named scope and check if any Return has a value.

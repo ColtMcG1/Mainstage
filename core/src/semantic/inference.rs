@@ -9,6 +9,7 @@ use crate::reports::*;
 use super::analyzer::SemanticAnalyzer;
 use super::types::{InferredType, SymbolType};
 use crate::semantic::SymbolKind;
+use crate::builtin::BUILTIN_FUNCS;
 
 pub fn unify(a: InferredType, b: InferredType) -> InferredType {
     use InferredType::*;
@@ -36,19 +37,22 @@ pub fn infer_call_expr_type(an: &SemanticAnalyzer<'_>, node: &AstNode<'_>) -> Op
     if let AstType::Identifier { name } = &target.kind {
         let name = name.as_ref();
 
-        if an.is_builtin(name) {
-            return Some(match name {
-                "ask" | "read" => InferredType::Str,
-                "say" | "write" => InferredType::Unit,
-                _ => InferredType::Unknown,
-            });
+        // Check if function name is builtin for type
+         if let Some(def) = BUILTIN_FUNCS.get(name) {
+            return Some(def.returns);
         }
+
+        // Is the call to a stage?
         if an.is_stage_name(name) {
             return Some(InferredType::Unit);
         }
+
+        // Is the call to a task
         if an.is_task_name(name) {
             return an.task_returns.get(name).copied().or(Some(InferredType::Unknown));
         }
+
+        // Unknown identifier
         return None;
     }
 

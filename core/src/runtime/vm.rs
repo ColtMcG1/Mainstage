@@ -255,7 +255,8 @@ impl<'a> VmIR<'a> {
                 }
                 Op::Length { target, array } => {
                     let len = match self.get(array) {
-                        RTValue::Array(ref a) => a.len() as i64,
+                        RTValue::Array(a) => a.len() as i64,
+                        RTValue::Str(s) => s.chars().count() as i64, // or s.len() for byte length
                         _ => 0,
                     };
                     self.set(target, RTValue::Int(len));

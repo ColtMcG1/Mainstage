@@ -7,47 +7,48 @@ LABEL scope.test_pj
 LOAD_CONST Temp(2) <- Str("demo_stage")
 CALL Temp(3) <- Temp(2)([])
 STORE_LOCAL Temp(3) -> Local(0)
-LOAD_CONST Temp(4) <- Str("Say the output?")
-ASK Temp(4) -> Temp(5)
-STORE_LOCAL Temp(5) -> Local(1)
-LOAD_LOCAL Temp(6) <- Local(1)
-BR_FALSE Temp(6) -> if.end.node_16
-LOAD_LOCAL Temp(7) <- Local(0)
-SAY Temp(7)
-LABEL if.end.node_16
+LOAD_LOCAL Temp(4) <- Local(0)
+LOAD_CONST Temp(5) <- Str("!!!")
+ADD Temp(6) <- Temp(4) + Temp(5)
+LENGTH Temp(7) <- Temp(6)
+STORE_LOCAL Temp(7) -> Local(1)
+LOAD_LOCAL Temp(8) <- Local(1)
+SAY Temp(8)
+LOAD_LOCAL Temp(9) <- Local(0)
+SAY Temp(9)
 RETURN
 LABEL scope.demo_stage
-NEW_ARRAY Temp(8) size 3
-LOAD_CONST Temp(9) <- Str("Hello")
-LOAD_CONST Temp(10) <- Int(0)
-ISET Temp(8)[Temp(10)] <- Temp(9)
-LOAD_CONST Temp(11) <- Str(" ")
-LOAD_CONST Temp(12) <- Int(1)
-ISET Temp(8)[Temp(12)] <- Temp(11)
-LOAD_CONST Temp(13) <- Str("world")
-LOAD_CONST Temp(14) <- Int(2)
-ISET Temp(8)[Temp(14)] <- Temp(13)
-STORE_LOCAL Temp(8) -> Local(2)
-LOAD_CONST Temp(15) <- Str("")
-STORE_LOCAL Temp(15) -> Local(3)
-LOAD_LOCAL Temp(16) <- Local(2)
-LOAD_CONST Temp(17) <- Int(0)
-STORE_LOCAL Temp(17) -> Local(4)
-LENGTH Temp(18) <- Temp(16)
-LABEL for.start.node_34
-LOAD_LOCAL Temp(19) <- Local(4)
-LT Temp(20) <- Temp(19) < Temp(18)
-BR_FALSE Temp(20) -> for.end.node_34
+NEW_ARRAY Temp(10) size 3
+LOAD_CONST Temp(11) <- Str("Hello")
+LOAD_CONST Temp(12) <- Int(0)
+ISET Temp(10)[Temp(12)] <- Temp(11)
+LOAD_CONST Temp(13) <- Str(" ")
+LOAD_CONST Temp(14) <- Int(1)
+ISET Temp(10)[Temp(14)] <- Temp(13)
+LOAD_CONST Temp(15) <- Str("world")
+LOAD_CONST Temp(16) <- Int(2)
+ISET Temp(10)[Temp(16)] <- Temp(15)
+STORE_LOCAL Temp(10) -> Local(2)
+LOAD_CONST Temp(17) <- Str("")
+STORE_LOCAL Temp(17) -> Local(3)
+LOAD_LOCAL Temp(18) <- Local(2)
+LOAD_CONST Temp(19) <- Int(0)
+STORE_LOCAL Temp(19) -> Local(4)
+LENGTH Temp(20) <- Temp(18)
+LABEL for.start.node_37
 LOAD_LOCAL Temp(21) <- Local(4)
-IGET Temp(22) <- Temp(16)[Temp(21)]
-STORE_LOCAL Temp(22) -> Local(5)
-LOAD_LOCAL Temp(23) <- Local(3)
-LOAD_LOCAL Temp(24) <- Local(5)
-ADD Temp(25) <- Temp(23) + Temp(24)
-STORE_LOCAL Temp(25) -> Local(3)
+LT Temp(22) <- Temp(21) < Temp(20)
+BR_FALSE Temp(22) -> for.end.node_37
+LOAD_LOCAL Temp(23) <- Local(4)
+IGET Temp(24) <- Temp(18)[Temp(23)]
+STORE_LOCAL Temp(24) -> Local(5)
+LOAD_LOCAL Temp(25) <- Local(3)
+LOAD_LOCAL Temp(26) <- Local(5)
+ADD Temp(27) <- Temp(25) + Temp(26)
+STORE_LOCAL Temp(27) -> Local(3)
 INC Local(4)
-JUMP for.start.node_34
-LABEL for.end.node_34
-LOAD_LOCAL Temp(26) <- Local(3)
-RETURN Temp(26)
+JUMP for.start.node_37
+LABEL for.end.node_37
+LOAD_LOCAL Temp(28) <- Local(3)
+RETURN Temp(28)
 RETURN

@@ -2,7 +2,7 @@
 use crate::parser::*;
 use crate::semantic::types::InferredType;
 use crate::semantic::{SymbolKind, SymbolTable};
-use crate::semantic::builtin::Builtins;
+use crate::semantic::builtin::*;
 use std::collections::{HashMap, HashSet};
 
 mod entrypoint;
@@ -20,9 +20,7 @@ pub struct SemanticAnalyzer<'a> {
     pub entry_point: AstNode<'a>,
     pub(crate) task_returns: HashMap<String, InferredType>,
     pub(crate) scope_members: HashMap<(SymbolKind, String), HashMap<String, InferredType>>,
-    init_stack: Vec<HashSet<(SymbolKind, String)>>,
-
-    builtins: Builtins,
+    init_stack: Vec<HashSet<(SymbolKind, String)>>
 }
 
 impl<'a> SemanticAnalyzer<'a> {
@@ -34,7 +32,6 @@ impl<'a> SemanticAnalyzer<'a> {
             task_returns: Default::default(),
             scope_members: Default::default(),
             init_stack: vec![],
-            builtins: Builtins::new(),
         };
         analyzer.predeclare_top_level();
         analyzer.predeclare_scope_members(); // generic member discovery
@@ -55,10 +52,25 @@ impl<'a> SemanticAnalyzer<'a> {
         Ok(())
     }
 
-    pub(crate) fn is_builtin(&self, name: &str) -> bool { self.builtins.is(name) }
-    pub(crate) fn is_value_builtin(&self, name: &str) -> bool { self.builtins.returns_value(name) }
-    pub(crate) fn is_stage_name(&self, name: &str) -> bool { util::is_kind(&self.symbol_table, name, SymbolKind::Stage) }
-    pub(crate) fn is_task_name(&self, name: &str) -> bool { util::is_kind(&self.symbol_table, name, SymbolKind::Task) }
+    pub(crate) fn is_builtin_method(&self, name: &str) -> bool {
+        BUILTIN_METHODS.contains_key(name)
+    }
+    pub(crate) fn get_builtin_method(&self, name: &str) -> Option<&BuiltinMethod> {
+        BUILTIN_METHODS.get(name)
+    }
+    pub(crate) fn is_builtin_function(&self, name: &str) -> bool {
+        BUILTIN_FUNCS.contains_key(name)
+    }
+    pub(crate) fn get_builtin_function(&self, name: &str) -> Option<&BuiltinFunc> {
+        BUILTIN_FUNCS.get(name)
+    }
+
+    pub(crate) fn is_stage_name(&self, name: &str) -> bool {
+        self.symbol_table.contains_stage(name)
+    }
+    pub(crate) fn is_task_name(&self, name: &str) -> bool {
+        self.symbol_table.contains_task(name)
+    }
 
     fn walk_root_nodes(&mut self) -> Result<(), ()> {
         for node in &mut self.ast.root.clone().children {
