@@ -320,7 +320,18 @@ impl Pipeline {
         if let Some(parser) = &self.parser {
             let ir = codegen::generate_program_from_ast(parser.root());
             if dump {
-                std::fs::write("dump_ir.txt", format!("{:#?}", ir)).unwrap();
+                std::fs::write(
+                    "dump_ir.txt",
+                    format!(
+                        "{}",
+                        ir.ops
+                            .iter()
+                            .map(|f| { format!("{}", f) })
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                    ),
+                )
+                .unwrap();
             }
             self.ir = Some(ir);
             Ok(())

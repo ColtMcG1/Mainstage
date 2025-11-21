@@ -1,10 +1,10 @@
 AstNode {
-    id: "node_20",
+    id: "node_32",
     kind: Script,
     span: Some(
         Span {
             start: 0,
-            end: 259,
+            end: 335,
         },
     ),
     location: Some(
@@ -44,7 +44,7 @@ AstNode {
             span: Some(
                 Span {
                     start: 24,
-                    end: 133,
+                    end: 176,
                 },
             ),
             location: Some(
@@ -56,17 +56,33 @@ AstNode {
             ),
             children: [
                 AstNode {
-                    id: "node_3",
-                    kind: Call {
-                        target: AstNode {
+                    id: "node_5",
+                    kind: Assignment {
+                        op: Set,
+                    },
+                    span: Some(
+                        Span {
+                            start: 61,
+                            end: 80,
+                        },
+                    ),
+                    location: Some(
+                        Location {
+                            file: "./samples/e2e/1.ms",
+                            line: 5,
+                            column: 5,
+                        },
+                    ),
+                    children: [
+                        AstNode {
                             id: "node_2",
                             kind: Identifier {
-                                name: "demo_stage",
+                                name: "out",
                             },
                             span: Some(
                                 Span {
                                     start: 61,
-                                    end: 71,
+                                    end: 64,
                                 },
                             ),
                             location: Some(
@@ -79,18 +95,214 @@ AstNode {
                             children: [],
                             attributes: [],
                         },
-                        arguments: [],
+                        AstNode {
+                            id: "node_4",
+                            kind: Call {
+                                target: AstNode {
+                                    id: "node_3",
+                                    kind: Identifier {
+                                        name: "demo_stage",
+                                    },
+                                    span: Some(
+                                        Span {
+                                            start: 67,
+                                            end: 77,
+                                        },
+                                    ),
+                                    location: Some(
+                                        Location {
+                                            file: "./samples/e2e/1.ms",
+                                            line: 5,
+                                            column: 11,
+                                        },
+                                    ),
+                                    children: [],
+                                    attributes: [],
+                                },
+                                arguments: [],
+                            },
+                            span: Some(
+                                Span {
+                                    start: 67,
+                                    end: 79,
+                                },
+                            ),
+                            location: Some(
+                                Location {
+                                    file: "./samples/e2e/1.ms",
+                                    line: 5,
+                                    column: 11,
+                                },
+                            ),
+                            children: [],
+                            attributes: [],
+                        },
+                    ],
+                    attributes: [],
+                },
+                AstNode {
+                    id: "node_13",
+                    kind: IfElse {
+                        cond: AstNode {
+                            id: "node_6",
+                            kind: Bool {
+                                value: true,
+                            },
+                            span: Some(
+                                Span {
+                                    start: 142,
+                                    end: 146,
+                                },
+                            ),
+                            location: Some(
+                                Location {
+                                    file: "./samples/e2e/1.ms",
+                                    line: 6,
+                                    column: 5,
+                                },
+                            ),
+                            children: [],
+                            attributes: [],
+                        },
+                        if_body: AstNode {
+                            id: "node_9",
+                            kind: Call {
+                                target: AstNode {
+                                    id: "node_7",
+                                    kind: Identifier {
+                                        name: "say",
+                                    },
+                                    span: Some(
+                                        Span {
+                                            start: 149,
+                                            end: 152,
+                                        },
+                                    ),
+                                    location: Some(
+                                        Location {
+                                            file: "./samples/e2e/1.ms",
+                                            line: 6,
+                                            column: 12,
+                                        },
+                                    ),
+                                    children: [],
+                                    attributes: [],
+                                },
+                                arguments: [
+                                    AstNode {
+                                        id: "node_8",
+                                        kind: Identifier {
+                                            name: "out",
+                                        },
+                                        span: Some(
+                                            Span {
+                                                start: 153,
+                                                end: 156,
+                                            },
+                                        ),
+                                        location: Some(
+                                            Location {
+                                                file: "./samples/e2e/1.ms",
+                                                line: 6,
+                                                column: 16,
+                                            },
+                                        ),
+                                        children: [],
+                                        attributes: [],
+                                    },
+                                ],
+                            },
+                            span: Some(
+                                Span {
+                                    start: 149,
+                                    end: 157,
+                                },
+                            ),
+                            location: Some(
+                                Location {
+                                    file: "./samples/e2e/1.ms",
+                                    line: 6,
+                                    column: 12,
+                                },
+                            ),
+                            children: [],
+                            attributes: [],
+                        },
+                        else_body: AstNode {
+                            id: "node_12",
+                            kind: Call {
+                                target: AstNode {
+                                    id: "node_10",
+                                    kind: Identifier {
+                                        name: "say",
+                                    },
+                                    span: Some(
+                                        Span {
+                                            start: 160,
+                                            end: 163,
+                                        },
+                                    ),
+                                    location: Some(
+                                        Location {
+                                            file: "./samples/e2e/1.ms",
+                                            line: 6,
+                                            column: 23,
+                                        },
+                                    ),
+                                    children: [],
+                                    attributes: [],
+                                },
+                                arguments: [
+                                    AstNode {
+                                        id: "node_11",
+                                        kind: Str {
+                                            value: "false",
+                                        },
+                                        span: Some(
+                                            Span {
+                                                start: 164,
+                                                end: 171,
+                                            },
+                                        ),
+                                        location: Some(
+                                            Location {
+                                                file: "./samples/e2e/1.ms",
+                                                line: 6,
+                                                column: 27,
+                                            },
+                                        ),
+                                        children: [],
+                                        attributes: [],
+                                    },
+                                ],
+                            },
+                            span: Some(
+                                Span {
+                                    start: 160,
+                                    end: 172,
+                                },
+                            ),
+                            location: Some(
+                                Location {
+                                    file: "./samples/e2e/1.ms",
+                                    line: 6,
+                                    column: 23,
+                                },
+                            ),
+                            children: [],
+                            attributes: [],
+                        },
                     },
                     span: Some(
                         Span {
-                            start: 61,
-                            end: 73,
+                            start: 142,
+                            end: 173,
                         },
                     ),
                     location: Some(
                         Location {
                             file: "./samples/e2e/1.ms",
-                            line: 5,
+                            line: 6,
                             column: 5,
                         },
                     ),
@@ -106,57 +318,59 @@ AstNode {
             ],
         },
         AstNode {
-            id: "node_4",
+            id: "node_14",
             kind: Stage {
                 name: "demo_stage",
                 params: [],
             },
             span: Some(
                 Span {
-                    start: 137,
-                    end: 259,
+                    start: 180,
+                    end: 335,
                 },
             ),
             location: Some(
                 Location {
                     file: "./samples/e2e/1.ms",
-                    line: 8,
+                    line: 9,
                     column: 1,
                 },
             ),
             children: [
                 AstNode {
-                    id: "node_11",
-                    kind: Assignment,
+                    id: "node_20",
+                    kind: Assignment {
+                        op: Set,
+                    },
                     span: Some(
                         Span {
-                            start: 181,
-                            end: 197,
+                            start: 224,
+                            end: 254,
                         },
                     ),
                     location: Some(
                         Location {
                             file: "./samples/e2e/1.ms",
-                            line: 10,
+                            line: 11,
                             column: 5,
                         },
                     ),
                     children: [
                         AstNode {
-                            id: "node_5",
+                            id: "node_15",
                             kind: Identifier {
                                 name: "arr",
                             },
                             span: Some(
                                 Span {
-                                    start: 181,
-                                    end: 184,
+                                    start: 224,
+                                    end: 227,
                                 },
                             ),
                             location: Some(
                                 Location {
                                     file: "./samples/e2e/1.ms",
-                                    line: 10,
+                                    line: 11,
                                     column: 5,
                                 },
                             ),
@@ -164,125 +378,84 @@ AstNode {
                             attributes: [],
                         },
                         AstNode {
-                            id: "node_10",
+                            id: "node_19",
                             kind: Array,
                             span: Some(
                                 Span {
-                                    start: 187,
-                                    end: 196,
+                                    start: 230,
+                                    end: 253,
                                 },
                             ),
                             location: Some(
                                 Location {
                                     file: "./samples/e2e/1.ms",
-                                    line: 10,
+                                    line: 11,
                                     column: 11,
                                 },
                             ),
                             children: [
                                 AstNode {
-                                    id: "node_6",
-                                    kind: Integer {
-                                        value: 0,
+                                    id: "node_16",
+                                    kind: Str {
+                                        value: "Hello",
                                     },
                                     span: Some(
                                         Span {
-                                            start: 188,
-                                            end: 189,
+                                            start: 231,
+                                            end: 238,
                                         },
                                     ),
                                     location: Some(
                                         Location {
                                             file: "./samples/e2e/1.ms",
-                                            line: 10,
+                                            line: 11,
                                             column: 12,
                                         },
                                     ),
                                     children: [],
-                                    attributes: [
-                                        Attribute {
-                                            name: "value",
-                                            value: "0",
-                                        },
-                                    ],
+                                    attributes: [],
                                 },
                                 AstNode {
-                                    id: "node_7",
-                                    kind: Integer {
-                                        value: 1,
+                                    id: "node_17",
+                                    kind: Str {
+                                        value: " ",
                                     },
                                     span: Some(
                                         Span {
-                                            start: 190,
-                                            end: 191,
+                                            start: 240,
+                                            end: 243,
                                         },
                                     ),
                                     location: Some(
                                         Location {
                                             file: "./samples/e2e/1.ms",
-                                            line: 10,
-                                            column: 14,
+                                            line: 11,
+                                            column: 21,
                                         },
                                     ),
                                     children: [],
-                                    attributes: [
-                                        Attribute {
-                                            name: "value",
-                                            value: "1",
-                                        },
-                                    ],
+                                    attributes: [],
                                 },
                                 AstNode {
-                                    id: "node_8",
-                                    kind: Integer {
-                                        value: 2,
+                                    id: "node_18",
+                                    kind: Str {
+                                        value: "world",
                                     },
                                     span: Some(
                                         Span {
-                                            start: 192,
-                                            end: 193,
+                                            start: 245,
+                                            end: 252,
                                         },
                                     ),
                                     location: Some(
                                         Location {
                                             file: "./samples/e2e/1.ms",
-                                            line: 10,
-                                            column: 16,
+                                            line: 11,
+                                            column: 26,
                                         },
                                     ),
                                     children: [],
-                                    attributes: [
-                                        Attribute {
-                                            name: "value",
-                                            value: "2",
-                                        },
-                                    ],
-                                },
-                                AstNode {
-                                    id: "node_9",
-                                    kind: Integer {
-                                        value: 3,
-                                    },
-                                    span: Some(
-                                        Span {
-                                            start: 194,
-                                            end: 195,
-                                        },
-                                    ),
-                                    location: Some(
-                                        Location {
-                                            file: "./samples/e2e/1.ms",
-                                            line: 10,
-                                            column: 18,
-                                        },
-                                    ),
-                                    children: [],
-                                    attributes: [
-                                        Attribute {
-                                            name: "value",
-                                            value: "3",
-                                        },
-                                    ],
+                                    attributes: [],
                                 },
                             ],
                             attributes: [],
@@ -291,24 +464,88 @@ AstNode {
                     attributes: [],
                 },
                 AstNode {
-                    id: "node_19",
-                    kind: Forin {
-                        iden: "i",
-                        iter: AstNode {
-                            id: "node_12",
+                    id: "node_23",
+                    kind: Assignment {
+                        op: Set,
+                    },
+                    span: Some(
+                        Span {
+                            start: 260,
+                            end: 269,
+                        },
+                    ),
+                    location: Some(
+                        Location {
+                            file: "./samples/e2e/1.ms",
+                            line: 12,
+                            column: 5,
+                        },
+                    ),
+                    children: [
+                        AstNode {
+                            id: "node_21",
                             kind: Identifier {
-                                name: "arr",
+                                name: "out",
                             },
                             span: Some(
                                 Span {
-                                    start: 212,
-                                    end: 215,
+                                    start: 260,
+                                    end: 263,
                                 },
                             ),
                             location: Some(
                                 Location {
                                     file: "./samples/e2e/1.ms",
-                                    line: 11,
+                                    line: 12,
+                                    column: 5,
+                                },
+                            ),
+                            children: [],
+                            attributes: [],
+                        },
+                        AstNode {
+                            id: "node_22",
+                            kind: Str {
+                                value: "",
+                            },
+                            span: Some(
+                                Span {
+                                    start: 266,
+                                    end: 268,
+                                },
+                            ),
+                            location: Some(
+                                Location {
+                                    file: "./samples/e2e/1.ms",
+                                    line: 12,
+                                    column: 11,
+                                },
+                            ),
+                            children: [],
+                            attributes: [],
+                        },
+                    ],
+                    attributes: [],
+                },
+                AstNode {
+                    id: "node_29",
+                    kind: Forin {
+                        iden: "i",
+                        iter: AstNode {
+                            id: "node_24",
+                            kind: Identifier {
+                                name: "arr",
+                            },
+                            span: Some(
+                                Span {
+                                    start: 284,
+                                    end: 287,
+                                },
+                            ),
+                            location: Some(
+                                Location {
+                                    file: "./samples/e2e/1.ms",
+                                    line: 13,
                                     column: 14,
                                 },
                             ),
@@ -316,126 +553,84 @@ AstNode {
                             attributes: [],
                         },
                         body: AstNode {
-                            id: "node_18",
+                            id: "node_28",
                             kind: Block,
                             span: Some(
                                 Span {
-                                    start: 216,
-                                    end: 256,
+                                    start: 288,
+                                    end: 315,
                                 },
                             ),
                             location: Some(
                                 Location {
                                     file: "./samples/e2e/1.ms",
-                                    line: 11,
+                                    line: 13,
                                     column: 18,
                                 },
                             ),
                             children: [
                                 AstNode {
-                                    id: "node_17",
-                                    kind: Call {
-                                        target: AstNode {
-                                            id: "node_13",
+                                    id: "node_27",
+                                    kind: Assignment {
+                                        op: Add,
+                                    },
+                                    span: Some(
+                                        Span {
+                                            start: 299,
+                                            end: 308,
+                                        },
+                                    ),
+                                    location: Some(
+                                        Location {
+                                            file: "./samples/e2e/1.ms",
+                                            line: 14,
+                                            column: 9,
+                                        },
+                                    ),
+                                    children: [
+                                        AstNode {
+                                            id: "node_25",
                                             kind: Identifier {
-                                                name: "say",
+                                                name: "out",
                                             },
                                             span: Some(
                                                 Span {
-                                                    start: 227,
-                                                    end: 230,
+                                                    start: 299,
+                                                    end: 302,
                                                 },
                                             ),
                                             location: Some(
                                                 Location {
                                                     file: "./samples/e2e/1.ms",
-                                                    line: 12,
+                                                    line: 14,
                                                     column: 9,
                                                 },
                                             ),
                                             children: [],
                                             attributes: [],
                                         },
-                                        arguments: [
-                                            AstNode {
-                                                id: "node_16",
-                                                kind: BinaryOp {
-                                                    op: Add,
-                                                    left: AstNode {
-                                                        id: "node_14",
-                                                        kind: Str {
-                                                            value: "Iteration ",
-                                                        },
-                                                        span: Some(
-                                                            Span {
-                                                                start: 231,
-                                                                end: 243,
-                                                            },
-                                                        ),
-                                                        location: Some(
-                                                            Location {
-                                                                file: "./samples/e2e/1.ms",
-                                                                line: 12,
-                                                                column: 13,
-                                                            },
-                                                        ),
-                                                        children: [],
-                                                        attributes: [],
-                                                    },
-                                                    right: AstNode {
-                                                        id: "node_15",
-                                                        kind: Identifier {
-                                                            name: "i",
-                                                        },
-                                                        span: Some(
-                                                            Span {
-                                                                start: 246,
-                                                                end: 247,
-                                                            },
-                                                        ),
-                                                        location: Some(
-                                                            Location {
-                                                                file: "./samples/e2e/1.ms",
-                                                                line: 12,
-                                                                column: 28,
-                                                            },
-                                                        ),
-                                                        children: [],
-                                                        attributes: [],
-                                                    },
-                                                },
-                                                span: Some(
-                                                    Span {
-                                                        start: 231,
-                                                        end: 247,
-                                                    },
-                                                ),
-                                                location: Some(
-                                                    Location {
-                                                        file: "./samples/e2e/1.ms",
-                                                        line: 12,
-                                                        column: 13,
-                                                    },
-                                                ),
-                                                children: [],
-                                                attributes: [],
+                                        AstNode {
+                                            id: "node_26",
+                                            kind: Identifier {
+                                                name: "i",
                                             },
-                                        ],
-                                    },
-                                    span: Some(
-                                        Span {
-                                            start: 227,
-                                            end: 248,
+                                            span: Some(
+                                                Span {
+                                                    start: 306,
+                                                    end: 307,
+                                                },
+                                            ),
+                                            location: Some(
+                                                Location {
+                                                    file: "./samples/e2e/1.ms",
+                                                    line: 14,
+                                                    column: 16,
+                                                },
+                                            ),
+                                            children: [],
+                                            attributes: [],
                                         },
-                                    ),
-                                    location: Some(
-                                        Location {
-                                            file: "./samples/e2e/1.ms",
-                                            line: 12,
-                                            column: 9,
-                                        },
-                                    ),
-                                    children: [],
+                                    ],
                                     attributes: [],
                                 },
                             ],
@@ -445,6 +640,47 @@ AstNode {
                     span: None,
                     location: None,
                     children: [],
+                    attributes: [],
+                },
+                AstNode {
+                    id: "node_31",
+                    kind: Return,
+                    span: Some(
+                        Span {
+                            start: 321,
+                            end: 332,
+                        },
+                    ),
+                    location: Some(
+                        Location {
+                            file: "./samples/e2e/1.ms",
+                            line: 16,
+                            column: 5,
+                        },
+                    ),
+                    children: [
+                        AstNode {
+                            id: "node_30",
+                            kind: Identifier {
+                                name: "out",
+                            },
+                            span: Some(
+                                Span {
+                                    start: 328,
+                                    end: 331,
+                                },
+                            ),
+                            location: Some(
+                                Location {
+                                    file: "./samples/e2e/1.ms",
+                                    line: 16,
+                                    column: 12,
+                                },
+                            ),
+                            children: [],
+                            attributes: [],
+                        },
+                    ],
                     attributes: [],
                 },
             ],

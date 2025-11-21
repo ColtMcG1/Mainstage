@@ -13,10 +13,12 @@ pub enum OpValue {
 }
 
 impl OpValue {
+    /// Returns true if the value is a scalar (int, bool, str, unit, null)
     pub fn is_scalar(&self) -> bool {
         matches!(self, OpValue::Int(_) | OpValue::Bool(_) | OpValue::Str(_) | OpValue::Unit | OpValue::Null)
     }
 
+    /// Returns the truthiness of the value
     pub fn is_truthy(&self) -> bool {
         match self {
             OpValue::Bool(b) => *b,

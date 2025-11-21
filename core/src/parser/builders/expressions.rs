@@ -7,6 +7,7 @@
 // Added direct value handling (array, string, number, boolean, shell_string).
 // Kept Attribute parsing (attributes rule unchanged).
 
+use crate::report;
 use crate::parser::attributes::Attribute;
 use crate::parser::builders;
 use crate::parser::{
@@ -14,6 +15,7 @@ use crate::parser::{
     driver::Rule,
     types::{AstType, BinaryOperator, UnaryOperator},
 };
+use crate::reports::Level;
 use crate::scripts::script::Script;
 
 // Identifiers
@@ -113,6 +115,31 @@ fn process_binary_chain<'a>(
         }
     }
     left
+}
+
+pub(crate) fn process_assign_operator_rule<'a>(
+    pair: pest::iterators::Pair<'a, Rule>,
+    script: &Script,
+) -> crate::parser::AssignOperator {
+    let span = AstNode::convert_pest_span_to_span(pair.as_span());
+    let location = AstNode::convert_pest_span_to_location(pair.as_span(), script);
+    match pair.as_str() {
+        "="  => crate::parser::AssignOperator::Set,
+        "+=" => crate::parser::AssignOperator::Add,
+        "-=" => crate::parser::AssignOperator::Sub,
+        "*=" => crate::parser::AssignOperator::Mul,
+        "/=" => crate::parser::AssignOperator::Div,
+        _    => {
+            report!(
+                Level::Warning,
+                format!("Unknown assignment operator '{}', defaulting to '='", pair.as_str()),
+                Some("mainstage.parser.expressions.process_assign_operator_rule".into()),
+                Some(span),
+                Some(location)
+            );
+            return crate::parser::AssignOperator::Set; // Default to Set on unknown
+        }
+    }
 }
 
 fn process_primary<'a>(pair: pest::iterators::Pair<'a, Rule>, script: &Script) -> AstNode<'a> {

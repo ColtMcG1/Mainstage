@@ -9,7 +9,7 @@ script = { SOI ~ item* ~ EOI }
 item = { declaration | statement }
 
 // --- Statements ---
-statement = { terminated_statement | loop_stmt | block }
+statement = { terminated_statement | loop_stmt | conditional_stmt | block }
 
 terminated_statement = {
     return_stmt
@@ -22,7 +22,6 @@ terminated_statement = {
 return_stmt     = { "return" ~ expression ~ ";" }
 include_stmt    = { "include" ~ string ~ ";" }
 import_stmt     = { "import" ~ string ~ "as" ~ identifier ~ ";" }
-assignment_stmt = { identifier ~ "=" ~ expression ~ ";" }
 expression_stmt = { expression ~ ";" }
 
 // --- Blocks ---
@@ -36,13 +35,24 @@ project_decl   = { attributes? ~ "project"   ~ identifier ~ block }
 stage_decl     = { attributes? ~ "stage"     ~ identifier ~ "(" ~ arguments? ~ ")" ~ block }
 task_decl      = { attributes? ~ "task"      ~ identifier ~ "(" ~ arguments? ~ ")" ~ block }
 
+// --- Conditionals (no trailing semicolon; body must be a block) ---
+conditional_stmt = { if_stmt | ifelse_stmt | tenary_stmt }
+if_stmt        = { "if" ~ expression ~ block }
+ifelse_stmt    = { "if" ~ expression ~ block ~ "else" ~ block }
+tenary_stmt    = { expression ~ "?" ~ expression ~ ":" ~ expression ~ ";" }
+
 // --- Loops (no trailing semicolon; body must be a block) ---
 loop_stmt    = { forin_stmt | forto_stmt | while_stmt }
 forin_stmt   = { "for" ~ identifier ~ "in" ~ expression ~ block }
 forto_stmt   = { "for" ~ assignment_expr ~ "to" ~ expression ~ block }
-while_stmt   = { "while" ~ "(" ~ expression ~ ")" ~ block }
-// Use assignment_expr (no trailing ';') in the for-header
-assignment_expr = { identifier ~ "=" ~ expression }
+while_stmt   = { "while" ~ expression ~ block }
+
+// Add operator set
+assign_op = { "=" | "+=" | "-=" | "*=" | "/=" }
+
+// Replace existing rules that used bare "="
+assignment_stmt = { identifier ~ assign_op ~ expression ~ ";" }
+assignment_expr = { identifier ~ assign_op ~ expression }  // for forto header
 
 // --- Expressions ---
 // Make calls/members/index postfix ops so chaining works: obj.fn(a).x[i]++.
@@ -78,13 +88,14 @@ attribute  = { identifier }
 attributes = { "[" ~ attribute ~ ("," ~ attribute)* ~ "]" }
 
 // --- Values ---
-value        = { array | shell_string | string | boolean | number }
+value        = { array | shell_string | string | boolean | number | null }
 array        = { "[" ~ (expression ~ ("," ~ expression)*)? ~ "]" }
 boolean      = { "true" | "false" }
 number       = { ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }
 string       = { "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
 shell_string = { shell_prefix ~ string }
 shell_prefix = { "sh" | "bash" | "zsh" | "pwsh" | "cmd" }
+null         = { "null" }
 
 // --- Identifiers ---
 identifier = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }

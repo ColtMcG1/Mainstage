@@ -50,7 +50,7 @@ impl<'a> SemanticAnalyzer<'a> {
                 Block => {
                     for c in &node.children { collect_members(c, acc); }
                 }
-                Assignment => {
+                Assignment { .. } => {
                     if node.children.len() >= 2 {
                         if let Identifier { name } = &node.children[0].kind {
                             acc.entry(name.to_string()).or_insert(InferredType::Unknown);

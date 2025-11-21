@@ -32,7 +32,7 @@ pub(crate) fn analyze_node<'a>(
                 analyze_node(an, c)?;
             }
         }
-        AstType::Assignment => super::assign::handle_assignment(an, node)?,
+        AstType::Assignment { .. } => super::assign::handle_assignment(an, node)?,
         AstType::Call { .. } => calls::analyze_call(an, node, false)?,
         _ => an.analyze_expression(node)?,
     }

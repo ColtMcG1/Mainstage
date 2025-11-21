@@ -4,7 +4,7 @@ use crate::reports::Level;
 
 fn is_executable_stmt(n: &AstNode) -> bool {
     match &n.kind {
-        AstType::Call { .. } | AstType::Assignment | AstType::Return
+        AstType::Call { .. } | AstType::Assignment { .. } | AstType::Return
         | AstType::While { .. } | AstType::Forin { .. } | AstType::Forto { .. } => true,
         AstType::Block => n.children.iter().any(is_executable_stmt),
         _ => false,

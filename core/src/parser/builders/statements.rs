@@ -37,6 +37,7 @@ pub(crate) fn process_statement_rule<'a>(
         Rule::terminated_statement => process_terminated_stmt(inner, script),
         Rule::block => process_block(inner, script),
         Rule::loop_stmt => process_loop_stmt(inner, script),
+        Rule::conditional_stmt => process_conditional_stmt(inner, script),
         _ => builders::utils::unhandled_rule(inner, script),
     }
 }
@@ -112,17 +113,19 @@ pub(crate) fn process_assignment_stmt<'a>(
     let span = AstNode::convert_pest_span_to_span(pair.as_span());
     let location = AstNode::convert_pest_span_to_location(pair.as_span(), script);
     let mut lhs = None;
+    let mut op = None;
     let mut rhs = None;
     for p in pair.into_inner() {
         match p.as_rule() {
             Rule::identifier => lhs = Some(builders::expressions::process_identifier_rule(p, script)),
+            Rule::assign_op => op = Some(builders::expressions::process_assign_operator_rule(p, script)),
             Rule::expression => rhs = Some(builders::expressions::process_expression_rule(p, script)),
             _ => {}
         }
     }
     AstNode {
         id: AstNode::generate_id(),
-        kind: AstType::Assignment,
+        kind: AstType::Assignment { op: op.expect("Assignment must have a valid assignment operator") },
         span: Some(span),
         location: Some(location),
         children: vec![
@@ -203,6 +206,142 @@ pub(crate) fn process_import_stmt<'a>(
     }
 }
 
+fn process_conditional_stmt<'a>(
+    pair: pest::iterators::Pair<'a, Rule>,
+    script: &Script,
+) -> AstNode<'a> {
+    let inner = pair.into_inner().next().unwrap();
+    match inner.as_rule() {
+        Rule::if_stmt => process_if_stmt(inner, script),
+        Rule::ifelse_stmt => process_ifelse_stmt(inner, script),
+        Rule::tenary_stmt => process_tenary_stmt(inner, script),
+        _ => builders::utils::unhandled_rule(inner, script),
+    }
+}
+
+fn process_if_stmt<'a>(
+    pair: pest::iterators::Pair<'a, Rule>,
+    script: &Script,
+) -> AstNode<'a> {
+    let span = AstNode::convert_pest_span_to_span(pair.as_span());
+    let location = AstNode::convert_pest_span_to_location(pair.as_span(), script);
+    let mut condition = None;
+    let mut body = None;
+    for p in pair.into_inner() {
+        match p.as_rule() {
+            Rule::expression => {
+                condition = Some(Box::new(builders::expressions::process_expression_rule(p, script)));
+            }
+            Rule::block => {
+                body = Some(process_block(p, script));
+            }
+            _ => {}
+        }
+    }
+    AstNode {
+        id: AstNode::generate_id(),
+        kind: AstType::If {
+            cond: condition.expect("If statement must have a condition"),
+            body: Box::new(
+                body.expect("If statement must have body"),
+            ),
+        },
+        span: Some(span),
+        location: Some(location),
+        children: vec![],
+        attributes: vec![],
+    }
+}
+
+fn process_ifelse_stmt<'a>(
+    pair: pest::iterators::Pair<'a, Rule>,
+    script: &Script,
+) -> AstNode<'a> {
+    let span = AstNode::convert_pest_span_to_span(pair.as_span());
+    let location = AstNode::convert_pest_span_to_location(pair.as_span(), script);
+    let mut condition = None;
+    let mut if_body = None;
+    let mut else_body = None;
+    for p in pair.into_inner() {
+        match p.as_rule() {
+            Rule::expression => {
+                condition = Some(Box::new(builders::expressions::process_expression_rule(p, script)));
+            }
+            Rule::block => {
+                if if_body.is_none() {
+                    if_body = Some(process_block(p, script));
+                } else {
+                    else_body = Some(process_block(p, script));
+                }
+            }
+            _ => {}
+        }
+    }
+    AstNode {
+        id: AstNode::generate_id(),
+        kind: AstType::IfElse {
+            cond: condition.expect("If-Else statement must have a condition"),
+            if_body: Box::new(
+                if_body.expect("If-Else statement must have if body"),
+            ),
+            else_body: Box::new(
+                else_body.expect("If-Else statement must have else body"),
+            ),
+        },
+        span: Some(span),
+        location: Some(location),
+        children: vec![],
+        attributes: vec![],
+    }
+}
+
+fn process_tenary_stmt<'a>(
+    pair: pest::iterators::Pair<'a, Rule>,
+    script: &Script,
+) -> AstNode<'a> {
+    let span = AstNode::convert_pest_span_to_span(pair.as_span());
+    let location = AstNode::convert_pest_span_to_location(pair.as_span(), script);
+    let mut condition = None;
+    let mut true_expr = None;
+    let mut false_expr = None;
+    let mut inner_rules = pair.into_inner();
+
+    if let Some(cond_pair) = inner_rules.next() {
+        if cond_pair.as_rule() == Rule::expression {
+            condition = Some(Box::new(builders::expressions::process_expression_rule(cond_pair, script)));
+        }
+    }
+
+    if let Some(true_pair) = inner_rules.next() {
+        if true_pair.as_rule() == Rule::expression {
+            true_expr = Some(builders::expressions::process_expression_rule(true_pair, script));
+        }
+    }
+
+    if let Some(false_pair) = inner_rules.next() {
+        if false_pair.as_rule() == Rule::expression {
+            false_expr = Some(builders::expressions::process_expression_rule(false_pair, script));
+        }
+    }
+
+    // Ternary is converted to IfElse AST node
+    AstNode {
+        id: AstNode::generate_id(),
+        kind: AstType::IfElse {
+            cond: condition.expect("Ternary statement must have a condition"),
+            if_body: Box::new(
+                true_expr.expect("Ternary statement must have true expression"),
+            ),
+            else_body: Box::new(
+                false_expr.expect("Ternary statement must have false expression"),
+            ),
+        },
+        span: Some(span),
+        location: Some(location),
+        children: vec![],
+        attributes: vec![],
+    }
+}
 
 /// Processes a loop statement rule into an AST node.
 /// # Reference

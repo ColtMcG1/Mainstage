@@ -82,7 +82,7 @@ impl DirectedAcyclicGraphAnalyzer {
         // Second pass: add data dependency edges
         fn add_data_edges(ast_node: &AstNode, nodes: &mut HashMap<String, AcyclicNode>) {
             match &ast_node.kind {
-                AstType::Assignment => {
+                AstType::Assignment { .. } => {
                     // children[0] = LHS; remaining children form the RHS (can be 1+ after expression flattening)
                     if ast_node.children.len() > 1 {
                         let mut producers = HashSet::new();
@@ -101,7 +101,7 @@ impl DirectedAcyclicGraphAnalyzer {
                         }
                     }
                 }
-                AstType::Call { target: _, arguments } => {
+                AstType::Call { arguments, .. } => {
                     let mut producers = HashSet::new();
                     for arg in arguments {
                         collect_producers(arg, &mut producers);

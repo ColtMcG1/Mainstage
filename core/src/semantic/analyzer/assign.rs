@@ -1,13 +1,43 @@
 use crate::parser::{AstNode, AstType};
-use crate::semantic::{Symbol, SymbolKind, SymbolScope};
 use crate::semantic::analyzer::SemanticAnalyzer;
-use crate::semantic::types::SymbolType;
 use crate::semantic::inference::infer_type;
+use crate::semantic::types::SymbolType;
+use crate::semantic::{Symbol, SymbolKind, SymbolScope};
+use crate::report;
 
-pub(crate) fn handle_assignment<'a>(an: &mut SemanticAnalyzer<'a>, node: &AstNode<'a>) -> Result<(), ()> {
-    if node.children.len() < 2 { return Ok(()); }
+pub(crate) fn handle_assignment<'a>(
+    an: &mut SemanticAnalyzer<'a>,
+    node: &AstNode<'a>,
+) -> Result<(), ()> {
+    if node.children.len() < 2 {
+        return Ok(());
+    }
+
     let (lhs, rhs) = (&node.children[0], &node.children[1]);
-    let name = match &lhs.kind { AstType::Identifier { name } => name.as_ref(), _ => return Ok(()) };
+    
+    let name = match &lhs.kind {
+        AstType::Identifier { name } => name.as_ref(),
+        _ => return Ok(()),
+    };
+
+    if let AstType::Assignment { op } = &node.kind {
+        if matches!(
+            op,
+            crate::parser::AssignOperator::Add | crate::parser::AssignOperator::Sub | crate::parser::AssignOperator::Mul | crate::parser::AssignOperator::Div
+        ) && !an.symbol_table.exists(name)
+        {
+            report!(
+                crate::reports::Level::Warning,
+                format!(
+                    "Compound assignment to undeclared '{}'; implicitly creating.",
+                    name
+                ),
+                Some("SemanticAnalyzer".into()),
+                lhs.span.clone(),
+                lhs.location.clone()
+            );
+        }
+    }
 
     // Always analyze the RHS first (type-check, nested diagnostics).
     an.analyze_expression(rhs)?;

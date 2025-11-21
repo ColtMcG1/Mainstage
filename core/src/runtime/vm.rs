@@ -86,7 +86,12 @@ impl<'a> VmIR<'a> {
     fn get(&self, slot: &Slot) -> RTValue {
         match slot {
             Slot::Temp(i) => self.temps.get(*i).cloned().unwrap_or(RTValue::Null),
-            Slot::Local(i) => self.current_frame().locals.get(*i).cloned().unwrap_or(RTValue::Null),
+            Slot::Local(i) => self
+                .current_frame()
+                .locals
+                .get(*i)
+                .cloned()
+                .unwrap_or(RTValue::Null),
             Slot::Captured(_) => RTValue::Null, // not used yet
         }
     }
@@ -101,7 +106,9 @@ impl<'a> VmIR<'a> {
             Slot::Local(i) => {
                 if *i >= self.current_frame().locals.len() {
                     let needed = *i + 1;
-                    self.current_frame_mut().locals.resize(needed, RTValue::Null);
+                    self.current_frame_mut()
+                        .locals
+                        .resize(needed, RTValue::Null);
                 }
                 self.current_frame_mut().locals[*i] = val;
             }
@@ -135,7 +142,10 @@ impl<'a> VmIR<'a> {
         self.objects.entry(name.to_string()).or_default();
         self.globals
             .entry(name.to_string())
-            .or_insert(RTValue::Ref { scope: "scope".into(), object: name.to_string() });
+            .or_insert(RTValue::Ref {
+                scope: "scope".into(),
+                object: name.to_string(),
+            });
     }
     fn func_name_from(&self, v: &RTValue) -> Option<String> {
         match v {
@@ -145,6 +155,38 @@ impl<'a> VmIR<'a> {
             RTValue::Ref { object, .. } => Some(object.clone()),
             _ => None,
         }
+    }
+
+    fn parse_input(s: &str) -> RTValue {
+        let trimmed = s.trim();
+        if trimmed.is_empty() {
+            return RTValue::Null;
+        }
+        // bool
+        match trimmed.to_ascii_lowercase().as_str() {
+            "true" => return RTValue::Bool(true),
+            "false" => return RTValue::Bool(false),
+            _ => {}
+        }
+        // int
+        if let Ok(i) = trimmed.parse::<i64>() {
+            return RTValue::Int(i);
+        }
+        // float
+        if let Ok(f) = trimmed.parse::<f64>() {
+            return RTValue::Float(f);
+        }
+        // future: arrays / objects (basic comma split)
+        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+            let inner = &trimmed[1..trimmed.len() - 1];
+            let mut items = Vec::new();
+            for part in inner.split(',') {
+                let v = Self::parse_input(part);
+                items.push(v);
+            }
+            return RTValue::Array(items);
+        }
+        RTValue::Str(trimmed.to_string())
     }
 
     pub fn run(&mut self) -> ExecutionResult {
@@ -178,7 +220,11 @@ impl<'a> VmIR<'a> {
                     let sz = *size as usize;
                     self.set(target, RTValue::Array(vec![RTValue::Null; sz]));
                 }
-                Op::ISet { target, index, value } => {
+                Op::ISet {
+                    target,
+                    index,
+                    value,
+                } => {
                     let idx = match self.get(index) {
                         RTValue::Int(i) if i >= 0 => i as usize,
                         _ => return Err("ISet: non-integer index".into()),
@@ -192,7 +238,11 @@ impl<'a> VmIR<'a> {
                         _ => return Err("ISet: target is not an array".into()),
                     }
                 }
-                Op::IGet { target, source, index } => {
+                Op::IGet {
+                    target,
+                    source,
+                    index,
+                } => {
                     let idx = match self.get(index) {
                         RTValue::Int(i) if i >= 0 => i as usize,
                         _ => return Err("IGet: non-integer index".into()),
@@ -212,19 +262,27 @@ impl<'a> VmIR<'a> {
                 }
 
                 // Members
-                Op::MGet { target, source, member } => {
+                Op::MGet {
+                    target,
+                    source,
+                    member,
+                } => {
                     let obj = self.get(source);
                     let v = match obj {
-                        RTValue::Ref { object, .. } => {
-                            self.objects.get(&object)
-                                .and_then(|m| m.get(member).cloned())
-                                .unwrap_or(RTValue::Null)
-                        }
+                        RTValue::Ref { object, .. } => self
+                            .objects
+                            .get(&object)
+                            .and_then(|m| m.get(member).cloned())
+                            .unwrap_or(RTValue::Null),
                         _ => RTValue::Null,
                     };
                     self.set(target, v);
                 }
-                Op::MSet { target, member, value } => {
+                Op::MSet {
+                    target,
+                    member,
+                    value,
+                } => {
                     let obj = self.get(target);
                     let val = self.get(value);
                     match obj {
@@ -274,7 +332,9 @@ impl<'a> VmIR<'a> {
                         Op::Sub { .. } => af - bf,
                         Op::Mul { .. } => af * bf,
                         Op::Div { .. } => {
-                            if bf == 0.0 { return Err("Division by zero".into()); }
+                            if bf == 0.0 {
+                                return Err("Division by zero".into());
+                            }
                             af / bf
                         }
                         _ => unreachable!(),
@@ -310,16 +370,25 @@ impl<'a> VmIR<'a> {
                 // Control flow
                 Op::Label { .. } => { /* no-op */ }
                 Op::Jump { target } => {
-                    self.ip = *self.labels.get(target).ok_or_else(|| format!("Unknown label {}", target))?;
+                    self.ip = *self
+                        .labels
+                        .get(target)
+                        .ok_or_else(|| format!("Unknown label {}", target))?;
                 }
                 Op::BrTrue { condition, target } => {
                     if Self::truthy(&self.get(condition)) {
-                        self.ip = *self.labels.get(target).ok_or_else(|| format!("Unknown label {}", target))?;
+                        self.ip = *self
+                            .labels
+                            .get(target)
+                            .ok_or_else(|| format!("Unknown label {}", target))?;
                     }
                 }
                 Op::BrFalse { condition, target } => {
                     if !Self::truthy(&self.get(condition)) {
-                        self.ip = *self.labels.get(target).ok_or_else(|| format!("Unknown label {}", target))?;
+                        self.ip = *self
+                            .labels
+                            .get(target)
+                            .ok_or_else(|| format!("Unknown label {}", target))?;
                     }
                 }
                 Op::Halt => {
@@ -380,25 +449,44 @@ impl<'a> VmIR<'a> {
 
                 // Builtins
                 Op::Say { message } => {
-                    let msg = self.get(message).as_str().unwrap_or_else(|| "null".to_string());
+                    let msg = self
+                        .get(message)
+                        .as_str()
+                        .unwrap_or_else(|| "null".to_string());
                     println!("{}", msg);
                 }
                 Op::Ask { question, target } => {
-                    let prompt = self.get(question).as_str().unwrap_or_else(|| "".to_string());
-                    print!("{}", prompt);
-                    let _ = io::stdout().flush();
-                    let mut line = String::new();
-                    io::stdin().read_line(&mut line).map_err(|e| e.to_string())?;
-                    let s = line.trim_end_matches(&['\r', '\n'][..]).to_string();
-                    self.set(target, RTValue::Str(s));
+                    let q = self.get(question);
+                    if let RTValue::Str(prompt) = q {
+                        print!("{} ", prompt);
+                    } else {
+                        print!("? ");
+                    }
+                    io::stdout().flush().ok();
+                    let mut buf = String::new();
+                    if io::stdin().read_line(&mut buf).is_ok() {
+                        let val = Self::parse_input(&buf);
+                        self.set(target, val);
+                    } else {
+                        self.set(target, RTValue::Null);
+                    }
                 }
                 Op::Read { location, target } => {
-                    let path = self.get(location).as_str().unwrap_or_else(|| "".to_string());
+                    let path = self
+                        .get(location)
+                        .as_str()
+                        .unwrap_or_else(|| "".to_string());
                     let contents = fs::read_to_string(&path).map_err(|e| e.to_string())?;
                     self.set(target, RTValue::Str(contents));
                 }
-                Op::Write { location, target: content } => {
-                    let path = self.get(location).as_str().unwrap_or_else(|| "".to_string());
+                Op::Write {
+                    location,
+                    target: content,
+                } => {
+                    let path = self
+                        .get(location)
+                        .as_str()
+                        .unwrap_or_else(|| "".to_string());
                     let data = self.get(content).as_str().unwrap_or_else(|| "".to_string());
                     fs::write(&path, data).map_err(|e| e.to_string())?;
                 }

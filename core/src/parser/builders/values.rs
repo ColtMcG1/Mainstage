@@ -5,6 +5,18 @@ use crate::parser::attributes::Attribute;
 pub(crate) fn process_value_rule<'a>(pair: pest::iterators::Pair<'a, Rule>, script: &Script) -> AstNode<'a> {
     let inner_pair = pair.into_inner().next().unwrap();
     match inner_pair.as_rule() {
+        Rule::null => {
+            let span = AstNode::convert_pest_span_to_span(inner_pair.as_span());
+            let location = AstNode::convert_pest_span_to_location(inner_pair.as_span(), script);
+            AstNode {
+                id: AstNode::generate_id(),
+                kind: AstType::Null,
+                span: Some(span),
+                location: Some(location),
+                children: vec![],
+                attributes: vec![],
+            }
+        }
         Rule::number => number(inner_pair, script),
         Rule::string => string(inner_pair, script),
         Rule::boolean => boolean(inner_pair, script),
