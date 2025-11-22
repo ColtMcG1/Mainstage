@@ -3,6 +3,7 @@ workspace demo_ws {
 
     for project in projects
     {
+        say(6);
     }
 }
 

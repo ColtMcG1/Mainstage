@@ -136,7 +136,6 @@ impl LowerCtx {
         self.current_scope = Some(name.to_string());
         self.initialized_members.clear();
         self.called_scopes.clear();
-        self.emit(Op::Label { name: format!("func.{}", name) });
         self.emit(Op::Label { name: format!("scope.{}", name) });
         self.push_frame(true);
         self.allocate_param_slots(name);

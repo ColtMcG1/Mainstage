@@ -1,7 +1,6 @@
 LOAD_CONST Temp(0) <- Str("demo_ws")
 CALL Temp(1) <- Temp(0)([])
 HALT
-LABEL func.demo_ws
 LABEL scope.demo_ws
 NEW_ARRAY Temp(2) size 1
 LOAD_CONST Temp(3) <- Str("test_pj")
@@ -11,36 +10,36 @@ LOAD_LOCAL Temp(5) <- Local(0)
 LOAD_CONST Temp(6) <- Int(0)
 STORE_LOCAL Temp(6) -> Local(1)
 LENGTH Temp(7) <- Temp(5)
-LABEL for.start.node_7
+LABEL for.start.node_10
 LOAD_LOCAL Temp(8) <- Local(1)
 LT Temp(9) <- Temp(8) < Temp(7)
-BR_FALSE Temp(9) -> for.end.node_7
+BR_FALSE Temp(9) -> for.end.node_10
 LOAD_LOCAL Temp(10) <- Local(1)
 IGET Temp(11) <- Temp(5)[Temp(10)]
 STORE_LOCAL Temp(11) -> Local(2)
+LOAD_CONST Temp(12) <- Int(6)
+SAY Temp(12)
 INC Local(1)
-JUMP for.start.node_7
-LABEL for.end.node_7
+JUMP for.start.node_10
+LABEL for.end.node_10
 RETURN
-LABEL func.test_pj
 LABEL scope.test_pj
-LOAD_CONST Temp(13) <- Str("What should I say?")
-ASK Temp(13) -> Temp(12)
-STORE_LOCAL Temp(12) -> Local(0)
-LOAD_LOCAL Temp(14) <- Local(0)
-LOAD_CONST Temp(15) <- Str("demo_stage")
-CALL Temp(16) <- Temp(15)([Temp(14)])
-STORE_LOCAL Temp(16) -> Local(1)
-LOAD_LOCAL Temp(17) <- Local(1)
-LENGTH Temp(18) <- Temp(17)
-SAY Temp(18)
+LOAD_CONST Temp(14) <- Str("What should I say?")
+ASK Temp(14) -> Temp(13)
+STORE_LOCAL Temp(13) -> Local(0)
+LOAD_LOCAL Temp(15) <- Local(0)
+LOAD_CONST Temp(16) <- Str("demo_stage")
+CALL Temp(17) <- Temp(16)([Temp(15)])
+STORE_LOCAL Temp(17) -> Local(1)
+LOAD_LOCAL Temp(18) <- Local(1)
+LENGTH Temp(19) <- Temp(18)
+SAY Temp(19)
 RETURN
-LABEL func.demo_stage
 LABEL scope.demo_stage
-LOAD_CONST Temp(19) <- Str("I should say - ")
-LOAD_LOCAL Temp(20) <- Local(0)
-ADD Temp(21) <- Temp(19) + Temp(20)
-SAY Temp(21)
-LOAD_LOCAL Temp(22) <- Local(0)
-RETURN Temp(22)
+LOAD_CONST Temp(20) <- Str("I should say - ")
+LOAD_LOCAL Temp(21) <- Local(0)
+ADD Temp(22) <- Temp(20) + Temp(21)
+SAY Temp(22)
+LOAD_LOCAL Temp(23) <- Local(0)
+RETURN Temp(23)
 RETURN
