@@ -158,7 +158,7 @@ fn lower_identifier(cx: &mut LowerCtx, name: &str) -> Option<Slot> {
         let t = cx.temp();
         cx.emit(Op::LoadLocal {
             target: t,
-            source: slot,
+            local: slot,
         });
         return Some(t);
     }

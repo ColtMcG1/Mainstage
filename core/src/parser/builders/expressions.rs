@@ -75,46 +75,152 @@ pub(crate) fn process_expression_rule<'a>(
     pair: pest::iterators::Pair<'a, Rule>,
     script: &Script,
 ) -> AstNode<'a> {
-    let inner = pair.into_inner().next().unwrap();
-    match inner.as_rule() {
-        Rule::equality_expression       => process_binary_chain(inner, script, parse_eq_op),
-        Rule::relational_expression     => process_binary_chain(inner, script, parse_rel_op),
-        Rule::additive_expression       => process_binary_chain(inner, script, parse_add_op),
-        Rule::multiplicative_expression => process_binary_chain(inner, script, parse_mul_op),
-        Rule::unary_expression          => process_unary(inner, script),
-        Rule::postfix_expression        => process_postfix(inner, script),
-        Rule::primary_expression        => process_primary(inner, script),
-        Rule::identifier                => process_identifier_rule(inner, script),
-        Rule::value                     => super::values::process_value_rule(inner, script),
-        _ => builders::utils::unhandled_rule(inner, script),
+    // Previously we always did `pair.into_inner().next().unwrap()` which dropped
+    // operator/operand children. Fix: only unwrap the outer `expression` wrapper;
+    // otherwise operate on the pair directly so binary-chain sees all children.
+    let pair_to_match = if pair.as_rule() == Rule::expression {
+        // expression -> equality_expression (or similar); take its child but keep full child tree
+        pair.into_inner().next().expect("expression should contain a child")
+    } else {
+        pair
+    };
+    match pair_to_match.as_rule() {
+        Rule::equality_expression       => process_binary_chain(pair_to_match, script, parse_eq_op),
+        Rule::relational_expression     => process_binary_chain(pair_to_match, script, parse_rel_op),
+        Rule::additive_expression       => process_binary_chain(pair_to_match, script, parse_add_op),
+        Rule::multiplicative_expression => process_binary_chain(pair_to_match, script, parse_mul_op),
+        Rule::unary_expression          => process_unary(pair_to_match, script),
+        Rule::postfix_expression        => process_postfix(pair_to_match, script),
+        Rule::primary_expression        => process_primary(pair_to_match, script),
+        Rule::identifier                => process_identifier_rule(pair_to_match, script),
+        Rule::value                     => super::values::process_value_rule(pair_to_match, script),
+        _ => builders::utils::unhandled_rule(pair_to_match, script),
     }
 }
 
 fn process_binary_chain<'a>(
     pair: pest::iterators::Pair<'a, Rule>,
     script: &Script,
-    op_parser: fn(&str) -> Option<BinaryOperator>,
+    _op_parser: fn(&str) -> Option<BinaryOperator>,
 ) -> AstNode<'a> {
-    let mut it = pair.clone().into_inner().peekable();
-    let first = it.next().unwrap();
-    let mut left = process_expression_rule(first, script);
-    while let (Some(op_tok), Some(rhs)) = (it.next(), it.next()) {
-        if let Some(op) = op_parser(op_tok.as_str()) {
-            let right = process_expression_rule(rhs, script);
-            left = AstNode {
-                id: AstNode::generate_id(),
-                kind: AstType::BinaryOp { op, left: Box::new(left), right: Box::new(right) },
-                span: Some(AstNode::convert_pest_span_to_span(pair.as_span())),
-                location: Some(AstNode::convert_pest_span_to_location(pair.as_span(), script)),
-                children: vec![],
-                attributes: vec![],
-            };
-        } else {
-            // If op token isn’t an operator (shouldn’t happen), break.
-            break;
+    use pest::iterators::Pair;
+    
+    // collect operands and operators in order from the pair's children
+    let mut operands: Vec<AstNode> = Vec::new();
+    let mut operators: Vec<BinaryOperator> = Vec::new();
+
+    for child in pair.clone().into_inner() {
+        match child.as_rule() {
+            Rule::add_op => {
+                let s = child.as_str().trim();
+                let op = match s {
+                    "+" => BinaryOperator::Add,
+                    "-" => BinaryOperator::Sub,
+                    _ => panic!("unknown add_op {}", s),
+                };
+                operators.push(op);
+            }
+            Rule::mul_op => {
+                let s = child.as_str().trim();
+                let op = match s {
+                    "*" => BinaryOperator::Mul,
+                    "/" => BinaryOperator::Div,
+                    _ => panic!("unknown mul_op {}", s),
+                };
+                operators.push(op);
+            }
+            Rule::rel_op => {
+                let s = child.as_str().trim();
+                let op = match s {
+                    "<" => BinaryOperator::Lt,
+                    "<=" => BinaryOperator::Le,
+                    ">" => BinaryOperator::Gt,
+                    ">=" => BinaryOperator::Ge,
+                    _ => panic!("unknown rel_op {}", s),
+                };
+                operators.push(op);
+            }
+            Rule::eq_op => {
+                let s = child.as_str().trim();
+                let op = match s {
+                    "==" => BinaryOperator::Eq,
+                    "!=" => BinaryOperator::Ne,
+                    _ => panic!("unknown eq_op {}", s),
+                };
+                operators.push(op);
+            }
+            // any other child is an operand (sub-expression / primary)
+            _ => {
+                let n = process_expression_rule(child, script);
+                operands.push(n);
+            }
         }
     }
-    left
+
+    // if there are no operators, the expression is just the single operand
+    if operators.is_empty() {
+        return operands.into_iter().next().expect("expected operand");
+    }
+
+    // precedence table (higher = tighter binding)
+    fn prec(op: &BinaryOperator) -> u8 {
+        match op {
+            BinaryOperator::Mul | BinaryOperator::Div => 30,
+            BinaryOperator::Add | BinaryOperator::Sub => 20,
+            BinaryOperator::Lt | BinaryOperator::Le | BinaryOperator::Gt | BinaryOperator::Ge => 15,
+            BinaryOperator::Eq | BinaryOperator::Ne => 10,
+        }
+    }
+
+    // helper to make AST BinaryOp node using the original pair for span/location
+    let make_node = |op: BinaryOperator, left: AstNode<'a>, right: AstNode<'a>, p: &Pair<Rule>, script: &Script| -> AstNode<'a> {
+        AstNode {
+            id: AstNode::generate_id(),
+            kind: AstType::BinaryOp { op, left: Box::new(left), right: Box::new(right) },
+            span: Some(AstNode::convert_pest_span_to_span(p.as_span())),
+            location: Some(AstNode::convert_pest_span_to_location(p.as_span(), script)),
+            children: vec![],
+            attributes: vec![],
+        }
+    };
+
+    // shunting-yard style reduction (operators are left-associative)
+    let mut op_stack: Vec<BinaryOperator> = Vec::new();
+    let mut val_stack: Vec<AstNode> = Vec::new();
+
+    // push first operand
+    val_stack.push(operands.remove(0));
+
+    for i in 0..operators.len() {
+        let cur_op = operators[i];
+        let rhs = operands.remove(0); // next operand
+
+        while let Some(top_op) = op_stack.last().cloned() {
+            if prec(&top_op) >= prec(&cur_op) {
+                let op_to_apply = op_stack.pop().unwrap();
+                let right = val_stack.pop().expect("missing rhs");
+                let left = val_stack.pop().expect("missing lhs");
+                let node = make_node(op_to_apply, left, right, &pair, script);
+                val_stack.push(node);
+            } else {
+                break;
+            }
+        }
+
+        op_stack.push(cur_op);
+        val_stack.push(rhs);
+    }
+
+    // apply remaining operators
+    while let Some(op_to_apply) = op_stack.pop() {
+        let right = val_stack.pop().expect("missing rhs at final reduce");
+        let left = val_stack.pop().expect("missing lhs at final reduce");
+        let node = make_node(op_to_apply, left, right, &pair, script);
+        val_stack.push(node);
+    }
+
+    // final AST node
+    val_stack.pop().expect("empty expression chain")
 }
 
 pub(crate) fn process_assign_operator_rule<'a>(

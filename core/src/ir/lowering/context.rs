@@ -180,7 +180,7 @@ pub fn analyze_meta(ops: &[Op]) -> IRMeta {
         use Op::*;
         match op {
             LoadConst { target, .. } => visit(target),
-            LoadLocal { target, source } => { visit(target); visit(source); }
+            LoadLocal { target, local: source } => { visit(target); visit(source); }
             StoreLocal { source, target } => { visit(source); visit(target); }
             LoadGlobal { target, .. } => visit(target),
             StoreGlobal { source, .. } => visit(source),

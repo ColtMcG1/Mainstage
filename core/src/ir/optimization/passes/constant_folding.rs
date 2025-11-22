@@ -10,68 +10,71 @@ impl Pass for ConstantFolding {
     fn name(&self) -> &'static str { "constant_folding" }
 
     fn run(&mut self, ops: &mut Vec<Op>) -> bool {
-        // Pre-scan: find mutated locals (multiple assignments or Inc/Dec)
-        let mut mutated: HashSet<Slot> = HashSet::new();
-        let mut assigns: HashMap<Slot, usize> = HashMap::new();
+        let mut changed = false;
+
+        // conservative: detect mutated locals so we don't propagate across them
+        let mut mutated_locals: HashSet<Slot> = HashSet::new();
         for op in ops.iter() {
             match op {
-                Op::StoreLocal { target, .. } => {
-                    let c = assigns.entry(*target).or_insert(0);
-                    *c += 1;
-                    if *c > 1 { mutated.insert(*target); }
-                }
-                Op::Inc { target } | Op::Dec { target } => {
-                    mutated.insert(*target);
-                }
+                Op::StoreLocal { target, .. } => { mutated_locals.insert(*target); }
+                Op::Inc { target } | Op::Dec { target } => { mutated_locals.insert(*target); }
+                Op::ISet { target, .. } => { mutated_locals.insert(*target); }
                 _ => {}
             }
         }
 
-        let mut changed = false;
-        let mut reg_consts: HashMap<Slot, OpValue> = HashMap::new();
-        let mut local_consts: HashMap<Slot, OpValue> = HashMap::new();
+        let mut consts: HashMap<Slot, OpValue> = HashMap::new();
 
         for i in 0..ops.len() {
-            // treat labels & jumps as boundaries for locals too (avoid loop folding)
+            // clear facts at hard control-flow boundaries to stay conservative
             match ops[i] {
-                Op::Label { .. } | Op::Jump { .. } => {
-                    reg_consts.clear();
-                    local_consts.clear();
-                }
-                Op::Return { .. } | Op::Halt => {
-                    reg_consts.clear();
-                    local_consts.clear();
+                Op::Label { .. } | Op::Jump { .. } | Op::Return { .. } | Op::Halt => {
+                    consts.clear();
                 }
                 _ => {}
             }
 
-            let mut replace_with: Option<(Slot, OpValue)> = None;
-            let mut invalidate: Vec<Slot> = Vec::new();
+            // We'll compute an optional replacement const for this op without mutating `consts`
+            let mut folded_const: Option<(Slot, OpValue)> = None;
+            // and a list of slots to invalidate if we can't fold the op's target
+            let mut invalidate_target: Option<Slot> = None;
 
             match &ops[i] {
                 Op::LoadConst { target, value } => {
-                    replace_with = Some((*target, value.clone()));
+                    // remember const
+                    folded_const = Some((*target, value.clone()));
                 }
 
-                Op::LoadLocal { target, source } => {
-                    if !mutated.contains(source) {
-                        if let Some(v) = local_consts.get(source) {
-                            replace_with = Some((*target, v.clone()));
+                Op::LoadLocal { target, local } => {
+                    // only propagate local constants if that local isn't mutated
+                    if !mutated_locals.contains(local) {
+                        if let Some(v) = consts.get(local) {
+                            folded_const = Some((*target, v.clone()));
+                        } else {
+                            invalidate_target = Some(*target);
                         }
                     } else {
-                        invalidate.push(*target);
+                        invalidate_target = Some(*target);
                     }
                 }
 
+                // Globals are identified by name (String). we don't track them in the Slot->OpValue map.
+                // Be conservative: invalidate the destination slot instead of looking up by name.
+                Op::LoadGlobal { target, .. } => {
+                    invalidate_target = Some(*target);
+                }
+
                 Op::StoreLocal { source, target } => {
-                    if !mutated.contains(target) {
-                        if let Some(v) = reg_consts.get(source) {
-                            local_consts.insert(*target, v.clone());
+                    // if source is a tracked temp constant, we can propagate it to local (unless mutated)
+                    if !mutated_locals.contains(target) {
+                        if let Some(v) = consts.get(source) {
+                            folded_const = Some((*target, v.clone()));
                         } else {
-                            local_consts.remove(target);
+                            // storing a non-const invalidates local const
+                            consts.remove(target);
                         }
                     } else {
-                        local_consts.remove(target);
+                        consts.remove(target);
                     }
                 }
 
@@ -85,9 +88,10 @@ impl Pass for ConstantFolding {
                 | Op::Le  { lhs, rhs, target }
                 | Op::Gt  { lhs, rhs, target }
                 | Op::Ge  { lhs, rhs, target } => {
-                    let l = reg_consts.get(lhs).or_else(|| local_consts.get(lhs));
-                    let r = reg_consts.get(rhs).or_else(|| local_consts.get(rhs));
-                    let folded = match &ops[i] {
+                    let l = consts.get(lhs);
+                    let r = consts.get(rhs);
+
+                    let res = match &ops[i] {
                         Op::Add { .. } => fold_add(l, r),
                         Op::Sub { .. } => fold_sub(l, r),
                         Op::Mul { .. } => fold_mul(l, r),
@@ -100,81 +104,101 @@ impl Pass for ConstantFolding {
                         Op::Ge  { .. } => fold_cmp(Cmp::Ge, l, r),
                         _ => None,
                     };
-                    if let Some(v) = folded {
-                        replace_with = Some((*target, v));
-                    } else {
-                        invalidate.push(*target);
+
+                    match res {
+                        Some(v) => { folded_const = Some((*target, v)); }
+                        None => { invalidate_target = Some(*target); }
                     }
                 }
 
                 Op::Length { target, array } => {
-                    if let Some(v) = reg_consts.get(array).or_else(|| local_consts.get(array)) {
-                        match v {
-                            V::Array(a) => replace_with = Some((*target, V::Int(a.len() as i64))),
-                            V::Str(s) => replace_with = Some((*target, V::Int(s.len() as i64))),
-                            _ => invalidate.push(*target),
-                        }
-                    } else {
-                        invalidate.push(*target);
+                    match consts.get(array) {
+                        Some(V::Array(a)) => folded_const = Some((*target, V::Int(a.len() as i64))),
+                        Some(V::Str(s))   => folded_const = Some((*target, V::Int(s.len() as i64))),
+                        _ => invalidate_target = Some(*target),
                     }
                 }
 
                 Op::IGet { target, source, index } => {
-                    let src = reg_consts.get(source).or_else(|| local_consts.get(source));
-                    let idx_v = reg_consts.get(index).or_else(|| local_consts.get(index));
-                    if let (Some(V::Array(arr)), Some(V::Int(i))) = (src, idx_v) {
-                        if *i >= 0 {
+                    match (consts.get(source), consts.get(index)) {
+                        (Some(V::Array(arr)), Some(V::Int(i))) if *i >= 0 => {
                             let ui = *i as usize;
                             if ui < arr.len() {
-                                replace_with = Some((*target, arr[ui].clone()));
+                                folded_const = Some((*target, arr[ui].clone()));
                             } else {
-                                invalidate.push(*target);
+                                invalidate_target = Some(*target);
                             }
-                        } else {
-                            invalidate.push(*target);
                         }
-                    } else {
-                        invalidate.push(*target);
+                        _ => invalidate_target = Some(*target),
                     }
                 }
 
-                Op::Inc { target } | Op::Dec { target } => {
-                    reg_consts.remove(target);
-                    local_consts.remove(target);
+                Op::Not { source, target } => {
+                    match consts.get(source) {
+                        Some(V::Bool(b)) => folded_const = Some((*target, V::Bool(!b))),
+                        _ => invalidate_target = Some(*target),
+                    }
                 }
 
-                Op::Call { target, .. } => invalidate.push(*target),
+                Op::Call { target, .. } => {
+                    invalidate_target = Some(*target);
+                }
 
                 Op::NewArray { target, .. }
                 | Op::ISet { target, .. }
-                | Op::MGet { target, .. } => invalidate.push(*target),
+                | Op::MGet { target, .. } => {
+                    invalidate_target = Some(*target);
+                }
+
+                Op::Inc { target } | Op::Dec { target } => {
+                    // mutating operations invalidate any const knowledge of the slot
+                    consts.remove(target);
+                }
 
                 _ => {}
             }
 
-            if let Some((slot, value)) = replace_with {
-                match ops[i] {
-                    Op::LoadConst { target, .. } if target == slot => {}
+            // Apply deferred invalidation first
+            if let Some(slot) = invalidate_target {
+                consts.remove(&slot);
+            }
+
+            // Apply folded constant (if any) — and replace op in the instruction stream
+            if let Some((slot, val)) = folded_const {
+                // if this instruction is not already a LoadConst for the same slot, replace it
+                match &ops[i] {
+                    Op::LoadConst { target, value: _ } if *target == slot => {
+                        // already the right LoadConst; still ensure map updated
+                        consts.insert(slot, val);
+                    }
                     _ => {
-                        ops[i] = Op::LoadConst { target: slot, value: value.clone() };
+                        ops[i] = Op::LoadConst { target: slot, value: val.clone() };
+                        consts.insert(slot, val);
                         changed = true;
                     }
                 }
-                reg_consts.insert(slot, value);
-            }
-            for s in invalidate {
-                reg_consts.remove(&s);
             }
         }
+
         changed
     }
 }
 
-// helpers unchanged
-fn as_int(v: &OpValue) -> Option<i64> { match v { V::Int(i) => Some(*i), _ => None } }
-fn as_float(v: &OpValue) -> Option<f64> { match v { V::Float(f) => Some(*f), _ => None } }
-fn both_int(l: Option<&OpValue>, r: Option<&OpValue>) -> Option<(i64,i64)> { Some((as_int(l?)?, as_int(r?)?)) }
-fn both_float(l: Option<&OpValue>, r: Option<&OpValue>) -> Option<(f64,f64)> { Some((as_float(l?)?, as_float(r?)?)) }
+// helpers
+
+fn as_int(v: &OpValue) -> Option<i64> {
+    match v { V::Int(i) => Some(*i), _ => None }
+}
+fn as_float(v: &OpValue) -> Option<f64> {
+    match v { V::Float(f) => Some(*f), _ => None }
+}
+fn both_int(l: Option<&OpValue>, r: Option<&OpValue>) -> Option<(i64,i64)> {
+    Some((as_int(l?)?, as_int(r?)?))
+}
+fn both_float(l: Option<&OpValue>, r: Option<&OpValue>) -> Option<(f64,f64)> {
+    Some((as_float(l?)?, as_float(r?)?))
+}
+
 fn fold_add(l: Option<&OpValue>, r: Option<&OpValue>) -> Option<OpValue> {
     if let Some((a,b)) = both_int(l,r) { return Some(V::Int(a + b)); }
     if let Some((a,b)) = both_float(l,r) { return Some(V::Float(a + b)); }
@@ -204,18 +228,21 @@ fn fold_div(l: Option<&OpValue>, r: Option<&OpValue>) -> Option<OpValue> {
 }
 fn fold_eq(l: Option<&OpValue>, r: Option<&OpValue>) -> Option<OpValue> {
     match (l?, r?) {
-        (V::Int(a), V::Int(b)) => Some(V::Bool(a == b)),
+        (V::Int(a),   V::Int(b))   => Some(V::Bool(a == b)),
         (V::Float(a), V::Float(b)) => Some(V::Bool(a == b)),
-        (V::Bool(a), V::Bool(b)) => Some(V::Bool(a == b)),
-        (V::Str(a), V::Str(b)) => Some(V::Bool(a == b)),
-        (V::Null, V::Null) => Some(V::Bool(true)),
+        (V::Bool(a),  V::Bool(b))  => Some(V::Bool(a == b)),
+        (V::Str(a),   V::Str(b))   => Some(V::Bool(a == b)),
+        (V::Null,     V::Null)     => Some(V::Bool(true)),
         _ => None,
     }
 }
 fn fold_ne(l: Option<&OpValue>, r: Option<&OpValue>) -> Option<OpValue> {
     fold_eq(l,r).map(|v| if let V::Bool(b) = v { V::Bool(!b) } else { v })
 }
-#[derive(Clone, Copy)] enum Cmp { Lt, Le, Gt, Ge }
+
+#[derive(Clone, Copy)]
+enum Cmp { Lt, Le, Gt, Ge }
+
 fn fold_cmp(op: Cmp, l: Option<&OpValue>, r: Option<&OpValue>) -> Option<OpValue> {
     if let Some((a,b)) = both_int(l,r) {
         let res = match op { Cmp::Lt => a < b, Cmp::Le => a <= b, Cmp::Gt => a > b, Cmp::Ge => a >= b };

@@ -198,7 +198,7 @@ impl<'a> VmIR<'a> {
                 Op::LoadConst { target, value } => {
                     self.set(target, RTValue::from(value.clone()));
                 }
-                Op::LoadLocal { target, source } => {
+                Op::LoadLocal { target, local: source } => {
                     let v = self.get(source);
                     self.set(target, v);
                 }
@@ -206,11 +206,11 @@ impl<'a> VmIR<'a> {
                     let v = self.get(source);
                     self.set(target, v);
                 }
-                Op::LoadGlobal { target, name } => {
+                Op::LoadGlobal { target, global: name } => {
                     let v = self.globals.get(name).cloned().unwrap_or(RTValue::Null);
                     self.set(target, v);
                 }
-                Op::StoreGlobal { source, name } => {
+                Op::StoreGlobal { source, global: name } => {
                     let v = self.get(source);
                     self.globals.insert(name.clone(), v);
                 }

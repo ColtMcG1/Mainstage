@@ -174,7 +174,7 @@ fn lower_assignment(cx: &mut LowerCtx, node: &AstNode) {
                 cx.emit(Op::StoreLocal { source: rhs_slot, target: slot });
             } else {
                 let cur = cx.temp();
-                cx.emit(Op::LoadLocal { target: cur, source: slot });
+                cx.emit(Op::LoadLocal { target: cur, local: slot });
                 let result = emit_binop(cx, (*op).clone(), cur, rhs_slot);
                 cx.emit(Op::StoreLocal { source: result, target: slot });
             }
@@ -225,14 +225,14 @@ fn lower_for_in(cx: &mut LowerCtx, node: &AstNode) {
 
     // cond: idx < len
     let idx_val = cx.temp();
-    cx.emit(Op::LoadLocal { target: idx_val, source: idx_slot });
+    cx.emit(Op::LoadLocal { target: idx_val, local: idx_slot });
     let cond = cx.temp();
     cx.emit(Op::Lt { lhs: idx_val, rhs: len, target: cond });
     br_false(cx, cond, &l_end);
 
     // item = arr[idx]
     let idx_cur = cx.temp();
-    cx.emit(Op::LoadLocal { target: idx_cur, source: idx_slot });
+    cx.emit(Op::LoadLocal { target: idx_cur, local: idx_slot });
     let item = cx.temp();
     cx.emit(Op::IGet { target: item, source: arr, index: idx_cur });
 
@@ -277,7 +277,7 @@ fn lower_for_to(cx: &mut LowerCtx, node: &AstNode) {
 
     // cond: i <= limit
     let i_now = cx.temp();
-    cx.emit(Op::LoadLocal { target: i_now, source: i_slot });
+    cx.emit(Op::LoadLocal { target: i_now, local: i_slot });
     let cond = cx.temp();
     cx.emit(Op::Le { lhs: i_now, rhs: limit, target: cond });
     br_false(cx, cond, &l_end);

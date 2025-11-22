@@ -1,6 +1,6 @@
 use crate::ir::op::Op;
 use super::pass::Pass;
-use super::passes::{ConstantFolding, DeadCodeElim};
+use super::passes::{ConstantFolding, ConstantPropagation, CopyPropagation, DeadCodeElim};
 
 pub struct Pipeline { passes: Vec<Box<dyn Pass>> }
 
@@ -9,7 +9,10 @@ impl Pipeline {
 
     pub fn with_default_passes() -> Self {
         let mut p = Self::new();
+        // safe ordering: fold constants, propagate constants, propagate copies, then eliminate dead code
         p.add_pass(Box::new(ConstantFolding::new()));
+        p.add_pass(Box::new(ConstantPropagation::new()));
+        p.add_pass(Box::new(CopyPropagation::new()));
         p.add_pass(Box::new(DeadCodeElim::new()));
         p
     }

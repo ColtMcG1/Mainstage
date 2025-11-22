@@ -4,26 +4,39 @@ workspace optimizer_demo {
 }
 
 project opt_project {
-    // Constant expression folded: (1 + 2) * (3 + 4) => 21
+    // constant folding: (1+2)*(3+4) -> 21
     say((1 + 2) * (3 + 4));
 
-    // String concatenation folded: "foo" + "bar" => "foobar"
+    // string concatenation folded -> "foobar"
     msg = "foo" + "bar";
     say(msg);
 
-    // Length folded: constant string length => 5
-    word = "hello";
-    say(word.length());
+    // copy propagation: tmp is copy of a -> use replaced with constant/local where possible
+    a = "copyme";
+    tmp = a;
+    say(tmp);
 
-    // Entire call chain returns constant -> length also constant
+    // constant propagation through locals
+    len_local = "hello".length();
+    stored_len = len_local;
+    say(stored_len); // should fold to 5
+
+    // fold across calls where possible (echo_stage returns its arg)
     out = echo_stage("abc");
-    say(out.length());
+    say(out.length()); // folded -> 3
 
-    // Unused complex expression temps eliminated (DCE):
-    unused = (10 * 2) + (30 / 3) + (4 - 1); // never referenced
+    // loop with constant array length: length folds but index remains mutable (no incorrect folding)
+    arr = ["x", "y", "z"];
+    n = arr.length();   // folded -> 3
+    while(n) {
+        say(arr[n]);
+        --n;
+    }
+
+    // dead code elimination: unused result should be removed
+    unused = (10 * 2) + (30 / 3) + (4 - 1);
 }
 
 stage echo_stage (val) {
-    // Return value directly; length of "abc" folded at call site
     return val;
 }

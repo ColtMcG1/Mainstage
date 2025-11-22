@@ -8,13 +8,13 @@ pub enum Op {
     /// Load a constant into a register
     LoadConst  { target: Slot, value: OpValue },
     /// Load a local variable into a register
-    LoadLocal  { target: Slot, source: Slot },
+    LoadLocal  { target: Slot, local: Slot },
     /// Store a register value into a local variable
     StoreLocal { source: Slot, target: Slot },
     /// Load a global variable into a register
-    LoadGlobal  { target: Slot, name: String },
+    LoadGlobal  { target: Slot, global: String },
     /// Store a register value into a global variable
-    StoreGlobal { source: Slot, name: String },
+    StoreGlobal { source: Slot, global: String },
 
     // --- Object / Collection ---
 
@@ -155,6 +155,85 @@ impl Op {
             _ => {}
         }
     }
+
+    // Map/replace used slots in-place. The closure must return the replacement slot.
+    pub fn map_used_slots<F: FnMut(Slot) -> Slot>(&mut self, mut f: F) {
+        match self {
+            Op::Add { lhs, rhs, .. }
+            | Op::Sub { lhs, rhs, .. }
+            | Op::Mul { lhs, rhs, .. }
+            | Op::Div { lhs, rhs, .. }
+            | Op::Eq  { lhs, rhs, .. }
+            | Op::Ne  { lhs, rhs, .. }
+            | Op::Lt  { lhs, rhs, .. }
+            | Op::Le  { lhs, rhs, .. }
+            | Op::Gt  { lhs, rhs, .. }
+            | Op::Ge  { lhs, rhs, .. } => {
+                *lhs = f(*lhs);
+                *rhs = f(*rhs);
+            }
+
+            Op::Length { array, .. } => {
+                *array = f(*array);
+            }
+
+            Op::IGet { source, index, .. } => {
+                *source = f(*source);
+                *index = f(*index);
+            }
+
+            Op::ISet { target, index, value } => {
+                *target = f(*target);
+                *index = f(*index);
+                *value = f(*value);
+            }
+
+            Op::MGet { target, source, .. } => {
+                *target = f(*target);
+                *source = f(*source);
+            }
+            Op::MSet { target, member: _, value } => {
+                *target = f(*target);
+                *value = f(*value);
+            }
+
+            Op::StoreLocal { source, .. } | Op::StoreGlobal { source, .. } => {
+                *source = f(*source);
+            }
+
+            Op::Call { func, args, .. } => {
+                *func = f(*func);
+                for a in args.iter_mut() { *a = f(*a); }
+            }
+
+            Op::Say { message } => {
+                *message = f(*message);
+            }
+            Op::Ask { question, target: _ } => {
+                *question = f(*question);
+            }
+            Op::Read { location, target: _ } => {
+                *location = f(*location);
+            }
+            Op::Write { location, target: _ } => {
+                *location = f(*location);
+            }
+
+            Op::BrTrue { condition, .. } | Op::BrFalse { condition, .. } => {
+                *condition = f(*condition);
+            }
+
+            Op::Inc { target } | Op::Dec { target } => {
+                *target = f(*target);
+            }
+
+            Op::Return { value } => {
+                if let Some(v) = value { *v = f(*v); }
+            }
+
+            _ => {}
+        }
+    }
 }
 
 impl std::fmt::Display for Op {
@@ -162,10 +241,10 @@ impl std::fmt::Display for Op {
         use Op::*;
         match self {
             LoadConst { target, value } => write!(f, "LOAD_CONST {:?} <- {:?}", target, value),
-            LoadLocal { target, source } => write!(f, "LOAD_LOCAL {:?} <- {:?}", target, source),
+            LoadLocal { target, local: source } => write!(f, "LOAD_LOCAL {:?} <- {:?}", target, source),
             StoreLocal { source, target } => write!(f, "STORE_LOCAL {:?} -> {:?}", source, target),
-            LoadGlobal { target, name } => write!(f, "LOAD_GLOBAL {:?} <- {}", target, name),
-            StoreGlobal { source, name } => write!(f, "STORE_GLOBAL {:?} -> {}", source, name),
+            LoadGlobal { target, global: name } => write!(f, "LOAD_GLOBAL {:?} <- {}", target, name),
+            StoreGlobal { source, global: name } => write!(f, "STORE_GLOBAL {:?} -> {}", source, name),
             NewArray { target, size } => write!(f, "NEW_ARRAY {:?} size {}", target, size),
             Length { target, array } => write!(f, "LENGTH {:?} <- {:?}", target, array),
             IGet { target, source, index } => write!(f, "IGET {:?} <- {:?}[{:?}]", target, source, index),

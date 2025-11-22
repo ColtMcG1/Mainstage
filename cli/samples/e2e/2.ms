@@ -1,10 +1,5 @@
 workspace demo_ws {
     projects = [test_pj];
-
-    for project in projects
-    {
-        say(6);
-    }
 }
 
 project test_pj {
@@ -13,7 +8,7 @@ project test_pj {
     say(out.length());
 }
 
-stage demo_stage (var) // No arguments
+stage demo_stage (var)
 {
     say("I should say - " + var);
     return var;
