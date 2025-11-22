@@ -1,4 +1,4 @@
-use super::{calls};
+use super::calls;
 use crate::parser::{AstNode, AstType};
 use crate::semantic::analyzer::SemanticAnalyzer;
 
@@ -20,8 +20,20 @@ pub(crate) fn analyze_node<'a>(
             an.exit_frame();
         }
 
-        AstType::Project { .. } | AstType::Stage { .. } | AstType::Task { .. } | AstType::Block => {
+        AstType::Project { .. } | AstType::Block => {
             an.enter_frame();
+            for c in &mut node.children {
+                analyze_node(an, c)?;
+            }
+            an.exit_frame();
+        }
+        AstType::Stage { params, .. } | AstType::Task { params, .. } => {
+            an.enter_frame();
+            for p in params {
+                if let AstType::Identifier { name } = &p.kind {
+                    super::util::declare_param(an, name.as_ref())?;
+                }
+            }
             for c in &mut node.children {
                 analyze_node(an, c)?;
             }

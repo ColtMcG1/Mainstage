@@ -1,54 +1,46 @@
-LOAD_CONST Temp(0) <- Str("test_pj")
+LOAD_CONST Temp(0) <- Str("demo_ws")
 CALL Temp(1) <- Temp(0)([])
 HALT
+LABEL func.demo_ws
 LABEL scope.demo_ws
-RETURN
-LABEL scope.test_pj
-LOAD_CONST Temp(2) <- Str("demo_stage")
-CALL Temp(3) <- Temp(2)([])
-STORE_LOCAL Temp(3) -> Local(0)
-LOAD_LOCAL Temp(4) <- Local(0)
-LOAD_CONST Temp(5) <- Str("!!!")
-ADD Temp(6) <- Temp(4) + Temp(5)
-LENGTH Temp(7) <- Temp(6)
-STORE_LOCAL Temp(7) -> Local(1)
+NEW_ARRAY Temp(2) size 1
+LOAD_CONST Temp(3) <- Str("test_pj")
+CALL Temp(4) <- Temp(3)([])
+STORE_LOCAL Temp(2) -> Local(0)
+LOAD_LOCAL Temp(5) <- Local(0)
+LOAD_CONST Temp(6) <- Int(0)
+STORE_LOCAL Temp(6) -> Local(1)
+LENGTH Temp(7) <- Temp(5)
+LABEL for.start.node_12
 LOAD_LOCAL Temp(8) <- Local(1)
-SAY Temp(8)
-LOAD_LOCAL Temp(9) <- Local(0)
-SAY Temp(9)
+LT Temp(9) <- Temp(8) < Temp(7)
+BR_FALSE Temp(9) -> for.end.node_12
+LOAD_LOCAL Temp(10) <- Local(1)
+IGET Temp(11) <- Temp(5)[Temp(10)]
+STORE_LOCAL Temp(11) -> Local(2)
+INC Local(1)
+JUMP for.start.node_12
+LABEL for.end.node_12
 RETURN
+LABEL func.test_pj
+LABEL scope.test_pj
+LOAD_CONST Temp(13) <- Str("What should I say?")
+ASK Temp(13) -> Temp(12)
+STORE_LOCAL Temp(12) -> Local(0)
+LOAD_LOCAL Temp(14) <- Local(0)
+LOAD_CONST Temp(15) <- Str("demo_stage")
+CALL Temp(16) <- Temp(15)([Temp(14)])
+STORE_LOCAL Temp(16) -> Local(1)
+LOAD_LOCAL Temp(17) <- Local(1)
+LENGTH Temp(18) <- Temp(17)
+SAY Temp(18)
+RETURN
+LABEL func.demo_stage
 LABEL scope.demo_stage
-NEW_ARRAY Temp(10) size 3
-LOAD_CONST Temp(11) <- Str("Hello")
-LOAD_CONST Temp(12) <- Int(0)
-ISET Temp(10)[Temp(12)] <- Temp(11)
-LOAD_CONST Temp(13) <- Str(" ")
-LOAD_CONST Temp(14) <- Int(1)
-ISET Temp(10)[Temp(14)] <- Temp(13)
-LOAD_CONST Temp(15) <- Str("world")
-LOAD_CONST Temp(16) <- Int(2)
-ISET Temp(10)[Temp(16)] <- Temp(15)
-STORE_LOCAL Temp(10) -> Local(2)
-LOAD_CONST Temp(17) <- Str("")
-STORE_LOCAL Temp(17) -> Local(3)
-LOAD_LOCAL Temp(18) <- Local(2)
-LOAD_CONST Temp(19) <- Int(0)
-STORE_LOCAL Temp(19) -> Local(4)
-LENGTH Temp(20) <- Temp(18)
-LABEL for.start.node_37
-LOAD_LOCAL Temp(21) <- Local(4)
-LT Temp(22) <- Temp(21) < Temp(20)
-BR_FALSE Temp(22) -> for.end.node_37
-LOAD_LOCAL Temp(23) <- Local(4)
-IGET Temp(24) <- Temp(18)[Temp(23)]
-STORE_LOCAL Temp(24) -> Local(5)
-LOAD_LOCAL Temp(25) <- Local(3)
-LOAD_LOCAL Temp(26) <- Local(5)
-ADD Temp(27) <- Temp(25) + Temp(26)
-STORE_LOCAL Temp(27) -> Local(3)
-INC Local(4)
-JUMP for.start.node_37
-LABEL for.end.node_37
-LOAD_LOCAL Temp(28) <- Local(3)
-RETURN Temp(28)
+LOAD_CONST Temp(19) <- Str("I should say - ")
+LOAD_LOCAL Temp(20) <- Local(0)
+ADD Temp(21) <- Temp(19) + Temp(20)
+SAY Temp(21)
+LOAD_LOCAL Temp(22) <- Local(0)
+RETURN Temp(22)
 RETURN

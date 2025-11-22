@@ -268,6 +268,36 @@ impl<'a> SymbolTable<'a> {
             _ => None,
         }
     }
+
+    // ADD: does current (innermost) scope already have name
+    pub fn contains_in_current(&self, name: &str) -> bool {
+        self.scopes
+            .last()
+            .map(|s| s.contains_key(name))
+            .unwrap_or(false)
+    }
+
+    pub fn insert_local(&mut self, name: &str) {
+        if let Some(current) = self.scopes.last_mut() {
+            if current.contains_key(name) { return; }
+            current
+                .entry(name.to_string())
+                .or_insert_with(Vec::new)
+                .push(Symbol::new_variable(
+                    std::borrow::Cow::Owned(name.to_string()),
+                    super::SymbolType::None,
+                    super::SymbolScope::Local,
+                ));
+        }
+    }
+
+    pub fn bump_refs(&mut self, name: &str) {
+        if let Some(list) = self.get_mut(name) {
+            for sym in list {
+                sym.increment_reference_count();
+            }
+        }
+    }
 }
 
 impl std::fmt::Debug for SymbolTable<'_> {

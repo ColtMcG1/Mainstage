@@ -25,9 +25,7 @@ impl<'a> SemanticAnalyzer<'a> {
         if let Ok(entry) = self.detect_entrypoint() {
             let name = match &entry.kind {
                 AstType::Workspace { name }
-                | AstType::Project { name }
-                | AstType::Stage { name, .. }
-                | AstType::Task { name, .. } => name.as_ref(),
+                | AstType::Project { name } => name.as_ref(),
                 _ => return,
             };
             if let Some(vec) = self.symbol_table.get_mut(name) {

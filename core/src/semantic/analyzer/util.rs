@@ -103,3 +103,10 @@ pub(crate) fn handle_identifier<'a>(
         Err(())
     }
 }
+
+pub(crate) fn declare_param<'a>(an: &mut SemanticAnalyzer<'a>, name: &str) -> Result<(), ()> {
+    if !an.symbol_table.contains_in_current(name) {
+        an.symbol_table.insert_local(name);
+    }
+    Ok(())
+}

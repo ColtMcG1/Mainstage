@@ -1,4 +1,5 @@
 # TODO List for where I left off
 
 - Constant folding
-- References for object members (workspace members, project members, etc.)
+- Semantic anlyzis should warn if of duplic identifiers in arrays.
+- Semantic analysis should warn of empty blocks.

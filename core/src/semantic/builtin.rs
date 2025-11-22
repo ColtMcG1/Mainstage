@@ -43,7 +43,6 @@ lazy_static::lazy_static! {
         use InferredType::*;
         let mut m = std::collections::HashMap::new();
         m.insert("length", BuiltinMethod { name:"length", arity:0, variadic:false, returns: Int });
-        m.insert("run",    BuiltinMethod { name:"run",    arity:0, variadic:false, returns: Unit });
         m
     };
 }

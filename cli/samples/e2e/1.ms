@@ -1,19 +1,17 @@
-workspace demo_ws {}
+workspace demo_ws {
+    projects = [test_pj];
 
-[entrypoint]
-project test_pj {
-    out = demo_stage(); // Should get the value from the initalized stage below
-    i = (out + "!!!").length();
-    say(i);
-    say(out);
+    for project in projects
+    {
+        demo_stage("Hello");
+    }
 }
 
-stage demo_stage () // No arguments
+project test_pj {
+    test = "Hello world";
+}
+
+stage demo_stage (var) // No arguments
 {
-    arr = ["Hello", " ", "world"];
-    out = "";
-    for i in arr {
-        out = out + i;
-    }
-    return out;
+    say(var);
 }

@@ -81,6 +81,37 @@ impl<'a> SemanticAnalyzer<'a> {
 
     fn collect_task_return_types(&mut self) {
         tasks::infer_task_returns(self);
+        // NEW: infer stage returns (simple scan)
+        self.task_returns.extend(self.infer_stage_returns());
+    }
+
+    fn infer_stage_returns(&self) -> HashMap<String, InferredType> {
+        let mut map = HashMap::new();
+        let root = self.ast.root();
+        fn scan<'b>(node: &AstNode<'b>, current: &mut Option<String>, out: &mut HashMap<String, InferredType>) {
+            match &node.kind {
+                AstType::Stage { name, .. } => {
+                    *current = Some(name.as_ref().to_string());
+                }
+                AstType::Return => {
+                    if let Some(scope) = current.as_ref() {
+                        let ty = if node.children.get(0).is_some() {
+                            InferredType::Dynamic
+                        } else {
+                            InferredType::Unit
+                        };
+                        out.entry(scope.clone()).or_insert(ty);
+                    }
+                }
+                _ => {}
+            }
+            for c in &node.children {
+                let mut inner = current.clone();
+                scan(c, &mut inner, out);
+            }
+        }
+        scan(root, &mut None, &mut map);
+        map
     }
 
     // Frame management for init tracking
