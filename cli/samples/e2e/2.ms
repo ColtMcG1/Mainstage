@@ -3,7 +3,6 @@ workspace demo_ws {
 
     for project in projects
     {
-        say(project.out);
     }
 }
 

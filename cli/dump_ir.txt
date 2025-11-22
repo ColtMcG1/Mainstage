@@ -11,16 +11,16 @@ LOAD_LOCAL Temp(5) <- Local(0)
 LOAD_CONST Temp(6) <- Int(0)
 STORE_LOCAL Temp(6) -> Local(1)
 LENGTH Temp(7) <- Temp(5)
-LABEL for.start.node_12
+LABEL for.start.node_7
 LOAD_LOCAL Temp(8) <- Local(1)
 LT Temp(9) <- Temp(8) < Temp(7)
-BR_FALSE Temp(9) -> for.end.node_12
+BR_FALSE Temp(9) -> for.end.node_7
 LOAD_LOCAL Temp(10) <- Local(1)
 IGET Temp(11) <- Temp(5)[Temp(10)]
 STORE_LOCAL Temp(11) -> Local(2)
 INC Local(1)
-JUMP for.start.node_12
-LABEL for.end.node_12
+JUMP for.start.node_7
+LABEL for.end.node_7
 RETURN
 LABEL func.test_pj
 LABEL scope.test_pj

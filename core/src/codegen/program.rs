@@ -8,7 +8,7 @@ pub struct IRProgram {
     pub meta: IRMeta,
 }
 
-pub fn generate_program_from_ast(root: &ast::AstNode, entry: Option<&str>) -> IRProgram {
+pub fn generate_program_from_ast(root: &ast::AstNode, entry: &str) -> IRProgram {
     let ops = lower_ast_to_ir(root, entry).ops;
     let meta = analyze_meta(&ops);
     IRProgram { ops, meta }

@@ -19,7 +19,7 @@ pub struct LowerCtx {
     pub(crate) param_names: HashMap<String, Vec<String>>,
     pub(crate) param_slots: HashMap<String, Vec<Slot>>,
 
-    pub(crate) entry: Option<String>,
+    pub(crate) entry: String,
     prev_next_local: Vec<usize>,
 }
 
@@ -37,7 +37,7 @@ impl LowerCtx {
             called_scopes: HashSet::new(),
             param_names: HashMap::new(),
             param_slots: HashMap::new(),
-            entry: None,
+            entry: String::new(),
             prev_next_local: Vec::new(),
         }
     }

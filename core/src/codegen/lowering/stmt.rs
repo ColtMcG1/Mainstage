@@ -20,20 +20,20 @@ fn record_scopes_recursive(cx: &mut LowerCtx, node: &AstNode) {
     }
 }
 
-pub fn lower_ast_to_ir(root: &AstNode, entry: Option<&str>) -> LowerCtx {
+pub fn lower_ast_to_ir(root: &AstNode, entry: &str) -> LowerCtx {
     let mut cx = LowerCtx::new();
 
     // 1) Discover all scopes and entrypoint
     record_scopes_recursive(&mut cx, root);
 
-    if let Some(e) = entry {
-        cx.entry = Some(e.to_string());
+    if !entry.is_empty() {
+        cx.entry = entry.to_string();
     }
 
     // 2) If an explicit [entrypoint] exists, emit an entry Call and then Halt
-    if let Some(entry) = cx.entry.clone() {
+    if !cx.entry.is_empty() {
         let f = cx.temp();
-        cx.emit(Op::LoadConst { target: f, value: OpValue::Str(entry.clone()) });
+        cx.emit(Op::LoadConst { target: f, value: OpValue::Str(cx.entry.clone()) });
         let sink = cx.temp(); // discard return
         cx.emit(Op::Call { target: sink, func: f, args: vec![] });
         cx.emit(Op::Halt);

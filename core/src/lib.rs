@@ -318,8 +318,8 @@ impl Pipeline {
     /// ```
     fn ir_generation(&mut self, dump: bool) -> Result<(), ()> {
         if let Some(parser) = &self.parser {
-            let entry = self.semantic.as_ref().map(|s| s.entry_point.kind.name());
-            let ir = codegen::generate_program_from_ast(parser.root(), entry.unwrap_or(None));
+            let entry = self.semantic.as_ref().map(|s| s.entry_point.kind.name()).unwrap_or(None);
+            let ir = codegen::generate_program_from_ast(parser.root(), entry.unwrap_or_default());
             if dump {
                 std::fs::write(
                     "dump_ir.txt",
