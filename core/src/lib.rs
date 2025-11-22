@@ -15,7 +15,7 @@ use crate::semantic::*;
 pub mod reports;
 
 pub mod acyclic;
-pub mod codegen;
+pub mod ir;
 pub mod parser;
 pub mod runtime;
 pub mod scripts;
@@ -52,7 +52,7 @@ pub struct Pipeline {
     /// The acyclic analyzer used for acyclic analysis.
     acyclic: Option<DirectedAcyclicGraphAnalyzer>,
     /// The IR module generated during code generation.
-    ir: Option<codegen::IRProgram>,
+    ir: Option<ir::IRProgram>,
 }
 
 impl Pipeline {
@@ -319,7 +319,7 @@ impl Pipeline {
     fn ir_generation(&mut self, dump: bool) -> Result<(), ()> {
         if let Some(parser) = &self.parser {
             let entry = self.semantic.as_ref().map(|s| s.entry_point.kind.name()).unwrap_or(None);
-            let ir = codegen::generate_program_from_ast(parser.root(), entry.unwrap_or_default());
+            let ir = ir::generate_program_from_ast(parser.root(), entry.unwrap_or_default());
             if dump {
                 std::fs::write(
                     "dump_ir.txt",

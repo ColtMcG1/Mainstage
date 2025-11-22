@@ -1,7 +1,7 @@
 use super::context::LowerCtx;
 use super::expr::lower_expr;
-use crate::codegen::op::Op;
-use crate::codegen::value::OpValue;
+use crate::ir::op::Op;
+use crate::ir::value::OpValue;
 use crate::parser::ast::AstNode;
 use crate::parser::types::AstType;
 use crate::parser::AssignOperator;
@@ -137,7 +137,7 @@ fn mk_labels(kind: &str, id: impl std::fmt::Display) -> (String, String) {
     (format!("{kind}.start.{id}"), format!("{kind}.end.{id}"))
 }
 
-fn br_false(cx: &mut LowerCtx, cond: crate::codegen::slot::Slot, target: &str) {
+fn br_false(cx: &mut LowerCtx, cond: crate::ir::slot::Slot, target: &str) {
     cx.emit(Op::BrFalse { condition: cond, target: target.to_string() });
 }
 
@@ -145,9 +145,9 @@ fn br_false(cx: &mut LowerCtx, cond: crate::codegen::slot::Slot, target: &str) {
 fn emit_binop(
     cx: &mut LowerCtx,
     op: AssignOperator,
-    lhs: crate::codegen::slot::Slot,
-    rhs: crate::codegen::slot::Slot,
-) -> crate::codegen::slot::Slot {
+    lhs: crate::ir::slot::Slot,
+    rhs: crate::ir::slot::Slot,
+) -> crate::ir::slot::Slot {
     let out = cx.temp();
     match op {
         AssignOperator::Add => cx.emit(Op::Add { lhs, rhs, target: out }),

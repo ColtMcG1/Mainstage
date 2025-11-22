@@ -1,5 +1,5 @@
-use crate::codegen::slot::Slot;
-use crate::codegen::value::OpValue;
+use crate::ir::slot::Slot;
+use crate::ir::value::OpValue;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Op {
@@ -91,6 +91,69 @@ impl Op {
             | Op::Halt
             | Op::Return { .. }
         )
+    }
+    pub fn defines_slot(&self) -> Option<Slot> {
+        match self {
+            Op::LoadConst { target, .. }
+            | Op::LoadLocal { target, .. }
+            | Op::LoadGlobal { target, .. }
+            | Op::Add { target, .. }
+            | Op::Sub { target, .. }
+            | Op::Mul { target, .. }
+            | Op::Div { target, .. }
+            | Op::Eq  { target, .. }
+            | Op::Ne  { target, .. }
+            | Op::Lt  { target, .. }
+            | Op::Le  { target, .. }
+            | Op::Gt  { target, .. }
+            | Op::Ge  { target, .. }
+            | Op::Length { target, .. }
+            | Op::IGet { target, .. }
+            | Op::Call { target, .. }
+            | Op::NewArray { target, .. }
+            | Op::MGet { target, .. }
+            | Op::Not { target, .. } => Some(*target),
+            _ => None,
+        }
+    }
+    pub fn is_pure(&self) -> bool {
+        matches!(self,
+            Op::LoadConst { .. }
+            | Op::Add { .. } | Op::Sub { .. } | Op::Mul { .. } | Op::Div { .. }
+            | Op::Eq { .. } | Op::Ne { .. } | Op::Lt { .. } | Op::Le { .. } | Op::Gt { .. } | Op::Ge { .. }
+            | Op::Length { .. } | Op::IGet { .. } | Op::Not { .. }
+            | Op::LoadLocal { .. } | Op::LoadGlobal { .. }
+        )
+    }
+    pub fn each_used_slot<F: FnMut(Slot)>(&self, mut f: F) {
+        match self {
+            Op::Add { lhs, rhs, .. }
+            | Op::Sub { lhs, rhs, .. }
+            | Op::Mul { lhs, rhs, .. }
+            | Op::Div { lhs, rhs, .. }
+            | Op::Eq  { lhs, rhs, .. }
+            | Op::Ne  { lhs, rhs, .. }
+            | Op::Lt  { lhs, rhs, .. }
+            | Op::Le  { lhs, rhs, .. }
+            | Op::Gt  { lhs, rhs, .. }
+            | Op::Ge  { lhs, rhs, .. } => { f(*lhs); f(*rhs); }
+            Op::Length { array, .. } => f(*array),
+            Op::IGet { source, index, .. } => { f(*source); f(*index); }
+            Op::StoreLocal { source, .. } => f(*source),
+            Op::StoreGlobal { source, .. } => f(*source),
+            Op::Call { func, args, .. } => {
+                f(*func);
+                for a in args { f(*a); }
+            }
+            Op::Say { message: value } => f(*value),
+            Op::BrTrue { condition, .. } | Op::BrFalse { condition, .. } => f(*condition),
+            Op::Inc { target } | Op::Dec { target } => f(*target),
+            Op::Return { value } => { if let Some(v)=value { f(*v); } }
+            Op::MGet { target, source, .. } => { f(*target); f(*source); }
+            Op::MSet { target, value, .. } => { f(*target); f(*value); }
+            Op::ISet { target, index, value } => { f(*target); f(*index); f(*value); }
+            _ => {}
+        }
     }
 }
 

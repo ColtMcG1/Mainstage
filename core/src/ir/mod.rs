@@ -4,6 +4,7 @@ pub mod program;
 pub mod scope;
 pub mod slot;
 pub mod value;
+pub mod optimization;
 
 pub use lowering::*;
 pub use op::*;
@@ -11,3 +12,4 @@ pub use program::*;
 pub use scope::*;
 pub use slot::*;
 pub use value::*;
+pub use optimization::*;

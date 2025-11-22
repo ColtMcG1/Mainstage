@@ -1,4 +1,4 @@
-use crate::codegen::OpValue;
+use crate::ir::OpValue;
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum RTValue {

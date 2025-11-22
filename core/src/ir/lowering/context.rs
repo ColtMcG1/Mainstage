@@ -1,5 +1,5 @@
-use crate::codegen::op::Op;
-use crate::codegen::slot::Slot;
+use crate::ir::op::Op;
+use crate::ir::slot::Slot;
 use std::collections::{HashMap, HashSet};
 use crate::parser::{AstNode, AstType};
 

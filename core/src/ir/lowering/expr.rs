@@ -1,6 +1,6 @@
 use super::context::LowerCtx;
-use crate::codegen::value::{OpValue, literal_from_node};
-use crate::codegen::{Op, Slot};
+use crate::ir::value::{OpValue, literal_from_node};
+use crate::ir::{Op, Slot};
 use crate::parser::types::BinaryOperator;
 use crate::parser::{AstNode, AstType};
 use crate::semantic::builtin::{BUILTIN_FUNCS, BUILTIN_METHODS, BuiltinIntrinsic};

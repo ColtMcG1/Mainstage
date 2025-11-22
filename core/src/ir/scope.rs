@@ -1,4 +1,4 @@
-use crate::codegen::slot::Slot;
+use crate::ir::slot::Slot;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::{Rc, Weak};

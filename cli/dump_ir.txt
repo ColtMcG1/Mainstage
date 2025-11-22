@@ -1,9 +1,9 @@
-LOAD_CONST Temp(0) <- Str("demo_ws")
+LOAD_CONST Temp(0) <- Str("optimizer_demo")
 CALL Temp(1) <- Temp(0)([])
 HALT
-LABEL scope.demo_ws
+LABEL scope.optimizer_demo
 NEW_ARRAY Temp(2) size 1
-LOAD_CONST Temp(3) <- Str("test_pj")
+LOAD_CONST Temp(3) <- Str("opt_project")
 CALL Temp(4) <- Temp(3)([])
 STORE_LOCAL Temp(2) -> Local(0)
 LOAD_LOCAL Temp(5) <- Local(0)
@@ -17,29 +17,35 @@ BR_FALSE Temp(9) -> for.end.node_10
 LOAD_LOCAL Temp(10) <- Local(1)
 IGET Temp(11) <- Temp(5)[Temp(10)]
 STORE_LOCAL Temp(11) -> Local(2)
-LOAD_CONST Temp(12) <- Int(6)
+LOAD_CONST Temp(12) <- Str("Workspace start")
 SAY Temp(12)
 INC Local(1)
 JUMP for.start.node_10
 LABEL for.end.node_10
 RETURN
-LABEL scope.test_pj
-LOAD_CONST Temp(14) <- Str("What should I say?")
-ASK Temp(14) -> Temp(13)
-STORE_LOCAL Temp(13) -> Local(0)
-LOAD_LOCAL Temp(15) <- Local(0)
-LOAD_CONST Temp(16) <- Str("demo_stage")
-CALL Temp(17) <- Temp(16)([Temp(15)])
-STORE_LOCAL Temp(17) -> Local(1)
-LOAD_LOCAL Temp(18) <- Local(1)
-LENGTH Temp(19) <- Temp(18)
+LABEL scope.opt_project
+LOAD_CONST Temp(15) <- Int(3)
+SAY Temp(15)
+LOAD_CONST Temp(18) <- Str("foobar")
+STORE_LOCAL Temp(18) -> Local(0)
+LOAD_LOCAL Temp(19) <- Local(0)
 SAY Temp(19)
-RETURN
-LABEL scope.demo_stage
-LOAD_CONST Temp(20) <- Str("I should say - ")
-LOAD_LOCAL Temp(21) <- Local(0)
-ADD Temp(22) <- Temp(20) + Temp(21)
+LOAD_CONST Temp(20) <- Str("hello")
+STORE_LOCAL Temp(20) -> Local(1)
+LOAD_LOCAL Temp(21) <- Local(1)
+LENGTH Temp(22) <- Temp(21)
 SAY Temp(22)
-LOAD_LOCAL Temp(23) <- Local(0)
-RETURN Temp(23)
+LOAD_CONST Temp(23) <- Str("abc")
+LOAD_CONST Temp(24) <- Str("echo_stage")
+CALL Temp(25) <- Temp(24)([Temp(23)])
+STORE_LOCAL Temp(25) -> Local(2)
+LOAD_LOCAL Temp(26) <- Local(2)
+LENGTH Temp(27) <- Temp(26)
+SAY Temp(27)
+LOAD_CONST Temp(34) <- Int(43)
+STORE_LOCAL Temp(34) -> Local(3)
+RETURN
+LABEL scope.echo_stage
+LOAD_LOCAL Temp(35) <- Local(0)
+RETURN Temp(35)
 RETURN

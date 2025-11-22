@@ -10,7 +10,7 @@ use std::path::Path;
 
 /// Execute a single bytecode function (first function = entry).
 pub fn execute(
-    module: &crate::codegen::IRProgram,
+    module: &crate::ir::IRProgram,
     _script_path: &Path,
 ) -> Result<(), String> {
     //let base = script_path.parent().unwrap_or(Path::new(".")).to_path_buf();

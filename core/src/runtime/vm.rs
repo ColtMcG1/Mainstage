@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::{self, Write};
 
-use crate::codegen::{IRProgram, Op, Slot};
+use crate::ir::{IRProgram, Op, Slot};
 use crate::runtime::value::RTValue;
 
 pub type ExecutionResult = Result<(), String>;

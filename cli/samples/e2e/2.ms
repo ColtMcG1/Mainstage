@@ -8,7 +8,7 @@ workspace demo_ws {
 }
 
 project test_pj {
-    test = ask("What should I say?");
+    test = "What should I say?";
     out = demo_stage(test);
     say(out.length());
 }
