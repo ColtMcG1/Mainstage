@@ -36,6 +36,8 @@ impl<'a> SymbolTable<'a> {
             for symbols in scope.values() {
                 for symbol in symbols {
                     if symbol.reference_count() == 0 {
+                        let span = symbol.span.clone();
+                        let location = symbol.location.clone().map(|loc| loc.into_owned());
                         report!(
                             report::Level::Warning,
                             format!(
@@ -44,8 +46,8 @@ impl<'a> SymbolTable<'a> {
                                 scope_idx
                             ),
                             Some("SemanticAnalyzer".into()),
-                            None,
-                            None
+                            span,
+                            location
                         );
                     }
                 }

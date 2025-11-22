@@ -5,6 +5,7 @@
 use std::borrow::Cow;
 
 use super::types::SymbolType;
+use crate::locations::{Location, Span};
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug, Hash)]
 pub enum SymbolKind {
@@ -34,6 +35,8 @@ pub struct Symbol<'a> {
     parent: Option<Box<Symbol<'a>>>,
     reference_count: usize,
     is_reserved: bool,
+    pub(crate) span: Option<Span>,
+    pub(crate) location: Option<Location<'a>>,
 }
 
 impl<'a> Symbol<'a> {
@@ -48,6 +51,8 @@ impl<'a> Symbol<'a> {
             parent: None,
             reference_count: 0,
             is_reserved: true,
+            span: None,
+            location: None,
         }
     }
 
@@ -67,6 +72,8 @@ impl<'a> Symbol<'a> {
             parent: None,
             reference_count: 0,
             is_reserved: false,
+            span: None,
+            location: None,
         }
     }
 
@@ -91,6 +98,12 @@ impl<'a> Symbol<'a> {
 
     pub fn with_reserved(mut self) -> Self {
         self.is_reserved = true;
+        self
+    }
+
+    pub fn with_span_location(mut self, span: Option<Span>, location: Option<Location<'a>>) -> Self {
+        self.span = span;
+        self.location = location;
         self
     }
 
