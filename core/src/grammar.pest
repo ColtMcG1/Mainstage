@@ -1,0 +1,100 @@
+// --- Lexical / Skipping ---
+WHITESPACE = _{ " " | "\t" | "\r" | "\n" | COMMENT }
+COMMENT    = _{ "//" ~ (!"\n" ~ ANY)* ~ ("\n" | EOI) }
+
+// --- Top-Level ---
+script = { SOI ~ item* ~ EOI }
+
+// Items are either declarations or statements (where statements can be blocks)
+item = { declaration | statement }
+
+// --- Statements ---
+statement = { terminated_statement | loop_stmt | conditional_stmt | block }
+
+terminated_statement = {
+    return_stmt
+  | include_stmt
+  | import_stmt
+  | assignment_stmt
+  | expression_stmt
+}
+
+return_stmt     = { "return" ~ expression ~ ";" }
+include_stmt    = { "include" ~ string ~ ";" }
+import_stmt     = { "import" ~ string ~ "as" ~ identifier ~ ";" }
+expression_stmt = { expression ~ ";" }
+
+// --- Blocks ---
+block = { "{" ~ statement* ~ "}" }
+
+// --- Declarations (no trailing semicolon) ---
+declaration   = { workspace_decl | project_decl | stage_decl }
+
+workspace_decl = { attributes? ~ "workspace" ~ identifier ~ block }
+project_decl   = { attributes? ~ "project"   ~ identifier ~ block }
+stage_decl     = { attributes? ~ "stage"     ~ identifier ~ "(" ~ arguments? ~ ")" ~ block }
+
+// --- Conditionals (no trailing semicolon; body must be a block) ---
+conditional_stmt = { if_stmt | if_else_stmt | tenary_stmt }
+if_stmt        = { "if" ~ expression ~ block }
+if_else_stmt    = { "if" ~ expression ~ block ~ "else" ~ block }
+tenary_stmt    = { expression ~ "?" ~ expression ~ ":" ~ expression ~ ";" }
+
+// --- Loops (no trailing semicolon; body must be a block) ---
+loop_stmt    = { for_in_stmt | for_to_stmt | while_stmt }
+for_in_stmt   = { "for" ~ identifier ~ "in" ~ expression ~ block }
+for_to_stmt   = { "for" ~ assignment_expr ~ "to" ~ expression ~ block }
+while_stmt   = { "while" ~ expression ~ block }
+
+// Add operator set
+assign_op = { "=" | "+=" | "-=" | "*=" | "/=" | "%=" }
+
+// Replace existing rules that used bare "="
+assignment_stmt = { identifier ~ assign_op ~ expression ~ ";" }
+assignment_expr = { identifier ~ assign_op ~ expression }  // for forto header
+
+// --- Expressions ---
+// Make calls/members/index postfix ops so chaining works: obj.fn(a).x[i]++.
+expression                = { equality_expression }
+equality_expression       = { relational_expression ~ (eq_op  ~ relational_expression)* }
+relational_expression     = { additive_expression   ~ (rel_op ~ additive_expression)* }
+additive_expression       = { multiplicative_expression ~ (add_op ~ multiplicative_expression)* }
+multiplicative_expression = { unary_expression      ~ (mul_op ~ unary_expression)* }
+unary_expression          = { (unary_op)* ~ postfix_expression }
+
+postfix_expression = { primary_expression ~ (postfix_op)* }
+postfix_op = {
+      "(" ~ arguments? ~ ")"        // call
+    | "." ~ identifier              // member
+    | "[" ~ expression ~ "]"        // index
+    | "++"                          // postfix inc
+    | "--"                          // postfix dec
+}
+
+primary_expression = { value | identifier | "(" ~ expression ~ ")" }
+
+eq_op    = { "==" | "!=" }
+rel_op   = { "<=" | ">=" | "<" | ">" }
+add_op   = { "+" | "-" }
+mul_op   = { "*" | "/" }
+unary_op = { "++" | "--" | "+" | "-" }
+
+// --- Arguments / Attributes ---
+parameter  = { expression }
+arguments  = { parameter ~ ("," ~ parameter)* ~ ","? }   // trailing comma ok
+
+attribute  = { identifier }
+attributes = { "[" ~ attribute ~ ("," ~ attribute)* ~ "]" }
+
+// --- Values ---
+value        = { array | shell_string | string | boolean | number | null }
+array        = { "[" ~ (expression ~ ("," ~ expression)*)? ~ "]" }
+boolean      = { "true" | "false" }
+number       = { ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }
+string       = { "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
+shell_string = { shell_prefix ~ string }
+shell_prefix = { "sh" | "bash" | "zsh" | "pwsh" | "cmd" }
+null         = { "null" }
+
+// --- Identifiers ---
+identifier = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }

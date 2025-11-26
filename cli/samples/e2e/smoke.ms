@@ -1,0 +1,1 @@
+[entrypoint] project p { say((1 + 2) * (3 + 4)); }

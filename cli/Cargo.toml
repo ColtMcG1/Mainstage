@@ -1,0 +1,10 @@
+[package]
+name = "mainstage"
+version = "0.2.0"
+edition = "2024"
+
+[dependencies]
+mainstage_core = { path = "../core" }
+clap = { version = "4.5.49", features = ["derive"] }
+clap_derive = "4.5.49"
+console = "0.16.1"
