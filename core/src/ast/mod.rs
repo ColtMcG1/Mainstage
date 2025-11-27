@@ -7,7 +7,7 @@ pub mod expr;
 
 /// Re-exporting for easier access
 pub use err::*;
-pub use kind::AstNodeKind;
+pub use kind::{AstNodeKind, BinaryOperator, UnaryOperator};
 pub use node::AstNode;
 pub use rules::RulesParser;
 

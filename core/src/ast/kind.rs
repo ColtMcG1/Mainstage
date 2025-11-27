@@ -1,5 +1,31 @@
 use super::node::AstNode;
 
+/// Represents binary operators in the AST.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BinaryOperator {
+    Eq,  // ==
+    Ne,  // !=
+    Lt,  // <
+    Le,  // <=
+    Gt,  // >
+    Ge,  // >=
+    Add, // +
+    Sub, // -
+    Mul, // *
+    Div, // /
+    Mod, // %
+}
+
+/// Represents unary operators in the AST.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnaryOperator {
+    Inc,   // ++
+    Dec,   // --
+    Plus,  // +
+    Minus, // -
+    Not,   // !
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum AstNodeKind {
     Script { body: Vec<AstNode> },
@@ -22,8 +48,8 @@ pub enum AstNodeKind {
     ForTo { initializer: Box<AstNode>, limit: Box<AstNode>, body: Box<AstNode> },
     While { condition: Box<AstNode>, body: Box<AstNode> },
 
-    UnaryOp { op: String, expr: Box<AstNode> },
-    BinaryOp { left: Box<AstNode>, op: String, right: Box<AstNode> },
+    UnaryOp { op: UnaryOperator, expr: Box<AstNode> },
+    BinaryOp { left: Box<AstNode>, op: BinaryOperator, right: Box<AstNode> },
     Assignment { target: Box<AstNode>, value: Box<AstNode> },
 
     Command { name: String, arg: String },
@@ -37,4 +63,40 @@ pub enum AstNodeKind {
     Bool { value: bool },
     List { elements: Vec<AstNode> },
     Null,
+}
+
+use std::fmt;
+
+impl fmt::Display for AstNodeKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AstNodeKind::Script { .. } => write!(f, "Script"),
+            AstNodeKind::Import { .. } => write!(f, "Import"),
+            AstNodeKind::Include { .. } => write!(f, "Include"),
+            AstNodeKind::Statement => write!(f, "Statement"),
+            AstNodeKind::Arguments { .. } => write!(f, "Arguments"),
+            AstNodeKind::Workspace { .. } => write!(f, "Workspace"),
+            AstNodeKind::Project { .. } => write!(f, "Project"),
+            AstNodeKind::Stage { .. } => write!(f, "Stage"),
+            AstNodeKind::Block { .. } => write!(f, "Block"),
+            AstNodeKind::If { .. } => write!(f, "If"),
+            AstNodeKind::IfElse { .. } => write!(f, "IfElse"),
+            AstNodeKind::ForIn { .. } => write!(f, "ForIn"),
+            AstNodeKind::ForTo { .. } => write!(f, "ForTo"),
+            AstNodeKind::While { .. } => write!(f, "While"),
+            AstNodeKind::UnaryOp { .. } => write!(f, "UnaryOp"),
+            AstNodeKind::BinaryOp { .. } => write!(f, "BinaryOp"),
+            AstNodeKind::Assignment { .. } => write!(f, "Assignment"),
+            AstNodeKind::Command { .. } => write!(f, "Command"),
+            AstNodeKind::Call { .. } => write!(f, "Call"),
+            AstNodeKind::Return { .. } => write!(f, "Return"),
+            AstNodeKind::Identifier { .. } => write!(f, "Identifier"),
+            AstNodeKind::String { .. } => write!(f, "String"),
+            AstNodeKind::Integer { .. } => write!(f, "Integer"),
+            AstNodeKind::Float { .. } => write!(f, "Float"),
+            AstNodeKind::Bool { .. } => write!(f, "Bool"),
+            AstNodeKind::List { .. } => write!(f, "List"),
+            AstNodeKind::Null => write!(f, "Null"),
+        }
+    }
 }

@@ -1,5 +1,5 @@
 use crate::{
-    ast::{AstNode, AstNodeKind, MainstageErrorExt, Rule, rules},
+    ast::{AstNode, AstNodeKind, BinaryOperator, UnaryOperator,MainstageErrorExt, Rule, rules},
     script,
 };
 
@@ -37,7 +37,21 @@ fn parse_equality_expression_rule(
 
     // Handle zero-or-more (op, right) repetitions
     while let Some(op_pair) = inner_pairs.next() {
-        let op = op_pair.as_str().to_string();
+        let op = match op_pair.as_str() {
+            "==" => BinaryOperator::Eq,
+            "!=" => BinaryOperator::Ne,
+            _ => {
+                return Err(Box::<dyn MainstageErrorExt>::from(Box::new(
+                    crate::ast::err::SyntaxError::with(
+                        crate::Level::Error,
+                        "Invalid equality operator.".into(),
+                        "mainstage.expr.parse_equality_expression_rule".into(),
+                        location.clone(),
+                        span.clone(),
+                    ),
+                )))
+            }
+        };
         let right_pair = match inner_pairs.next() {
             Some(rp) => rp,
             None => {
@@ -79,7 +93,24 @@ fn parse_relational_expression_rule(
 
     // Handle zero-or-more (op, right) repetitions
     while let Some(op_pair) = inner_pairs.next() {
-        let op = op_pair.as_str().to_string();
+        let op = match op_pair.as_str() {
+            "<" => BinaryOperator::Lt,
+            "<=" => BinaryOperator::Le,
+            ">" => BinaryOperator::Gt,
+            ">=" => BinaryOperator::Ge,
+            _ => {
+                return Err(Box::<dyn MainstageErrorExt>::from(Box::new(
+                    crate::ast::err::SyntaxError::with(
+                        crate::Level::Error,
+                        "Invalid relational operator.".into(),
+                        "mainstage.expr.parse_relational_expression_rule".into(),
+                        location.clone(),
+                        span.clone(),
+                    ),
+                )))
+            }
+        };
+
         let right_pair = match inner_pairs.next() {
             Some(rp) => rp,
             None => {
@@ -121,7 +152,22 @@ fn parse_additive_expression_rule(
 
     // Handle zero-or-more (op, right) repetitions
     while let Some(op_pair) = inner_pairs.next() {
-        let op = op_pair.as_str().to_string();
+        let op = match op_pair.as_str() {
+            "+" => BinaryOperator::Add,
+            "-" => BinaryOperator::Sub,
+            _ => {
+                return Err(Box::<dyn MainstageErrorExt>::from(Box::new(
+                    crate::ast::err::SyntaxError::with(
+                        crate::Level::Error,
+                        "Invalid additive operator.".into(),
+                        "mainstage.expr.parse_additive_expression_rule".into(),
+                        location.clone(),
+                        span.clone(),
+                    ),
+                )))
+            }
+        };
+
         let right_pair = match inner_pairs.next() {
             Some(rp) => rp,
             None => {
@@ -165,7 +211,23 @@ fn parse_multiplicative_expression_rule(
     // Handle zero-or-more (op, right) repetitions
     while let Some(op_pair) = inner_pairs.next() {
         // op_pair should be an operator; next() must provide the right-hand operand
-        let op = op_pair.as_str().to_string();
+        let op = match op_pair.as_str() {
+            "*" => BinaryOperator::Mul,
+            "/" => BinaryOperator::Div,
+            "%" => BinaryOperator::Mod,
+            _ => {
+                return Err(Box::<dyn MainstageErrorExt>::from(Box::new(
+                    crate::ast::err::SyntaxError::with(
+                        crate::Level::Error,
+                        "Invalid multiplicative operator.".into(),
+                        "mainstage.expr.parse_multiplicative_expression_rule".into(),
+                        location.clone(),
+                        span.clone(),
+                    ),
+                )))
+            }
+        };
+
         let right_pair = match inner_pairs.next() {
             Some(rp) => rp,
             None => {
@@ -210,7 +272,24 @@ fn parse_unary_expression_rule(
 
             Ok(AstNode::new(
                 AstNodeKind::UnaryOp {
-                    op: op_pair.as_str().to_string(),
+                    op: match op_pair.as_str() {
+                        "++" => UnaryOperator::Inc,
+                        "--" => UnaryOperator::Dec,
+                        "-" => UnaryOperator::Minus,
+                        "+" => UnaryOperator::Plus,
+                        "!" => UnaryOperator::Not,
+                        _ => {
+                            return Err(Box::<dyn MainstageErrorExt>::from(Box::new(
+                                crate::ast::err::SyntaxError::with(
+                                    crate::Level::Error,
+                                    "Invalid unary operator.".into(),
+                                    "mainstage.expr.parse_unary_expression_rule".into(),
+                                    location.clone(),
+                                    span.clone(),
+                                ),
+                            )))
+                        }
+                    },
                     expr: Box::new(parse_unary_expression_rule(expr_pair, script)?),
                 },
                 location,

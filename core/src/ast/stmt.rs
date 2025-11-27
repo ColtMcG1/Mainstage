@@ -1,5 +1,5 @@
 use crate::{
-    ast::{AstNode, AstNodeKind, MainstageErrorExt, Rule, rules},
+    ast::{AstNode, AstNodeKind, BinaryOperator, MainstageErrorExt, Rule, rules},
     script,
 };
 
@@ -123,14 +123,13 @@ fn parse_assignment_statement_rule(
         // Compound assignments become `target = target <op> value`
         "+=" | "-=" | "*=" | "/=" | "%=" => {
             let op = match op_pair.as_str() {
-                "+=" => "+",
-                "-=" => "-",
-                "*=" => "*",
-                "/=" => "/",
-                "%=" => "%",
+                "+=" => BinaryOperator::Add,
+                "-=" => BinaryOperator::Sub,
+                "*=" => BinaryOperator::Mul,
+                "/=" => BinaryOperator::Div,
+                "%=" => BinaryOperator::Mod,
                 _ => unreachable!(),
-            }
-            .to_string();
+            };
 
             // left side of binary op uses a clone of the identifier node
             let left_clone = target_node.clone();
@@ -384,14 +383,8 @@ fn parse_conditional_statement_rule(
     let (mut inner_pairs, location, span) = rules::get_data_from_rule(&pair, script);
     let next_pair = rules::fetch_next_pair(&mut inner_pairs, &location, &span)?;
     match next_pair.as_rule() {
-        Rule::if_stmt => {
-            // Placeholder implementation
-            Ok(AstNode::new(AstNodeKind::Statement, location, span))
-        }
-        Rule::if_else_stmt => {
-            // Placeholder implementation
-            Ok(AstNode::new(AstNodeKind::Statement, location, span))
-        }
+        Rule::if_stmt => parse_if_statement_rule(next_pair, script),
+        Rule::if_else_stmt => parse_if_else_statement_rule(next_pair, script),
         _ => Err(Box::<dyn MainstageErrorExt>::from(Box::new(
             crate::ast::err::SyntaxError::with(
                 crate::Level::Error,
@@ -402,4 +395,49 @@ fn parse_conditional_statement_rule(
             ),
         ))),
     }
+}
+
+fn parse_if_statement_rule(
+    pair: pest::iterators::Pair<Rule>,
+    script: &script::Script,
+) -> Result<AstNode, Box<dyn MainstageErrorExt>> {
+    let (mut inner_pairs, location, span) = rules::get_data_from_rule(&pair, script);
+    let condition_pair = rules::fetch_next_pair(&mut inner_pairs, &location, &span)?;
+    let body_pair = rules::fetch_next_pair(&mut inner_pairs, &location, &span)?;
+
+    let condition_node = super::expr::parse_expression_rule(condition_pair, script)?;
+    let body_node = parse_block_rule(body_pair, script)?;
+
+    Ok(AstNode::new(
+        AstNodeKind::If {
+            condition: Box::new(condition_node),
+            body: Box::new(body_node),
+        },
+        location,
+        span,
+    ))
+}
+
+fn parse_if_else_statement_rule(
+    pair: pest::iterators::Pair<Rule>,
+    script: &script::Script,
+) -> Result<AstNode, Box<dyn MainstageErrorExt>> {
+    let (mut inner_pairs, location, span) = rules::get_data_from_rule(&pair, script);
+    let condition_pair = rules::fetch_next_pair(&mut inner_pairs, &location, &span)?;
+    let if_body_pair = rules::fetch_next_pair(&mut inner_pairs, &location, &span)?;
+    let else_body_pair = rules::fetch_next_pair(&mut inner_pairs, &location, &span)?;
+
+    let condition_node = super::expr::parse_expression_rule(condition_pair, script)?;
+    let if_body_node = parse_block_rule(if_body_pair, script)?;
+    let else_body_node = parse_block_rule(else_body_pair, script)?;
+
+    Ok(AstNode::new(
+        AstNodeKind::IfElse {
+            condition: Box::new(condition_node),
+            if_body: Box::new(if_body_node),
+            else_body: Box::new(else_body_node),
+        },
+        location,
+        span,
+    ))
 }

@@ -5,7 +5,7 @@ use super::kind::AstNodeKind;
 #[derive(Clone, PartialEq)]
 pub struct AstNode {
     id: usize,
-    pub node_type: AstNodeKind,
+    pub kind: AstNodeKind,
     pub location: Option<location::Location>,
     pub span: Option<location::Span>,
 }
@@ -25,7 +25,7 @@ impl AstNode {
     ) -> Self {
         AstNode {
             id: Self::create_id(),
-            node_type,
+            kind: node_type,
             location,
             span,
         }
@@ -44,7 +44,7 @@ impl AstNode {
         self.id
     }
     pub fn get_kind(&self) -> &AstNodeKind {
-        &self.node_type
+        &self.kind
     }
     pub fn get_location(&self) -> Option<&crate::location::Location> {
         self.location.as_ref()
@@ -68,7 +68,7 @@ impl fmt::Display for AstNode {
         fmt_indent(f, &format!("id: {},\n", self.id), 2)?;
         // Kind with pretty debug (allows readable nested enums/vecs)
         fmt_indent(f, "kind: ", 2)?;
-        writeln!(f, "{:#?},", &self.node_type)?;
+        writeln!(f, "{:#?},", &self.kind)?;
 
         // Location
         if let Some(loc) = &self.location {

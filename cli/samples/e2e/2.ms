@@ -18,6 +18,10 @@ stage load_stage(var)
 
 stage process_project_stage(prj)
 {
+    if prj.sources == null {
+        say("No sources found.");
+        return;
+    }
     in = load_stage(prj.sources[0]);
     say(in);
 }

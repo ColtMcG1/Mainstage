@@ -1,5 +1,5 @@
 use clap::{Arg, ArgMatches, Command};
-use mainstage_core::ast::generate_ast_from_source;
+use mainstage_core::{analyze_semantic_rules, ast::generate_ast_from_source};
 use std::fs;
 
 fn main() {
@@ -75,7 +75,7 @@ fn dispatch_commands(matches: &ArgMatches) {
                 .expect("Failed to load script file");
 
             // Properly handle the Result so we don't silently drop errors.
-            let ast = match generate_ast_from_source(&script) {
+            let mut ast = match generate_ast_from_source(&script) {
                 Ok(ast) => ast,
                 Err(e) => {
                     // Print a helpful message and stop processing this command.
@@ -83,6 +83,10 @@ fn dispatch_commands(matches: &ArgMatches) {
                     return;
                 }
             };
+
+            analyze_semantic_rules(&mut ast).map_err(|e| {
+                println!("Semantic analysis error: {}", e);
+            }).ok();
 
             if let Some(output_file) = out {
                 fs::write(output_file, format!("{:#?}", ast)).expect("Failed to write output file");

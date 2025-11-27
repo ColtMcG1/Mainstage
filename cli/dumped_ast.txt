@@ -1,5 +1,5 @@
 AstNode {
-  id: 31,
+  id: 38,
   kind: Script {
     body: [
         AstNode {
@@ -199,7 +199,7 @@ AstNode {
         }
         ,
         AstNode {
-          id: 29,
+          id: 36,
           kind: Stage {
             name: "process_project_stage",
             args: Some(
@@ -224,42 +224,103 @@ AstNode {
                 ,
             ),
             body: AstNode {
-              id: 28,
+              id: 35,
               kind: Block {
                 statements: [
                     AstNode {
-                      id: 26,
-                      kind: Assignment {
-                        target: AstNode {
-                          id: 24,
-                          kind: Identifier {
-                            name: "in",
+                      id: 30,
+                      kind: If {
+                        condition: AstNode {
+                          id: 26,
+                          kind: BinaryOp {
+                            left: AstNode {
+                              id: 24,
+                              kind: Identifier {
+                                name: "prj",
+                            },
+                              location: 2.ms:21:8
+                              span: start=2.ms:21:8 end=2.ms:21:11
+                            }
+                            ,
+                            op: Eq,
+                            right: AstNode {
+                              id: 25,
+                              kind: Null,
+                              location: 2.ms:21:23
+                              span: start=2.ms:21:23 end=2.ms:21:27
+                            }
+                            ,
                         },
-                          location: 2.ms:21:5
-                          span: start=2.ms:21:5 end=2.ms:21:7
+                          location: 2.ms:21:20
+                          span: start=2.ms:21:20 end=2.ms:21:22
                         }
                         ,
-                        value: AstNode {
-                          id: 25,
-                          kind: Identifier {
-                            name: "load_stage",
+                        body: AstNode {
+                          id: 29,
+                          kind: Block {
+                            statements: [
+                                AstNode {
+                                  id: 27,
+                                  kind: Identifier {
+                                    name: "say",
+                                },
+                                  location: 2.ms:22:9
+                                  span: start=2.ms:22:9 end=2.ms:22:12
+                                }
+                                ,
+                                AstNode {
+                                  id: 28,
+                                  kind: Identifier {
+                                    name: "return",
+                                },
+                                  location: 2.ms:23:9
+                                  span: start=2.ms:23:9 end=2.ms:23:15
+                                }
+                                ,
+                            ],
                         },
-                          location: 2.ms:21:10
-                          span: start=2.ms:21:10 end=2.ms:21:20
+                          location: None
+                          span: None
                         }
                         ,
                     },
                       location: 2.ms:21:5
-                      span: start=2.ms:21:5 end=2.ms:21:37
+                      span: start=2.ms:21:5 end=2.ms:24:6
                     }
                     ,
                     AstNode {
-                      id: 27,
+                      id: 33,
+                      kind: Assignment {
+                        target: AstNode {
+                          id: 31,
+                          kind: Identifier {
+                            name: "in",
+                        },
+                          location: 2.ms:25:5
+                          span: start=2.ms:25:5 end=2.ms:25:7
+                        }
+                        ,
+                        value: AstNode {
+                          id: 32,
+                          kind: Identifier {
+                            name: "load_stage",
+                        },
+                          location: 2.ms:25:10
+                          span: start=2.ms:25:10 end=2.ms:25:20
+                        }
+                        ,
+                    },
+                      location: 2.ms:25:5
+                      span: start=2.ms:25:5 end=2.ms:25:37
+                    }
+                    ,
+                    AstNode {
+                      id: 34,
                       kind: Identifier {
                         name: "say",
                     },
-                      location: 2.ms:22:5
-                      span: start=2.ms:22:5 end=2.ms:22:8
+                      location: 2.ms:26:5
+                      span: start=2.ms:26:5 end=2.ms:26:8
                     }
                     ,
                 ],
@@ -270,11 +331,11 @@ AstNode {
             ,
         },
           location: 2.ms:19:1
-          span: start=2.ms:19:1 end=2.ms:23:2
+          span: start=2.ms:19:1 end=2.ms:27:2
         }
         ,
         AstNode {
-          id: 30,
+          id: 37,
           kind: Null,
           location: None
           span: None
@@ -283,5 +344,5 @@ AstNode {
     ],
 },
   location: 2.ms:1:1
-  span: start=2.ms:1:1 end=2.ms:23:2
+  span: start=2.ms:1:1 end=2.ms:27:2
 }

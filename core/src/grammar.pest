@@ -76,8 +76,8 @@ primary_expression = { value | identifier | "(" ~ expression ~ ")" }
 eq_op    = { "==" | "!=" }
 rel_op   = { "<=" | ">=" | "<" | ">" }
 add_op   = { "+" | "-" }
-mul_op   = { "*" | "/" }
-unary_op = { "++" | "--" | "+" | "-" }
+mul_op   = { "*" | "/" | "%" }
+unary_op = { "++" | "--" | "+" | "-" | "!" }
 
 // --- Arguments / Attributes ---
 parameter  = { expression }
