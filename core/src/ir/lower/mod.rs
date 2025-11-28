@@ -28,8 +28,16 @@ pub struct IrModule {
     llocal_map: HashMap<usize, usize>,
     /// Preserve the AST for top-level stages so we can specialize/inline them
     stage_asts: HashMap<String, AstNode>,
+    /// Map stage name -> parameter names (in order)
+    stage_params: HashMap<String, Vec<String>>,
+    /// Map stage name -> parameter local indices (in the stage's locals scope)
+    stage_param_local_indices: HashMap<String, Vec<usize>>,
     /// Map label op index -> label name (reverse of `stage_labels`)
     label_index_to_name: HashMap<usize, String>,
+    /// Map original op index (SLocal) -> variable name stored
+    op_slocal_name: HashMap<usize, String>,
+    /// Map CallLabel op index -> arg name hints (Some(name) if arg was an Identifier)
+    callsite_arg_names: HashMap<usize, Vec<Option<String>>>,
     /// When true, `emit_label` will not register stage labels into `stage_labels`
     inlining: bool,
 }
@@ -49,13 +57,33 @@ impl IrModule {
             local_constants: HashMap::new(),
             llocal_map: HashMap::new(),
             stage_asts: HashMap::new(),
+            stage_params: HashMap::new(),
+            stage_param_local_indices: HashMap::new(),
             label_index_to_name: HashMap::new(),
+            op_slocal_name: HashMap::new(),
+            callsite_arg_names: HashMap::new(),
             inlining: false,
         }
     }
 
     pub fn get_stage_labels(&self) -> HashMap<String, usize> {
         self.stage_labels.clone()
+    }
+
+    pub fn get_callsite_arg_names(&self) -> HashMap<usize, Vec<Option<String>>> {
+        self.callsite_arg_names.clone()
+    }
+
+    pub fn get_stage_param_names(&self, name: &str) -> Option<Vec<String>> {
+        self.stage_params.get(name).cloned()
+    }
+
+    pub fn get_stage_param_local_indices(&self, name: &str) -> Option<Vec<usize>> {
+        self.stage_param_local_indices.get(name).cloned()
+    }
+
+    pub fn get_op_slocal_name(&self) -> HashMap<usize, String> {
+        self.op_slocal_name.clone()
     }
 
     fn alloc_reg(&mut self) -> usize {
@@ -69,6 +97,28 @@ impl IrModule {
             self.locals.push(HashMap::new());
         }
         self.locals.last_mut().unwrap()
+    }
+
+    fn local_name_by_index(&self, idx: usize) -> Option<String> {
+        for scope in self.locals.iter().rev() {
+            for (k, &v) in scope.iter() {
+                if v == idx {
+                    return Some(k.clone());
+                }
+            }
+        }
+        None
+    }
+
+    fn emit_slocal(&mut self, src: usize, local_index: usize) {
+        let pos = self.ops.len();
+        self.ops.push(IROp::SLocal { src, local_index });
+        if let Some(name) = self.local_name_by_index(local_index) {
+            self.op_slocal_name.insert(pos, name);
+        }
+        if let Some(v) = self.reg_constants.get(&src) {
+            self.local_constants.insert(local_index, v.clone());
+        }
     }
 
     pub fn lower_from_ast(&mut self, ast: &AstNode, entrypoint: &str) {
@@ -316,12 +366,19 @@ impl IrModule {
                 if let Some(params_node) = args {
                     if let AstNodeKind::Arguments { args: params } = &params_node.kind {
                         let locals = self.current_locals_mut();
+                        let mut param_names: Vec<String> = Vec::new();
+                        let mut param_indices: Vec<usize> = Vec::new();
                         for p in params.iter() {
                             if let AstNodeKind::Identifier { name: pname } = &p.kind {
                                 let idx = locals.len();
                                 locals.insert(pname.clone(), idx);
+                                param_names.push(pname.clone());
+                                param_indices.push(idx);
                             }
                         }
+                        // record param metadata for optimizer
+                        self.stage_params.insert(name.clone(), param_names);
+                        self.stage_param_local_indices.insert(name.clone(), param_indices);
                     }
                 }
 
@@ -335,6 +392,73 @@ impl IrModule {
                 self.emit_brfalse_to(cond_reg, end_label.clone());
                 self.walk_node(body);
                 self.emit_label(end_label);
+                None
+            }
+            AstNodeKind::Member { object, property } => {
+                // Try to resolve compile-time project member access like `prj.sources`
+                if let AstNodeKind::Identifier { name: obj_name } = &object.kind {
+                    // `property` is a string (the member name)
+                    let prop_name = property.clone();
+
+                    // First, if `obj_name` refers to a local with a compile-time constant
+                    // symbol (e.g. a parameter `prj` seeded to `Symbol(test_pj)` during
+                    // inlining), resolve via local_constants -> projects lookup.
+                    let mut resolved = false;
+                    for scope in self.locals.iter().rev() {
+                        if let Some(&local_idx) = scope.get(obj_name) {
+                            if let Some(v) = self.local_constants.get(&local_idx) {
+                                if let Value::Symbol(proj_name) = v {
+                                    if let Some(members) = self.projects.get(proj_name).cloned() {
+                                        if let Some(mv) = members.get(&prop_name) {
+                                            let dest = self.alloc_reg();
+                                            self.ops.push(IROp::LConst { dest, value: mv.clone() });
+                                            self.reg_constants.insert(dest, mv.clone());
+                                            return Some(dest);
+                                        }
+                                    }
+                                    resolved = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    if !resolved {
+                        // fallback: object is a top-level identifier referencing a project name
+                        if let Some(members) = self.projects.get(obj_name).cloned() {
+                            if let Some(v) = members.get(&prop_name) {
+                                let dest = self.alloc_reg();
+                                self.ops.push(IROp::LConst { dest, value: v.clone() });
+                                self.reg_constants.insert(dest, v.clone());
+                                return Some(dest);
+                            }
+                        }
+                    }
+                }
+                // Fallback: not implemented yet — return None so callers treat as runtime value
+                None
+            }
+            AstNodeKind::Index { object, index } => {
+                // Try to resolve compile-time index into constant arrays, e.g. `prj.sources[0]`
+                // First, try to evaluate the object to a constant register
+                if let Some(obj_reg) = self.walk_node(object) {
+                    // if the object register is a known constant array, and index is integer literal,
+                    // fold to the element value
+                    if let Some(val) = self.reg_constants.get(&obj_reg).cloned() {
+                        if let Value::Array(arr) = val {
+                            if let AstNodeKind::Integer { value } = &index.kind {
+                                let idx = *value as usize;
+                                if idx < arr.len() {
+                                    let dest = self.alloc_reg();
+                                    let v = arr[idx].clone();
+                                    self.ops.push(IROp::LConst { dest, value: v.clone() });
+                                    self.reg_constants.insert(dest, v);
+                                    return Some(dest);
+                                }
+                            }
+                        }
+                    }
+                }
                 None
             }
             AstNodeKind::IfElse { condition, if_body, else_body } => {
@@ -393,10 +517,7 @@ impl IrModule {
                     self.ops.push(IROp::LConst { dest: one, value: Value::Int(1) });
                     let newv = self.alloc_reg();
                     self.ops.push(IROp::Add { dest: newv, src1: lv, src2: one });
-                    self.ops.push(IROp::SLocal { src: newv, local_index: idx });
-                    if let Some(v) = self.reg_constants.get(&newv) {
-                        self.local_constants.insert(idx, v.clone());
-                    }
+                    self.emit_slocal(newv, idx);
                     self.emit_jump_to(start_lbl.clone());
                 }
 
@@ -432,10 +553,7 @@ impl IrModule {
                             // fallback evaluate
                             self.walk_node(elem).unwrap_or_else(|| self.alloc_reg())
                         };
-                        self.ops.push(IROp::SLocal { src: val_reg, local_index: idx_local });
-                        if let Some(v) = self.reg_constants.get(&val_reg) {
-                            self.local_constants.insert(idx_local, v.clone());
-                        }
+                        self.emit_slocal(val_reg, idx_local);
                         self.walk_node(body);
                     }
                 } else if let AstNodeKind::Identifier { name: iter_name } = &iterable.kind {
@@ -452,10 +570,7 @@ impl IrModule {
                             let v = Value::Symbol(elem_name.clone());
                             self.ops.push(IROp::LConst { dest: r, value: v.clone() });
                             self.reg_constants.insert(r, v);
-                            self.ops.push(IROp::SLocal { src: r, local_index: idx_local });
-                            if let Some(v) = self.reg_constants.get(&r) {
-                                self.local_constants.insert(idx_local, v.clone());
-                            }
+                            self.emit_slocal(r, idx_local);
                             self.walk_node(body);
                         }
                     } else {
@@ -484,10 +599,7 @@ impl IrModule {
                     // idx = 0
                     let zero = self.alloc_reg();
                     self.ops.push(IROp::LConst { dest: zero, value: Value::Int(0) });
-                    self.ops.push(IROp::SLocal { src: zero, local_index: idx_local });
-                    if let Some(v) = self.reg_constants.get(&zero) {
-                        self.local_constants.insert(idx_local, v.clone());
-                    }
+                    self.emit_slocal(zero, idx_local);
 
                     let start_lbl = self.new_label();
                     let end_lbl = self.new_label();
@@ -507,10 +619,7 @@ impl IrModule {
                     let val_dest = self.alloc_reg();
                     self.ops.push(IROp::Call { dest: val_dest, func: index_func, args: vec![iter_reg, idx_r] });
                     // store into iterator local
-                    self.ops.push(IROp::SLocal { src: val_dest, local_index: iter_local_idx });
-                    if let Some(v) = self.reg_constants.get(&val_dest) {
-                        self.local_constants.insert(iter_local_idx, v.clone());
-                    }
+                    self.emit_slocal(val_dest, iter_local_idx);
 
                     // body
                     self.walk_node(body);
@@ -520,10 +629,7 @@ impl IrModule {
                     self.ops.push(IROp::LConst { dest: one, value: Value::Int(1) });
                     let newv = self.alloc_reg();
                     self.ops.push(IROp::Add { dest: newv, src1: idx_r, src2: one });
-                    self.ops.push(IROp::SLocal { src: newv, local_index: idx_local });
-                    if let Some(v) = self.reg_constants.get(&newv) {
-                        self.local_constants.insert(idx_local, v.clone());
-                    }
+                    self.emit_slocal(newv, idx_local);
                     self.emit_jump_to(start_lbl.clone());
                     self.emit_label(end_lbl);
                 }
@@ -549,7 +655,7 @@ impl IrModule {
                         locals.insert(name.clone(), new_idx);
                         new_idx
                     };
-                    self.ops.push(IROp::SLocal { src: val_reg, local_index: idx });
+                    self.emit_slocal(val_reg, idx);
                     if let Some(v) = self.reg_constants.get(&val_reg) {
                         self.local_constants.insert(idx, v.clone());
                     }
@@ -661,12 +767,38 @@ impl IrModule {
                 // If the callee is a stage identifier and we have its label, try a direct CallLabel
                 if let AstNodeKind::Identifier { name } = &callee.kind {
                     if let Some(&label_idx) = self.stage_labels.get(name) {
-                        // lower args
+                        // prepare arg name hints (so optimizer can match identifier args to SLocal stores)
+                        let mut arg_name_hints: Vec<Option<String>> = args.iter().map(|a| {
+                            if let AstNodeKind::Identifier { name } = &a.kind { Some(name.clone()) } else { None }
+                        }).collect();
+
+                        // lower args into registers. Guarantee that when the AST
+                        // argument is a bare Identifier we always emit an explicit
+                        // register (either an `LLocal` or an `LConst(Symbol)`)
+                        // so downstream optimizer can match by name.
                         let mut arg_regs = Vec::new();
                         for a in args.iter() {
-                            if let Some(ar) = self.walk_node(a) {
-                                arg_regs.push(ar);
-                            }
+                            // If lowering yields a register, use it. Otherwise,
+                            // for identifier args synthesize a small literal
+                            // register so the callsite has an explicit operand.
+                            let ar = match self.walk_node(a) {
+                                Some(r) => r,
+                                None => {
+                                    // If the AST arg is an identifier, represent it
+                                    // as a Symbol constant so the optimizer can see
+                                    // and match the name. Otherwise allocate a
+                                    // fresh register to preserve ordering.
+                                    if let AstNodeKind::Identifier { name } = &a.kind {
+                                        let rr = self.alloc_reg();
+                                        self.ops.push(IROp::LConst { dest: rr, value: Value::Symbol(name.clone()) });
+                                        self.reg_constants.insert(rr, Value::Symbol(name.clone()));
+                                        rr
+                                    } else {
+                                        self.alloc_reg()
+                                    }
+                                }
+                            };
+                            arg_regs.push(ar);
                         }
 
                         // Collect candidate constant substitutions (without mutating) to avoid borrow issues
@@ -712,6 +844,104 @@ impl IrModule {
                                     let reg = arg_regs[i];
                                     if let Some(v) = self.reg_constants.get(&reg) {
                                         param_bindings.insert(pname.clone(), v.clone());
+                                    }
+                                }
+                            }
+
+                            // Conservative specialization: if a parameter is bound to a project
+                            // symbol and that project has a static `sources` array whose
+                            // first element is a string, substitute the argument register
+                            // with an LConst containing that string. This makes calls like
+                            // `load_stage(prj.sources[0])` receive the literal path.
+                            if !param_names.is_empty() {
+                                // We'll operate on a copy of arg_regs to avoid borrow issues
+                                let mut new_arg_regs = arg_regs.clone();
+                                for (i, pname) in param_names.iter().enumerate() {
+                                    if i >= new_arg_regs.len() { break; }
+                                    // skip if already a constant binding
+                                    if param_bindings.contains_key(pname) { continue; }
+
+                                    let areg = new_arg_regs[i];
+                                    // try to find a symbol value for this arg (either reg constant
+                                    // or originating local constant via llocal_map)
+                                    let mut sym_opt: Option<String> = None;
+                                    if let Some(v) = self.reg_constants.get(&areg) {
+                                        if let Value::Symbol(s) = v {
+                                            sym_opt = Some(s.clone());
+                                        }
+                                    }
+                                    if sym_opt.is_none() {
+                                        if let Some(&local_idx) = self.llocal_map.get(&areg) {
+                                            if let Some(v) = self.local_constants.get(&local_idx) {
+                                                if let Value::Symbol(s) = v {
+                                                    sym_opt = Some(s.clone());
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    if let Some(proj_name) = sym_opt {
+                                        // clone members to avoid holding an immutable borrow of self
+                                        if let Some(members) = self.projects.get(&proj_name).cloned() {
+                                            if let Some(Value::Array(arr)) = members.get("sources") {
+                                                if let Some(first) = arr.get(0) {
+                                                    if let Value::Str(pat) = first {
+                                                        // insert an LConst for the string and substitute arg
+                                                        let const_r = self.alloc_reg();
+                                                        let val = Value::Str(pat.clone());
+                                                        self.ops.push(IROp::LConst { dest: const_r, value: val.clone() });
+                                                        self.reg_constants.insert(const_r, val);
+                                                        new_arg_regs[i] = const_r;
+                                                        // also record a param binding so inlining can see it
+                                                        param_bindings.insert(pname.clone(), Value::Str(pat.clone()));
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                // replace arg_regs with substituted version
+                                arg_regs = new_arg_regs;
+
+                                // If we know the callee's parameter names and some parameters were
+                                // not provided as explicit args, try to synthesize argument registers
+                                // by loading caller locals with matching names. This makes callsites
+                                // that used implicit local-based parameter passing become explicit
+                                // CallLabel args so optimizer can see constant values.
+                                if let Some(stage_ast) = self.stage_asts.get(name).cloned() {
+                                    let mut param_names: Vec<String> = Vec::new();
+                                    if let AstNodeKind::Stage { args: maybe_args, .. } = &stage_ast.kind {
+                                        if let Some(params_node) = maybe_args {
+                                            if let AstNodeKind::Arguments { args: params } = &params_node.kind {
+                                                for p in params.iter() {
+                                                    if let AstNodeKind::Identifier { name: pname } = &p.kind {
+                                                        param_names.push(pname.clone());
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    if !param_names.is_empty() && arg_regs.len() < param_names.len() {
+                                        for pn in param_names.iter().skip(arg_regs.len()) {
+                                            // search caller locals for this name
+                                            let mut found_idx: Option<usize> = None;
+                                            for scope in self.locals.iter().rev() {
+                                                if let Some(idx) = scope.get(pn) {
+                                                    found_idx = Some(*idx);
+                                                    break;
+                                                }
+                                            }
+                                            if let Some(li) = found_idx {
+                                                let r = self.alloc_reg();
+                                                self.ops.push(IROp::LLocal { dest: r, local_index: li });
+                                                self.llocal_map.insert(r, li);
+                                                arg_regs.push(r);
+                                                arg_name_hints.push(Some(pn.clone()));
+                                            } else {
+                                                // no matching caller local; leave missing
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -786,7 +1016,10 @@ impl IrModule {
 
                         // Not specialized/inlined: emit a normal CallLabel
                         let dest = self.alloc_reg();
+                        let pos = self.ops.len();
                         self.ops.push(IROp::CallLabel { dest, label_index: label_idx, args: arg_regs });
+                        // record arg name hints for optimizer
+                        self.callsite_arg_names.insert(pos, arg_name_hints);
                         return Some(dest);
                     }
                 }

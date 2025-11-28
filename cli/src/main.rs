@@ -181,10 +181,12 @@ fn dispatch_commands(matches: &ArgMatches) {
 
             let ir_module = mainstage_core::ir::lower_ast_to_ir(&ast, &entry, optimize);
 
-            let _bytecode = mainstage_core::ir::emit_bytecode(&ir_module);
-
-            // Run the bytecode in the VM (not implemented yet)
-            println!("Running bytecode (not implemented yet)...");
+            let bytecode = mainstage_core::ir::emit_bytecode(&ir_module);
+            // Run the bytecode in the VM
+            match mainstage_core::run_bytecode(&bytecode) {
+                Ok(()) => {}
+                Err(e) => println!("Runtime error: {}", e),
+            }
         }
         Some(("disasm", sub_m)) => {
             let file = sub_m.get_one::<String>("file").expect("required argument");

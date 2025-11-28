@@ -12,30 +12,30 @@ LConst r7 <- Str(""No sources found."")
 Call r8 <- r6(r7)
 LConst r9 <- Symbol(return)
 Label L_internal_0
-CallLabel r10 <- L0()
-SLocal local[1] <- r10
-LConst r11 <- Symbol(say)
-LLocal r12 <- local[1]
-Call r13 <- r11(r12)
+CallLabel r11 <- L0(r10)
+SLocal local[1] <- r11
+LConst r12 <- Symbol(say)
+LLocal r13 <- local[1]
+Call r14 <- r12(r13)
 Label demo_ws
-LConst r14 <- Array([Symbol("test_pj")])
-SLocal local[0] <- r14
-LConst r15 <- Symbol(test_pj)
-SLocal local[1] <- r15
-LLocal r16 <- local[1]
+LConst r15 <- Array([Symbol("test_pj")])
+SLocal local[0] <- r15
+LConst r16 <- Symbol(test_pj)
+SLocal local[1] <- r16
 LConst r17 <- Symbol(test_pj)
-Eq r21 <- r19 == r20
-BrFalse r21 -> 0
-LConst r22 <- Symbol(say)
-LConst r23 <- Str(""No sources found."")
-Call r24 <- r22(r23)
-LConst r25 <- Symbol(return)
+LConst r18 <- Symbol(test_pj)
+Eq r22 <- r20 == r21
+BrFalse r22 -> 0
+LConst r23 <- Symbol(say)
+LConst r24 <- Str(""No sources found."")
+Call r25 <- r23(r24)
+LConst r26 <- Symbol(return)
 Label L_internal_1
-CallLabel r26 <- L0()
-SLocal local[2] <- r26
-LConst r27 <- Symbol(say)
-LLocal r28 <- local[2]
-Call r29 <- r27(r28)
-LLocal r18 <- local[1]
+CallLabel r28 <- L0(r27)
+SLocal local[2] <- r28
+LConst r29 <- Symbol(say)
+LLocal r30 <- local[2]
+Call r31 <- r29(r30)
+LConst r19 <- Symbol(test_pj)
 Label L_internal_2
 Halt
