@@ -1,4 +1,4 @@
-use super::symbol::{Symbol, SymbolScope};
+use super::symbol::{Symbol};
 use super::kind::{InferredKind, Kind, Origin};
 
 /// Analyze an assignment and infer the assigned value's kind.
@@ -25,7 +25,6 @@ pub(crate) fn analyze_assignment(
                     let prop_sym = Symbol::new_variable(
                         name.clone(),
                         Some(value_kind.clone()),
-                        SymbolScope::Local,
                         node.location.clone(),
                         node.span.clone(),
                     );
@@ -70,7 +69,6 @@ pub(crate) fn analyze_assignment(
                 tbl.insert_symbol(Symbol::new_variable(
                     name.clone(),
                     Some(value_kind.clone()),
-                    SymbolScope::Local,
                     node.location.clone(),
                     node.span.clone(),
                 ));
@@ -259,8 +257,6 @@ pub(crate) fn analyze_expression(
                         name.clone(),
                         super::symbol::SymbolKind::Function,
                         None,
-                        super::symbol::SymbolScope::Global,
-                        None,
                         None,
                         node.location.clone(),
                         node.span.clone(),
@@ -353,7 +349,6 @@ pub(crate) fn analyze_expression(
                         let placeholder = Symbol::new_variable(
                             property.clone(),
                             Some(InferredKind::dynamic()),
-                            SymbolScope::Local,
                             node.location.clone(),
                             node.span.clone(),
                         );
@@ -506,7 +501,6 @@ pub(crate) fn analyze_forin(
         tbl.insert_symbol(Symbol::new_variable(
             iterator.clone(),
             Some(elem_kind),
-            super::symbol::SymbolScope::Local,
             node.location.clone(),
             node.span.clone(),
         ));

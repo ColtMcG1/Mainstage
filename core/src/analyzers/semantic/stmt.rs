@@ -1,5 +1,5 @@
 use super::{
-    symbol::{SymbolKind, SymbolScope},
+    symbol::{SymbolKind},
     table::SymbolTable,
 };
 use crate::analyzers::semantic::symbol::Symbol;
@@ -70,8 +70,6 @@ fn analyze_statement(
             // register workspace in current (global) scope
             tbl.insert_symbol(Symbol::new_object(
                 name.clone(),
-                SymbolScope::Global,
-                None,
                 None,
                 node.location.clone(),
                 node.span.clone(),
@@ -90,8 +88,6 @@ fn analyze_statement(
             // register project in current (global) scope
             tbl.insert_symbol(Symbol::new_object(
                 name.clone(),
-                SymbolScope::Global,
-                None,
                 None,
                 node.location.clone(),
                 node.span.clone(),
@@ -120,8 +116,6 @@ fn analyze_statement(
                 name.clone(),
                 SymbolKind::Function,
                 None,
-                SymbolScope::Global,
-                Some(params_symbols.clone()),
                 None,
                 node.location.clone(),
                 node.span.clone(),
@@ -201,8 +195,6 @@ fn analyze_parameters(
                 let symbol = Symbol::new(
                     name.clone(),
                     SymbolKind::Variable,
-                    None,
-                    SymbolScope::Local,
                     None,
                     None,
                     param.location.clone(),

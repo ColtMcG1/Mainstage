@@ -1,4 +1,4 @@
-Jump 19
+Jump 20
 Label load_stage
 LConst r0 <- Symbol(read)
 LLocal r1 <- local[0]
@@ -6,9 +6,9 @@ Call r2 <- r0(r1)
 Ret r2
 Label process_project_stage
 Eq r5 <- r3 == r4
-BrFalse r5 -> 0
+BrFalse r5 -> 14
 LConst r6 <- Symbol(say)
-LConst r7 <- Str(""No sources found."")
+LConst r7 <- Str("No sources found.")
 Call r8 <- r6(r7)
 LConst r9 <- Symbol(return)
 Label L_internal_0
@@ -24,18 +24,28 @@ LConst r16 <- Symbol(test_pj)
 SLocal local[1] <- r16
 LConst r17 <- Symbol(test_pj)
 LConst r18 <- Symbol(test_pj)
+LConst r20 <- Array([Str("./samples/e2e/*.ms")])
 Eq r22 <- r20 == r21
-BrFalse r22 -> 0
+BrFalse r22 -> 34
 LConst r23 <- Symbol(say)
-LConst r24 <- Str(""No sources found."")
+LConst r24 <- Str("No sources found.")
 Call r25 <- r23(r24)
 LConst r26 <- Symbol(return)
 Label L_internal_1
-CallLabel r28 <- L0(r27)
-SLocal local[2] <- r28
-LConst r29 <- Symbol(say)
-LLocal r30 <- local[2]
-Call r31 <- r29(r30)
-LConst r19 <- Symbol(test_pj)
+LConst r27 <- Array([Str("./samples/e2e/*.ms")])
+LConst r28 <- Str("./samples/e2e/*.ms")
+LConst r29 <- Str("./samples/e2e/*.ms")
+LConst r31 <- Symbol(read)
+LConst r32 <- Array([Symbol("test_pj")])
+Call r33 <- r31(r32)
+SLocal local[1] <- r33
+Jump 44
+LLocal r30 <- local[1]
 Label L_internal_2
+SLocal local[2] <- r30
+LConst r34 <- Symbol(say)
+LLocal r35 <- local[2]
+Call r36 <- r34(r35)
+LLocal r19 <- local[1]
+Label L_internal_3
 Halt

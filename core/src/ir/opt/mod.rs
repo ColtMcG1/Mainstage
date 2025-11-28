@@ -212,6 +212,40 @@ fn interproc_substitute(ir: &mut IrModule) {
         label_to_stage.insert(*idx, name.clone());
     }
 
+    // Build a helper map: symbol name -> nearest following Array<Str> literal discovered
+    // This heuristic helps resolve patterns where lowering emitted a Symbol for a
+    // project name and later emitted the project's `sources` Array literal.
+    let mut symbol_to_array: HashMap<String, Vec<Value>> = HashMap::new();
+    // (no-op) placeholder retained for future heuristics
+    for _ in ir.ops.iter() { }
+
+    // Find symbol -> array mapping by scanning for a Symbol LConst followed by an Array LConst
+    for (i_sym, op) in ir.ops.iter().enumerate() {
+        if let IROp::LConst { value: v, .. } = op {
+            if let Value::Symbol(sname) = v {
+                // look forward for an Array of Str values
+                for j in (i_sym + 1)..ir.ops.len() {
+                    if let IROp::LConst { value: vv, .. } = &ir.ops[j] {
+                        if let Value::Array(arr) = vv {
+                            // only map if array elements are strings (common for sources)
+                            let mut all_str = true;
+                            for el in arr.iter() {
+                                match el {
+                                    Value::Str(_) => {}
+                                    _ => { all_str = false; break; }
+                                }
+                            }
+                            if all_str {
+                                symbol_to_array.insert(sname.clone(), arr.clone());
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     let mut i = 0usize;
     while i < ir.ops.len() {
         let op_i = ir.ops[i].clone();
@@ -286,41 +320,153 @@ fn interproc_substitute(ir: &mut IrModule) {
                             }
                         }
 
-                        // Replace callee LLocal reads with LConst when caller provided a literal
+                        // More robust: try to determine a literal for each parameter by
+                        // recursively tracing argument registers back to their producers.
+                        // We follow chains like: reg <- LLocal(dest) <- local[n] (SLocal src)
+                        // and ultimately find an LConst producer if present. This is
+                        // a conservative heuristic that avoids speculative evaluation.
                         for (pi, pname) in param_names.iter().enumerate() {
                             if pi >= param_local_indices.len() { break; }
                             let param_local_idx = param_local_indices[pi];
 
-                            let mut found_slocal: Option<usize> = None;
-                            for j in (0..i).rev() {
-                                if let Some(nm) = slocal_names.get(&j) {
-                                    if nm == pname {
-                                        if let IROp::SLocal { .. } = &ir.ops[j] {
-                                            found_slocal = Some(j);
-                                            break;
+                            // locate the call position after any inserted arg loads
+                            let call_pos = i;
+
+                            // recursive tracer: given a register index and a search limit (exclusive),
+                            // walk backwards to find an originating LConst value if one exists.
+                            // This version also consults `symbol_to_array` to resolve arrays
+                            // of `Symbol(name)` into the corresponding `Array(Str(...))` when
+                            // the lowering emitted a nearby Array literal for that symbol.
+                            fn trace_reg_to_const(ir: &IrModule, reg: usize, limit: usize, visited: &mut Vec<usize>, sym_map: &HashMap<String, Vec<Value>>) -> Option<Value> {
+                                if visited.contains(&reg) { return None; }
+                                visited.push(reg);
+                                for k in (0..limit).rev() {
+                                    match &ir.ops[k] {
+                                        IROp::LConst { dest, value } if *dest == reg => {
+                                            // If this is an Array of Symbols, attempt to resolve
+                                            // each symbol to a concrete Array(Str) via the symbol map.
+                                            if let Value::Array(arr) = value {
+                                                let mut resolved: Vec<Value> = Vec::new();
+                                                let mut any_resolved = false;
+                                                for el in arr.iter() {
+                                                    match el {
+                                                        Value::Symbol(s) => {
+                                                            if let Some(mapped) = sym_map.get(s) {
+                                                                // splice in mapped string elements
+                                                                for me in mapped.iter() { resolved.push(me.clone()); }
+                                                                any_resolved = true;
+                                                            } else {
+                                                                resolved.push(Value::Symbol(s.clone()));
+                                                            }
+                                                        }
+                                                        other => resolved.push(other.clone()),
+                                                    }
+                                                }
+                                                if any_resolved {
+                                                    return Some(Value::Array(resolved));
+                                                } else {
+                                                    return Some(value.clone());
+                                                }
+                                            }
+                                            return Some(value.clone());
+                                        }
+                                        IROp::LLocal { dest, local_index: lidx } if *dest == reg => {
+                                            // find most recent SLocal for this local before k
+                                            for s in (0..k).rev() {
+                                                if let IROp::SLocal { src, local_index } = &ir.ops[s] {
+                                                    if *local_index == *lidx { // same local
+                                                        // recursively trace src register
+                                                        return trace_reg_to_const(ir, *src, s, visited, sym_map);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                                None
+                            }
+
+                            // Determine candidate literal from existing call arg (if any)
+                            let mut literal_val: Option<Value> = None;
+                            if pi < args.len() {
+                                let areg = args[pi];
+                                let mut visited: Vec<usize> = Vec::new();
+                                if let Some(v) = trace_reg_to_const(ir, areg, call_pos, &mut visited, &symbol_to_array) { literal_val = Some(v); }
+                            }
+
+                            // fallback: try to find an SLocal by name (older heuristic)
+                            if literal_val.is_none() {
+                                let mut found_slocal: Option<usize> = None;
+                                for j in (0..call_pos).rev() {
+                                    if let Some(nm) = slocal_names.get(&j) {
+                                        if nm == pname {
+                                            if let IROp::SLocal { .. } = &ir.ops[j] {
+                                                found_slocal = Some(j);
+                                                break;
+                                            }
                                         }
                                     }
                                 }
-                            }
-                            if found_slocal.is_none() { continue; }
-                            let sidx = found_slocal.unwrap();
-                            let src_reg = if let IROp::SLocal { src, .. } = &ir.ops[sidx] { *src } else { continue; };
-
-                            let mut literal_val: Option<Value> = None;
-                            for k in (0..sidx).rev() {
-                                if let IROp::LConst { dest, value } = &ir.ops[k] {
-                                    if *dest == src_reg { literal_val = Some(value.clone()); break; }
+                                if let Some(sidx) = found_slocal {
+                                    if let IROp::SLocal { src, .. } = ir.ops[sidx].clone() {
+                                        let mut visited: Vec<usize> = Vec::new();
+                                        if let Some(v) = trace_reg_to_const(ir, src, sidx, &mut visited, &symbol_to_array) { literal_val = Some(v); }
+                                    }
                                 }
                             }
+
                             if literal_val.is_none() { continue; }
                             let val = literal_val.unwrap();
+                            eprintln!("[opt] interproc: resolved param '{}' -> {:?}", pname, val);
 
+                            // insert an LConst immediately before the call so callsite arg becomes a const
+                            let mut max_reg: usize = 0;
+                            for op in ir.ops.iter() {
+                                match op {
+                                    IROp::LConst { dest, .. }
+                                    | IROp::LLocal { dest, .. }
+                                    | IROp::Add { dest, .. }
+                                    | IROp::Sub { dest, .. }
+                                    | IROp::Mul { dest, .. }
+                                    | IROp::Div { dest, .. }
+                                    | IROp::Mod { dest, .. }
+                                    | IROp::Eq { dest, .. }
+                                    | IROp::Neq { dest, .. }
+                                    | IROp::Lt { dest, .. }
+                                    | IROp::Lte { dest, .. }
+                                    | IROp::Gt { dest, .. }
+                                    | IROp::Gte { dest, .. }
+                                    | IROp::And { dest, .. }
+                                    | IROp::Or { dest, .. }
+                                    | IROp::Not { dest, .. }
+                                    | IROp::Inc { dest }
+                                    | IROp::Dec { dest }
+                                    | IROp::Call { dest, .. }
+                                    | IROp::CallLabel { dest, .. }
+                                    | IROp::CLoad { dest, .. }
+                                    | IROp::AllocClosure { dest }
+                                    => if *dest > max_reg { max_reg = *dest; }
+                                    _ => {}
+                                }
+                            }
+                            let const_r = max_reg + 1;
+                            ir.ops.insert(call_pos, IROp::LConst { dest: const_r, value: val.clone() });
+                            // update args and advance index to account for insertion
+                            if pi < args.len() {
+                                args[pi] = const_r;
+                            } else {
+                                while args.len() <= pi { args.push(const_r); }
+                                args[pi] = const_r;
+                            }
+                            i += 1; // we've inserted before the call
+
+                            // Replace callee LLocal reads with LConst where local_index matches
                             let start = label_index;
                             let mut end = ir.ops.len();
                             for t in (start + 1)..ir.ops.len() {
                                 if let IROp::Label { .. } = &ir.ops[t] { end = t; break; }
                             }
-
                             for t in (start + 1)..end {
                                 let op_clone = ir.ops[t].clone();
                                 if let IROp::LLocal { dest, local_index } = op_clone {

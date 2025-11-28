@@ -460,7 +460,7 @@ fn parse_value_rule(
     match next_rule.as_rule() {
         Rule::string => Ok(AstNode::new(
             AstNodeKind::String {
-                value: next_rule.as_str().to_string(),
+                value: next_rule.as_str()[1..next_rule.as_str().len()-1].to_string()
             },
             location,
             span,

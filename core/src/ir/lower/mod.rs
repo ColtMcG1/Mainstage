@@ -122,7 +122,17 @@ impl IrModule {
     }
 
     pub fn lower_from_ast(&mut self, ast: &AstNode, entrypoint: &str) {
-        // First, lower stage declarations so their labels exist for calls.
+        // First, lower project declarations so their member data is available
+        // to later lowering of workspaces/stages.
+        if let AstNodeKind::Script { body } = &ast.kind {
+            for n in body.iter() {
+                if let AstNodeKind::Project { .. } = &n.kind {
+                    self.walk_node(n);
+                }
+            }
+        }
+
+        // Next, lower stage declarations so their labels exist for calls.
         if let AstNodeKind::Script { body } = &ast.kind {
             for n in body.iter() {
                 if let AstNodeKind::Stage { name, .. } = &n.kind {
@@ -152,11 +162,16 @@ impl IrModule {
                             self.walk_node(n);
                             // Ensure execution starts at the selected entrypoint label by
                             // inserting a Jump at position 0 that relocates to the label.
+                            // When we insert at the front, all previously-recorded relocation
+                            // positions must be incremented to remain valid.
                             self.ops.insert(0, IROp::Jump { target: 0 });
+                            for rel in self.relocations.iter_mut() {
+                                rel.0 += 1;
+                            }
                             self.relocations.push((0, name.clone()));
                             // After lowering entrypoint, resolve relocations and return
                             self.patch_relocations();
-                            return;
+                            return; // Ensure only one return statement
                         }
                     }
                     _ => {}
@@ -176,6 +191,9 @@ impl IrModule {
             // Prepend a Jump to the chosen container label so bytecode execution
             // begins at the intended entrypoint.
             self.ops.insert(0, IROp::Jump { target: 0 });
+            for rel in self.relocations.iter_mut() {
+                rel.0 += 1;
+            }
             self.relocations.push((0, cont_name));
         }
 
@@ -227,15 +245,17 @@ impl IrModule {
                 // Replace the op at pos with an updated one
                 match &self.ops[*pos] {
                     IROp::Jump { .. } => {
-                        self.ops[*pos] = IROp::Jump { target: target_idx };
+                        self.ops[*pos] = IROp::Jump { target: target_idx+1 };
                     }
                     IROp::BrFalse { cond, .. } => {
                         let c = *cond;
-                        self.ops[*pos] = IROp::BrFalse { cond: c, target: target_idx };
+                        // Branch targets should also account for the prepended Jump
+                        self.ops[*pos] = IROp::BrFalse { cond: c, target: target_idx+1 };
                     }
                     IROp::BrTrue { cond, .. } => {
                         let c = *cond;
-                        self.ops[*pos] = IROp::BrTrue { cond: c, target: target_idx };
+                        // Branch targets should also account for the prepended Jump
+                        self.ops[*pos] = IROp::BrTrue { cond: c, target: target_idx+1 };
                     }
                     _ => {}
                 }

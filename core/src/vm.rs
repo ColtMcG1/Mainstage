@@ -125,7 +125,7 @@ enum Op {
     Not { dest: usize, src: usize },
     Inc { dest: usize },
     Dec { dest: usize },
-    Label { name: String },
+    Label,
     Jump { target: usize },
     BrTrue { cond: usize, target: usize },
     BrFalse { cond: usize, target: usize },
@@ -183,7 +183,7 @@ pub fn run_bytecode(bytes: &[u8]) -> Result<(), String> {
             0x28 => { let dest = read_u32(&mut cur)? as usize; let src = read_u32(&mut cur)? as usize; ops.push(Op::Not { dest, src }); }
             0x30 => { let dest = read_u32(&mut cur)? as usize; ops.push(Op::Inc { dest }); }
             0x31 => { let dest = read_u32(&mut cur)? as usize; ops.push(Op::Dec { dest }); }
-            0x40 => { let name = read_string(&mut cur)?; ops.push(Op::Label { name: name.clone() }); label_pos.insert(i, name); }
+            0x40 => { let name = read_string(&mut cur)?; ops.push(Op::Label); label_pos.insert(i, name); }
             0x41 => { let target = read_u32(&mut cur)? as usize; ops.push(Op::Jump { target }); }
             0x42 => { let cond = read_u32(&mut cur)? as usize; let target = read_u32(&mut cur)? as usize; ops.push(Op::BrTrue { cond, target }); }
             0x43 => { let cond = read_u32(&mut cur)? as usize; let target = read_u32(&mut cur)? as usize; ops.push(Op::BrFalse { cond, target }); }
@@ -366,6 +366,36 @@ pub fn run_bytecode(bytes: &[u8]) -> Result<(), String> {
 
 fn run_host_fn(name: &str, args: &Vec<RunValue>) -> Result<RunValue, String> {
     match name {
+        "ask" => {
+            use std::io::{self, Write};
+            if let Some(RunValue::Str(prompt)) = args.get(0) {
+                print!("{}", prompt);
+                io::stdout().flush().map_err(|e| format!("io error: {}", e))?;
+                let mut input = String::new();
+                io::stdin().read_line(&mut input).map_err(|e| format!("io error: {}", e))?;
+                let s = input.trim_end().to_string();
+                let s_trim = s.trim();
+                // Try boolean
+                let low = s_trim.to_ascii_lowercase();
+                if low == "true" {
+                    return Ok(RunValue::Bool(true));
+                } else if low == "false" {
+                    return Ok(RunValue::Bool(false));
+                }
+                // Try integer
+                if let Ok(i) = s_trim.parse::<i64>() {
+                    return Ok(RunValue::Int(i));
+                }
+                // Try float
+                if let Ok(f) = s_trim.parse::<f64>() {
+                    return Ok(RunValue::Float(f));
+                }
+                // Fallback to string
+                Ok(RunValue::Str(s))
+            } else {
+                Ok(RunValue::Str(String::new()))
+            }
+        }
         "say" => {
             if let Some(a) = args.get(0) {
                 match a {
@@ -388,7 +418,8 @@ fn run_host_fn(name: &str, args: &Vec<RunValue>) -> Result<RunValue, String> {
         }
         "read" => {
             if let Some(RunValue::Str(glob_pat)) = args.get(0) {
-                match glob::glob(glob_pat) {
+                println!("Reading files matching pattern: {}", glob_pat);
+                match glob(glob_pat) {
                     Ok(paths) => {
                         let mut out: Vec<RunValue> = Vec::new();
                         for p in paths.flatten() {
@@ -403,6 +434,16 @@ fn run_host_fn(name: &str, args: &Vec<RunValue>) -> Result<RunValue, String> {
                 }
             } else {
                 Ok(RunValue::Array(Vec::new()))
+            }
+        }
+        "write" => {
+            if let (Some(RunValue::Str(path)), Some(RunValue::Str(content))) = (args.get(0), args.get(1)) {
+                match fs::write(path, content) {
+                    Ok(_) => Ok(RunValue::Bool(true)),
+                    Err(e) => Err(format!("write error: {}", e)),
+                }
+            } else {
+                Err("write: invalid arguments".to_string())
             }
         }
         _ => Err(format!("unknown host function: {}", name)),

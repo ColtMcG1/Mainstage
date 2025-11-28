@@ -9,21 +9,11 @@ pub enum SymbolKind {
 }
 
 #[derive(Debug, Clone)]
-pub enum SymbolScope {
-    Global,
-    Local
-}
-
-#[derive(Debug, Clone)]
 pub struct Symbol {
     pub(crate) name: String,
 
     kind: SymbolKind,
     pub(crate) inferred_type: Option<InferredKind>,
-
-    scope: SymbolScope,
-
-    parameters: Option<Vec<Symbol>>,
     returns: Option<InferredKind>,
 
     /// For object symbols, store properties (fields) declared inside their bodies.
@@ -43,9 +33,7 @@ impl Symbol {
         name: String,
         kind: SymbolKind,
         inferred_type: Option<InferredKind>,
-        scope: SymbolScope,
-        parameters: Option<Vec<Symbol>>,
-    returns: Option<InferredKind>,
+        returns: Option<InferredKind>,
         location: Option<crate::location::Location>,
         span: Option<crate::location::Span>,
     ) -> Self {
@@ -53,8 +41,6 @@ impl Symbol {
             name,
             kind,
             inferred_type,
-            scope,
-            parameters,
             returns,
             properties: None,
             ref_count: 0,
@@ -66,8 +52,6 @@ impl Symbol {
 
     pub fn new_object(
         name: String,
-        scope: SymbolScope,
-        arguments: Option<Vec<Symbol>>,
         returns: Option<InferredKind>,
         location: Option<crate::location::Location>,
         span: Option<crate::location::Span>,
@@ -81,8 +65,6 @@ impl Symbol {
                 location.clone(),
                 span.clone(),
             )),
-            scope,
-            arguments,
             returns,
             location,
             span,
@@ -94,7 +76,6 @@ impl Symbol {
     pub fn new_variable(
         name: String,
         inferred_type: Option<InferredKind>,
-        scope: SymbolScope,
         location: Option<crate::location::Location>,
         span: Option<crate::location::Span>,
     ) -> Self {
@@ -102,8 +83,6 @@ impl Symbol {
             name,
             SymbolKind::Variable,
             inferred_type,
-            scope,
-            None,
             None,
             location,
             span,
