@@ -1,17 +1,31 @@
-use super::symbol::Symbol;
+use super::symbol::{Symbol, SymbolKind};
 use std::collections::HashMap;
+use crate::error::MainstageErrorExt;
+
+/// Diagnostics collected during analysis are stored on the SymbolTable so
+/// analyzer passes (which receive only `&mut SymbolTable`) can push warnings
+/// and infos without changing many function signatures.
 
 // A single scope: name -> overload set
 type Scope = HashMap<String, Vec<Symbol>>;
 
 pub struct SymbolTable {
     pub symbols: Vec<Scope>,
+    pub diagnostics: Vec<Box<dyn MainstageErrorExt>>,
+    /// Parallel stack tracking whether a scope is an object/project/workspace
+    /// declaration scope and, if so, the object name. This lets the analyzer
+    /// skip unused-variable warnings for object fields assigned inside those
+    /// declaration bodies.
+    object_contexts: Vec<Option<String>>,
 }
+
 
 impl SymbolTable {
     pub fn new() -> Self {
         SymbolTable {
             symbols: vec![HashMap::new()],
+            diagnostics: Vec::new(),
+            object_contexts: vec![None],
         }
     }
 
@@ -19,10 +33,67 @@ impl SymbolTable {
 
     pub fn enter_scope(&mut self) {
         self.symbols.push(HashMap::new());
+        self.object_contexts.push(None);
     }
 
     pub fn exit_scope(&mut self) {
+        // If this scope is an object/project/workspace declaration body, skip
+        // emitting unused-variable warnings for symbols declared here because
+        // they are treated as object fields (they'll be referenced via member
+        // access) rather than local variables.
+        let skip_warnings = match self.object_contexts.last() {
+            Some(Some(_)) => true,
+            _ => false,
+        };
+
+        if !skip_warnings {
+            // Before popping the current scope, emit warnings for any variables
+            // that were declared in this scope but never referenced.
+            if let Some(current_scope) = self.symbols.last() {
+                for symbols in current_scope.values() {
+                    for sym in symbols {
+                        // Only consider variables (not functions/objects)
+                        if matches!(sym.kind(), SymbolKind::Variable) {
+                            if !sym.is_referenced() {
+                                // Build a warning diagnostic for this unused variable.
+                                let msg = format!("Variable '{}' is declared but never used", sym.name);
+                                self.diagnostics.push(Box::new(
+                                    crate::analyzers::semantic::err::SemanticError::with(
+                                        crate::error::Level::Warning,
+                                        msg,
+                                        "mainstage.analyzers.semantic.table.exit_scope".to_string(),
+                                        sym.location(),
+                                        sym.span(),
+                                    ),
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         self.symbols.pop();
+        self.object_contexts.pop();
+    }
+
+    /// Enter a new scope that corresponds to an object/project/workspace
+    /// declaration body. The `name` should be the declared object's name.
+    pub fn enter_object_scope(&mut self, name: String) {
+        self.symbols.push(HashMap::new());
+        self.object_contexts.push(Some(name));
+    }
+
+    /// Take and return all diagnostics collected so far.
+    pub fn take_diagnostics(&mut self) -> Vec<Box<dyn MainstageErrorExt>> {
+        std::mem::take(&mut self.diagnostics)
+    }
+
+    /// Return the current object declaration name, if the current scope is an
+    /// object/project/workspace body. Clones the name so callers don't need
+    /// mutable access.
+    pub fn current_object_name(&self) -> Option<String> {
+        self.object_contexts.last().and_then(|o| o.clone())
     }
 
     /// ------- Symbol Helpers -------
@@ -36,95 +107,14 @@ impl SymbolTable {
         }
     }
 
-    pub fn lookup_symbol(&self, name: &str) -> Option<&Vec<Symbol>> {
-        for scope in self.symbols.iter().rev() {
-            if let Some(symbols) = scope.get(name) {
-                return Some(symbols);
-            }
-        }
-        None
-    }
-
-    pub fn lookup_symbol_mut(&mut self, name: &str) -> Option<&mut Vec<Symbol>> {
+    /// Return the most-recent (visible) symbol for `name` as a mutable reference.
+    /// This is a convenience wrapper over `lookup_symbol_mut(...).and_then(|v| v.last_mut())`.
+    pub fn get_latest_symbol_mut(&mut self, name: &str) -> Option<&mut Symbol> {
         for scope in self.symbols.iter_mut().rev() {
             if let Some(symbols) = scope.get_mut(name) {
-                return Some(symbols);
+                return symbols.last_mut();
             }
         }
         None
-    }
-
-    pub fn remove_symbol(&mut self, name: &str) -> Option<Vec<Symbol>> {
-        if let Some(current_scope) = self.symbols.last_mut() {
-            return current_scope.remove(name);
-        }
-        None
-    }
-
-    pub fn symbol_exists(&self, name: &str) -> bool {
-        self.lookup_symbol(name).is_some()
-    }
-
-    pub fn symbol_exists_in_current_scope(&self, name: &str) -> bool {
-        if let Some(current_scope) = self.symbols.last() {
-            return current_scope.contains_key(name);
-        }
-        false
-    }
-
-    pub fn symbol_exists_in_global_scope(&self, name: &str) -> bool {
-        if let Some(global_scope) = self.symbols.first() {
-            return global_scope.contains_key(name);
-        }
-        false
-    }
-
-    pub fn collect_symbols_with_kind(&self, kind: super::kind::Kind) -> Vec<&Symbol> {
-        let mut collected = Vec::new();
-
-        for scope in &self.symbols {
-            for symbols in scope.values() {
-                for symbol in symbols {
-                    if let Some(inferred_type) = &symbol.inferred_type {
-                        if *inferred_type == kind {
-                            collected.push(symbol);
-                        }
-                    }
-                }
-            }
-        }
-
-        collected
-    }
-
-    /// ------- Current Scope Helpers -------
-
-    pub fn current_scope(&self) -> Option<&Scope> {
-        self.symbols.last()
-    }
-
-    pub fn current_scope_mut(&mut self) -> Option<&mut Scope> {
-        self.symbols.last_mut()
-    }
-
-    /// ------- Global Scope Helpers -------
-
-    pub fn is_global_scope(&self) -> bool {
-        self.symbols.len() == 1
-    }
-
-    pub fn global_scope(&self) -> &Scope {
-        &self.symbols[0]
-    }
-
-    pub fn global_scope_mut(&mut self) -> &mut Scope {
-        &mut self.symbols[0]
-    }
-
-    /// ------- Utility Helpers -------
-
-    pub fn clear(&mut self) {
-        self.symbols.clear();
-        self.symbols.push(HashMap::new());
     }
 }

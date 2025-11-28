@@ -49,6 +49,8 @@ pub struct InferredKind {
     pub origin: Origin,
     pub location: Option<crate::location::Location>,
     pub span: Option<crate::location::Span>,
+    // For container types (e.g., Array) we may carry an element type.
+    pub element: Option<Box<InferredKind>>,
 }
 
 impl Default for InferredKind {
@@ -58,6 +60,7 @@ impl Default for InferredKind {
             origin: Origin::Unknown,
             location: None,
             span: None,
+            element: None,
         }
     }
 }
@@ -74,6 +77,7 @@ impl InferredKind {
             origin,
             location,
             span,
+            element: None,
         }
     }
 
@@ -92,6 +96,12 @@ impl InferredKind {
     }
     pub fn dynamic() -> Self {
         Self::default()
+    }
+
+    /// Attach an element kind for container types like Array.
+    pub fn with_element(mut self, elem: InferredKind) -> Self {
+        self.element = Some(Box::new(elem));
+        self
     }
 
     // Builder-style modifiers useful in analysis passes
@@ -119,11 +129,23 @@ impl InferredKind {
         matches!(self.kind, Kind::Null)
     }
 
+    pub fn element_kind(&self) -> Option<&InferredKind> {
+        self.element.as_deref()
+    }
+
     // Compatibility test: true if values of `other` can be used where `self` is expected.
     // Dynamic and Null are treated permissively; caller can tighten rules if needed.
     pub fn is_compatible_with(&self, other: &InferredKind) -> bool {
         if self.is_dynamic() || other.is_dynamic() {
             return true;
+        }
+        // If both are arrays, element compatibility matters
+        if matches!(self.kind, Kind::Array) && matches!(other.kind, Kind::Array) {
+            match (self.element_kind(), other.element_kind()) {
+                (Some(a), Some(b)) => return a.is_compatible_with(b),
+                // If either lacks element info, be permissive
+                _ => return true,
+            }
         }
         if self.kind == other.kind {
             return true;
@@ -132,8 +154,22 @@ impl InferredKind {
         if other.is_null() {
             return true;
         }
-        // numeric coercion allowed (Integer -> Float)
-        if matches!(self.kind, Kind::Float) && matches!(other.kind, Kind::Integer) {
+        // numeric coercion allowed both ways (Integer <-> Float)
+        if (matches!(self.kind, Kind::Float) && matches!(other.kind, Kind::Integer))
+            || (matches!(self.kind, Kind::Integer) && matches!(other.kind, Kind::Float))
+        {
+            return true;
+        }
+
+        // Bool and Integer are compatible both ways (allow implicit promotion)
+        if (matches!(self.kind, Kind::Integer) && matches!(other.kind, Kind::Boolean))
+            || (matches!(self.kind, Kind::Boolean) && matches!(other.kind, Kind::Integer))
+        {
+            return true;
+        }
+
+        // Allow any type to be used where a string is expected (implicit to-string)
+        if matches!(self.kind, Kind::String) {
             return true;
         }
         false
@@ -153,13 +189,52 @@ impl InferredKind {
                 origin: Origin::Coerced,
                 location: self.location.clone().or(other.location.clone()),
                 span: self.span.clone().or(other.span.clone()),
+                element: self.element.clone().or(other.element.clone()),
             };
         }
         if self.is_dynamic() || other.is_dynamic() {
             return InferredKind::dynamic();
         }
         match (&self.kind, &other.kind) {
+            // Numeric coercion: Float wins
             (Float, Integer) | (Integer, Float) => InferredKind::new(
+                Float,
+                Origin::Coerced,
+                self.location.clone().or(other.location.clone()),
+                self.span.clone().or(other.span.clone()),
+            ),
+            // Array + Array => unify element kinds
+            (Array, Array) => {
+                // if either has no element info, result is Array(dynamic)
+                match (self.element_kind(), other.element_kind()) {
+                    (Some(a), Some(b)) => {
+                        let unified = a.unify(b);
+                        let mut out = InferredKind::new(
+                            Array,
+                            Origin::Coerced,
+                            self.location.clone().or(other.location.clone()),
+                            self.span.clone().or(other.span.clone()),
+                        );
+                        out = out.with_element(unified);
+                        out
+                    }
+                    _ => InferredKind::new(
+                        Array,
+                        Origin::Coerced,
+                        self.location.clone().or(other.location.clone()),
+                        self.span.clone().or(other.span.clone()),
+                    ),
+                }
+            }
+            // Bool + Integer => Integer
+            (Integer, Boolean) | (Boolean, Integer) => InferredKind::new(
+                Integer,
+                Origin::Coerced,
+                self.location.clone().or(other.location.clone()),
+                self.span.clone().or(other.span.clone()),
+            ),
+            // Bool + Float => Float
+            (Float, Boolean) | (Boolean, Float) => InferredKind::new(
                 Float,
                 Origin::Coerced,
                 self.location.clone().or(other.location.clone()),
@@ -183,6 +258,16 @@ impl fmt::Display for InferredKind {
             Origin::Coerced => "coerced",
             Origin::Unknown => "unknown",
         };
+
+        // For array kinds include the element type if present: Array<Integer>
+        if let Kind::Array = &self.kind {
+            if let Some(elem) = &self.element {
+                return write!(f, "Array<{}> ({})", elem, origin);
+            } else {
+                return write!(f, "Array<?> ({})", origin);
+            }
+        }
+
         write!(f, "{} ({})", self.kind, origin)
     }
 }

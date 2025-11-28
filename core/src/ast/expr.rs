@@ -315,18 +315,118 @@ fn parse_postfix_expression_rule(
 ) -> Result<AstNode, Box<dyn MainstageErrorExt>> {
     let (mut inner_pair, location, span) = rules::get_data_from_rule(&pair, script);
     let next_rule = rules::fetch_next_pair(&mut inner_pair, &location, &span)?;
-    match next_rule.as_rule() {
-        Rule::primary_expression => parse_primary_expression_rule(next_rule, script),
-        _ => Err(Box::<dyn MainstageErrorExt>::from(Box::new(
-            crate::ast::err::SyntaxError::with(
-                crate::Level::Error,
-                "Unexpected postfix expression type.".into(),
-                "mainstage.expr.parse_postfix_expression_rule".into(),
-                location,
-                span,
-            ),
-        ))),
+    // Start with the primary expression, then apply zero-or-more postfix ops
+    let mut node = parse_primary_expression_rule(next_rule, script)?;
+
+    // Remaining inner pairs (if any) are postfix_op instances; apply them left-to-right.
+    while let Some(op_pair) = inner_pair.next() {
+        // Each op_pair is a postfix_op; inspect its inner contents to determine
+        // whether it's a call, member access, index, or postfix inc/dec.
+        let mut op_inner = op_pair.clone().into_inner();
+
+        // If there are inner pairs, inspect the first one to decide.
+        if let Some(first) = op_inner.next() {
+            match first.as_rule() {
+                Rule::arguments => {
+                    // Call: build argument list
+                    let mut args: Vec<AstNode> = Vec::new();
+                    for arg_pair in first.into_inner() {
+                        // each arg_pair is a parameter expression wrapper; extract inner expr
+                        if let Some(expr_pair) = arg_pair.into_inner().next() {
+                            let expr_node = parse_expression_rule(expr_pair, script)?;
+                            args.push(expr_node);
+                        }
+                    }
+                    node = AstNode::new(
+                        AstNodeKind::Call { callee: Box::new(node), args },
+                        rules::get_location_from_pair(&op_pair, script),
+                        rules::get_span_from_pair(&op_pair, script),
+                    );
+                }
+                Rule::identifier => {
+                    // Member access like `.prop`
+                    let prop_name = first.as_str().to_string();
+                    node = AstNode::new(
+                        AstNodeKind::Member { object: Box::new(node), property: prop_name },
+                        rules::get_location_from_pair(&op_pair, script),
+                        rules::get_span_from_pair(&op_pair, script),
+                    );
+                }
+                Rule::expression => {
+                    // Indexing like `[expr]`
+                    let idx_node = parse_expression_rule(first, script)?;
+                    node = AstNode::new(
+                        AstNodeKind::Index { object: Box::new(node), index: Box::new(idx_node) },
+                        rules::get_location_from_pair(&op_pair, script),
+                        rules::get_span_from_pair(&op_pair, script),
+                    );
+                }
+                _ => {
+                    // Handle raw tokens such as postfix ++/-- which have no inner pair
+                    let s = op_pair.as_str();
+                    match s {
+                        "++" => {
+                            node = AstNode::new(
+                                AstNodeKind::UnaryOp { op: UnaryOperator::Inc, expr: Box::new(node) },
+                                rules::get_location_from_pair(&op_pair, script),
+                                rules::get_span_from_pair(&op_pair, script),
+                            );
+                        }
+                        "--" => {
+                            node = AstNode::new(
+                                AstNodeKind::UnaryOp { op: UnaryOperator::Dec, expr: Box::new(node) },
+                                rules::get_location_from_pair(&op_pair, script),
+                                rules::get_span_from_pair(&op_pair, script),
+                            );
+                        }
+                        _ => {
+                            return Err(Box::<dyn MainstageErrorExt>::from(Box::new(
+                                crate::ast::err::SyntaxError::with(
+                                    crate::Level::Error,
+                                    "Unsupported postfix operator.".into(),
+                                    "mainstage.expr.parse_postfix_expression_rule".into(),
+                                    location.clone(),
+                                    span.clone(),
+                                ),
+                            )));
+                        }
+                    }
+                }
+            }
+        } else {
+            // No inner pairs; maybe op_pair.as_str() is ++ or --
+            let s = op_pair.as_str();
+            match s {
+                "++" => {
+                    node = AstNode::new(
+                        AstNodeKind::UnaryOp { op: UnaryOperator::Inc, expr: Box::new(node) },
+                        rules::get_location_from_pair(&op_pair, script),
+                        rules::get_span_from_pair(&op_pair, script),
+                    );
+                }
+                "--" => {
+                    node = AstNode::new(
+                        AstNodeKind::UnaryOp { op: UnaryOperator::Dec, expr: Box::new(node) },
+                        rules::get_location_from_pair(&op_pair, script),
+                        rules::get_span_from_pair(&op_pair, script),
+                    );
+                }
+                _ => {
+                    return Err(Box::<dyn MainstageErrorExt>::from(Box::new(
+                        crate::ast::err::SyntaxError::with(
+                            crate::Level::Error,
+                            "Unsupported postfix operator with no inner rule.".into(),
+                            "mainstage.expr.parse_postfix_expression_rule".into(),
+                            location.clone(),
+                            span.clone(),
+                        ),
+                    )));
+                }
+            }
+        }
     }
+
+    Ok(node)
 }
 
 fn parse_primary_expression_rule(

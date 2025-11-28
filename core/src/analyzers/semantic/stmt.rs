@@ -39,13 +39,12 @@ fn analyze_statement(
     match &mut node.kind {
         AstNodeKind::Workspace { name, body } => {
 
+            // ensure body is not empty
             check_for_empty_block(body)?;
 
             // register workspace in current (global) scope
-            tbl.insert_symbol(Symbol::new(
+            tbl.insert_symbol(Symbol::new_object(
                 name.clone(),
-                SymbolKind::Object,
-                None,
                 SymbolScope::Global,
                 None,
                 None,
@@ -53,28 +52,37 @@ fn analyze_statement(
                 node.span.clone(),
             ));
 
-            // analyze children inside a new scope
-            tbl.enter_scope();
-            analyze_statement(body, tbl)?;
+            // analyze children inside a new object declaration scope (workspace)
+            tbl.enter_object_scope(name.clone());
+            super::node::analyze_node(body, tbl)?;
             tbl.exit_scope();
         }
         AstNodeKind::Project { name, body } => {
-            tbl.insert_symbol(Symbol::new(
+
+            // ensure body is not empty
+            check_for_empty_block(body)?;
+
+            // register project in current (global) scope
+            tbl.insert_symbol(Symbol::new_object(
                 name.clone(),
-                SymbolKind::Object,
-                None,
                 SymbolScope::Global,
                 None,
                 None,
                 node.location.clone(),
                 node.span.clone(),
             ));
-            tbl.enter_scope();
-            analyze_statement(body, tbl)?;
+
+            // analyze children inside a new object declaration scope (project)
+            tbl.enter_object_scope(name.clone());
+            super::node::analyze_node(body, tbl)?;
             tbl.exit_scope();
         }
 
         AstNodeKind::Stage { name, args, body } => {
+
+            // ensure body is not empty
+            check_for_empty_block(body)?;
+            
             // Build parameter symbol list (do not insert yet)
             let params_symbols = if let Some(params_node) = args {
                 analyze_parameters(params_node, tbl)?
@@ -85,7 +93,7 @@ fn analyze_statement(
             // Insert stage symbol into global scope with parameter metadata
             tbl.insert_symbol(Symbol::new(
                 name.clone(),
-                SymbolKind::Object,
+                SymbolKind::Function,
                 None,
                 SymbolScope::Global,
                 Some(params_symbols.clone()),
@@ -99,8 +107,25 @@ fn analyze_statement(
             for p in params_symbols.iter() {
                 tbl.insert_symbol(p.clone());
             }
-            analyze_statement(body, tbl)?;
+            super::node::analyze_node(body, tbl)?;
+
+            // Collect returns from the stage body before exiting the scope so return expressions
+            // can be analyzed with access to local symbols/params.
+            if let Some(returns_kind) = super::expr::collect_returns(body, tbl)? {
+                // set the stage symbol's returns metadata in the global scope
+                if let Some(sym) = tbl.get_latest_symbol_mut(name) {
+                    // ensure we are updating the global-stage symbol specifically
+                    // if the found symbol is in the current scope this will still update
+                    // the most-recent visible symbol; for strict global-only update,
+                    // use a dedicated get_symbol_in_global_scope_mut helper instead.
+                    sym.set_returns(returns_kind);
+                }
+            }
+
             tbl.exit_scope();
+        }
+        AstNodeKind::Null => {
+            // EOI emits a Null node, do nothing
         }
         _ => {
             return Err(Box::new(

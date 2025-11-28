@@ -85,7 +85,7 @@ fn dispatch_commands(matches: &ArgMatches) {
             };
 
             analyze_semantic_rules(&mut ast).map_err(|e| {
-                println!("Semantic analysis error: {}", e);
+                e.iter().for_each(|f| println!("Semantic analysis error: {f}"));
             }).ok();
 
             if let Some(output_file) = out {

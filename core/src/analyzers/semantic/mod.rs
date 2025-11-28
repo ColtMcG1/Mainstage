@@ -1,5 +1,5 @@
-use crate::ast::{AstNode, AstNodeKind};
-use crate::error::{Level, MainstageErrorExt};
+use crate::ast::{AstNode};
+use crate::error::{MainstageErrorExt};
 
 mod err;
 mod kind;
@@ -12,7 +12,12 @@ mod analyzer;
 
 pub use kind::InferredKind;
 
-pub fn analyze_semantic_rules(ast: &mut AstNode) -> Result<(), Box<dyn MainstageErrorExt>> {
+pub fn analyze_semantic_rules(ast: &mut AstNode) -> Result<(), Vec<Box<dyn MainstageErrorExt>>> {
     let mut analyzer = analyzer::Analyzer::new();
-    analyzer.analyze(ast)
+    analyzer.analyze(ast).ok();
+    let diagnostics = analyzer.take_diagnostics();
+    if !diagnostics.is_empty() {
+        return Err(diagnostics);
+    }
+    Ok(())
 }

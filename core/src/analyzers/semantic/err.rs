@@ -30,13 +30,23 @@ impl SemanticError {
 
 impl std::fmt::Display for SemanticError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(loc) = &self.location {
-            write!(f, "{} at {}", self.message, loc)
-        } else if let Some(span) = &self.span {
-            write!(f, "{} at span {:?}", self.message, span)
-        } else {
-            write!(f, "{}", self.message)
-        }
+        // Build a compact, consistent diagnostic line similar to the global Debug
+        // representation used for MainstageErrorExt, but human-friendly.
+        let loc_str = match &self.location {
+            Some(loc) => format!("{}:{}:{}", loc.file, loc.line, loc.column),
+            None => "unknown".to_string(),
+        };
+
+        let span_str = match &self.span {
+            Some(span) => span.to_string(),
+            None => "span:none".to_string(),
+        };
+
+        write!(
+            f,
+            "MAINSTAGE | {} | {} | {} | {} | {}",
+            self.level, loc_str, self.issuer, span_str, self.message
+        )
     }
 }
 

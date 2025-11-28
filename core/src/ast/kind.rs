@@ -54,6 +54,8 @@ pub enum AstNodeKind {
 
     Command { name: String, arg: String },
     Call { callee: Box<AstNode>, args: Vec<AstNode> },
+    Member { object: Box<AstNode>, property: String },
+    Index { object: Box<AstNode>, index: Box<AstNode> },
     Return { value: Option<Box<AstNode>> },
 
     Identifier { name: String },
@@ -89,6 +91,8 @@ impl fmt::Display for AstNodeKind {
             AstNodeKind::Assignment { .. } => write!(f, "Assignment"),
             AstNodeKind::Command { .. } => write!(f, "Command"),
             AstNodeKind::Call { .. } => write!(f, "Call"),
+            AstNodeKind::Member { .. } => write!(f, "Member"),
+            AstNodeKind::Index { .. } => write!(f, "Index"),
             AstNodeKind::Return { .. } => write!(f, "Return"),
             AstNodeKind::Identifier { .. } => write!(f, "Identifier"),
             AstNodeKind::String { .. } => write!(f, "String"),

@@ -78,12 +78,25 @@ fn parse_terminated_statement_rule(
         Rule::assignment_stmt => parse_assignment_statement_rule(next_rule, script),
         Rule::expression_stmt => super::expr::parse_expression_rule(next_rule, script),
         Rule::return_stmt => {
-            // Placeholder implementation
-            Ok(AstNode::new(
-                AstNodeKind::Return { value: None },
-                location,
-                span,
-            ))
+            // Parse inner expression for return value
+            let mut inner = next_rule.into_inner();
+            // The grammar for return_stmt is: "return" ~ expression ~ ";"
+            // The first inner pair should be the expression
+            if let Some(expr_pair) = inner.next() {
+                let expr_node = super::expr::parse_expression_rule(expr_pair, script)?;
+                Ok(AstNode::new(
+                    AstNodeKind::Return { value: Some(Box::new(expr_node)) },
+                    location,
+                    span,
+                ))
+            } else {
+                // No expression found: treat as returning nothing
+                Ok(AstNode::new(
+                    AstNodeKind::Return { value: None },
+                    location,
+                    span,
+                ))
+            }
         }
         _ => Err(Box::<dyn MainstageErrorExt>::from(Box::new(
             crate::ast::err::SyntaxError::with(
