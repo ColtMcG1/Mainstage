@@ -1,11 +1,17 @@
-pub mod irmod;
+pub mod lower;
+pub mod opt;
+pub mod bytecode;
 pub mod op;
 pub mod value;
 
-use super::ir::irmod::IrModule;
+use self::lower::IrModule;
+pub use self::bytecode::emit_bytecode;
 
-pub fn lower_ast_to_ir(ast: &crate::ast::AstNode, entrypoint: &str) -> IrModule {
+pub fn lower_ast_to_ir(ast: &crate::ast::AstNode, entrypoint: &str, optimize: bool) -> IrModule {
     let mut ir_mod = IrModule::new();
     ir_mod.lower_from_ast(ast, entrypoint);
+    if optimize {
+        opt::optimize(&mut ir_mod);
+    }
     ir_mod
 }

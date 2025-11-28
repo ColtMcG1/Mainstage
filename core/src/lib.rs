@@ -10,7 +10,7 @@ pub use error::{Level, MainstageErrorExt};
 pub use location::{Location, Span};
 pub use script::Script;
 pub use analyzers::{analyze_semantic_rules, analyze_acyclic_rules};
-pub use ir::{lower_ast_to_ir};
+pub use ir::{lower_ast_to_ir, emit_bytecode};
 
 pub fn generate_error_report<E: MainstageErrorExt>(error: &E) -> String {
     let level = error.level();

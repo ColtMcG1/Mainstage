@@ -33,6 +33,9 @@ pub enum IROp {
     BrTrue { cond: Register, target: usize },
     BrFalse { cond: Register, target: usize },
     Halt,
+    AllocClosure { dest: Register },
+    CStore { closure: Register, field: usize, src: Register },
+    CLoad { dest: Register, closure: Register, field: usize },
 
     Call { dest: Register, func: Register, args: Vec<Register> },
     CallLabel { dest: Register, label_index: usize, args: Vec<Register> },
@@ -66,6 +69,9 @@ impl std::fmt::Display for IROp {
             IROp::BrTrue { cond, target } => write!(f, "BrTrue r{} -> {}", cond, target),
             IROp::BrFalse { cond, target } => write!(f, "BrFalse r{} -> {}", cond, target),
             IROp::Halt => write!(f, "Halt"),
+            IROp::AllocClosure { dest } => write!(f, "AllocClosure r{}", dest),
+            IROp::CStore { closure, field, src } => write!(f, "CStore clo[r{}].{} <- r{}", closure, field, src),
+            IROp::CLoad { dest, closure, field } => write!(f, "CLoad r{} <- clo[r{}].{}", dest, closure, field),
             IROp::Call { dest, func, args } => {
                 write!(f, "Call r{} <- r{}(", dest, func)?;
                 for (i, arg) in args.iter().enumerate() {

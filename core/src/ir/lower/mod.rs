@@ -1,4 +1,3 @@
-
 use crate::ast::{AstNode, AstNodeKind, BinaryOperator, UnaryOperator};
 use super::op::IROp;
 use super::value::Value;
@@ -15,8 +14,18 @@ pub struct IrModule {
     label_counter: usize,
     /// Relocations for jumps/branches: (op_index, label_name)
     relocations: Vec<(usize, String)>,
-        /// Map of stage name -> label op index (for direct call lowering)
-        stage_labels: HashMap<String, usize>,
+    /// Map of stage name -> label op index (for direct call lowering)
+    stage_labels: HashMap<String, usize>,
+    /// Map of project name -> member map (members are simple lowered Values)
+    projects: HashMap<String, HashMap<String, Value>>,
+    /// Map of local name -> static list of identifier elements discovered in a workspace
+    static_list_locals: HashMap<String, Vec<String>>,
+    /// Map register -> constant Value when the register holds a compile-time literal
+    reg_constants: HashMap<usize, Value>,
+    /// Map local_index -> constant Value when the local was assigned a compile-time literal
+    local_constants: HashMap<usize, Value>,
+    /// Map dest register produced by an `LLocal` -> local_index (for tracking origins)
+    llocal_map: HashMap<usize, usize>,
 }
 
 impl IrModule {
@@ -28,7 +37,16 @@ impl IrModule {
             label_counter: 0,
             relocations: Vec::new(),
             stage_labels: HashMap::new(),
+            projects: HashMap::new(),
+            static_list_locals: HashMap::new(),
+            reg_constants: HashMap::new(),
+            local_constants: HashMap::new(),
+            llocal_map: HashMap::new(),
         }
+    }
+
+    pub fn get_stage_labels(&self) -> HashMap<String, usize> {
+        self.stage_labels.clone()
     }
 
     fn alloc_reg(&mut self) -> usize {
@@ -56,32 +74,34 @@ impl IrModule {
             }
         }
 
-        // Then, find the workspace matching entrypoint and lower its body as
-        // the script's execution entry. If not found, fall back to the first
-        // workspace encountered.
+        // Then, find the workspace or project matching entrypoint and lower it.
+        // Workspaces may contain both members and logic; projects contain only
+        // members. We should lower the container node (workspace/project)
+        // itself so that labels (and any nested stages) are emitted correctly.
         let mut fallback: Option<&AstNode> = None;
         if let AstNodeKind::Script { body } = &ast.kind {
             for n in body.iter() {
-                if let AstNodeKind::Workspace { name, body } = &n.kind {
-                    if fallback.is_none() {
-                        fallback = Some(&n);
+                match &n.kind {
+                    AstNodeKind::Workspace { name, .. } | AstNodeKind::Project { name, .. } => {
+                        if fallback.is_none() {
+                            fallback = Some(&n);
+                        }
+                        if name == entrypoint {
+                            // Lower the entire workspace/project node (not just its body)
+                            self.walk_node(n);
+                            // After lowering entrypoint, resolve relocations and return
+                            self.patch_relocations();
+                            return;
+                        }
                     }
-                    if name == entrypoint {
-                        // Lower the workspace body as top-level code
-                        self.walk_node(body);
-                        // After lowering entrypoint body, resolve relocations and return
-                        self.patch_relocations();
-                        return;
-                    }
+                    _ => {}
                 }
             }
         }
 
-        // If entrypoint workspace wasn't found, lower the first workspace body if present
-        if let Some(ws) = fallback {
-            if let AstNodeKind::Workspace { body, .. } = &ws.kind {
-                self.walk_node(body);
-            }
+        // If entrypoint wasn't found, lower the first workspace or project container
+        if let Some(cont) = fallback {
+            self.walk_node(cont);
         }
 
         // Resolve label relocations (jump targets)
@@ -109,12 +129,6 @@ impl IrModule {
     fn emit_brfalse_to(&mut self, cond: usize, label: String) {
         let pos = self.ops.len();
         self.ops.push(IROp::BrFalse { cond, target: 0 });
-        self.relocations.push((pos, label));
-    }
-
-    fn emit_brtrue_to(&mut self, cond: usize, label: String) {
-        let pos = self.ops.len();
-        self.ops.push(IROp::BrTrue { cond, target: 0 });
         self.relocations.push((pos, label));
     }
 
@@ -155,12 +169,110 @@ impl IrModule {
         self.locals.pop();
     }
 
+    /// Allocate a closure object and capture the given local names into it.
+    /// Returns the register containing the closure handle.
+    pub fn emit_capture_closure(&mut self, capture_names: &[String]) -> usize {
+        // allocate closure object
+        let clo_reg = self.alloc_reg();
+        self.ops.push(IROp::AllocClosure { dest: clo_reg });
+
+        for (i, name) in capture_names.iter().enumerate() {
+            // find local index for the name
+            let mut found_idx: Option<usize> = None;
+            for scope in self.locals.iter().rev() {
+                if let Some(idx) = scope.get(name) {
+                    found_idx = Some(*idx);
+                    break;
+                }
+            }
+            let local_idx = if let Some(idx) = found_idx {
+                idx
+            } else {
+                // if not found, create a new local slot (fallback)
+                let m = self.current_locals_mut();
+                let ni = m.len();
+                m.insert(name.clone(), ni);
+                ni
+            };
+
+            // load local into a register
+            let val_reg = self.alloc_reg();
+            self.ops.push(IROp::LLocal { dest: val_reg, local_index: local_idx });
+            self.llocal_map.insert(val_reg, local_idx);
+
+            // store into closure field
+            self.ops.push(IROp::CStore { closure: clo_reg, field: i, src: val_reg });
+        }
+
+        clo_reg
+    }
+
     fn walk_node(&mut self, node: &AstNode) -> Option<usize> {
         match &node.kind {
             AstNodeKind::Script { body } => {
                 for n in body.iter() {
                     self.walk_node(n);
                 }
+                None
+            }
+            AstNodeKind::Workspace { name, body } => {
+                // Emit a label for the workspace so it can be referenced as an entrypoint
+                self.emit_label(name.clone());
+                    // Enter a new locals scope for this workspace
+                    self.push_locals_scope();
+
+                    // Pre-scan the workspace body for assignments of the form
+                    // `name = [id1, id2, ...]` so we can unroll `for x in name`
+                    // loops when the list is statically known.
+                    if let AstNodeKind::Block { statements } = &body.kind {
+                        for s in statements.iter() {
+                            if let AstNodeKind::Assignment { target, value } = &s.kind {
+                                if let AstNodeKind::Identifier { name: tname } = &target.kind {
+                                    if let AstNodeKind::List { elements } = &value.kind {
+                                        let mut ids = Vec::new();
+                                        let mut all_ids = true;
+                                        for e in elements.iter() {
+                                            if let AstNodeKind::Identifier { name: idn } = &e.kind {
+                                                ids.push(idn.clone());
+                                            } else {
+                                                all_ids = false;
+                                                break;
+                                            }
+                                        }
+                                        if all_ids {
+                                            self.static_list_locals.insert(tname.clone(), ids);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Lower workspace body (members + logic)
+                    self.walk_node(body);
+
+                    self.pop_locals_scope();
+                // Ensure workspace returns by halting if none
+                self.ops.push(IROp::Halt);
+                None
+            }
+            AstNodeKind::Project { name, body } => {
+                // Projects are data containers (members only). Collect simple
+                // member literals into the `projects` registry so runtimes can
+                // resolve project metadata without emitting runtime ops here.
+                let mut members_map: HashMap<String, Value> = HashMap::new();
+                if let AstNodeKind::Block { statements } = &body.kind {
+                    for s in statements.iter() {
+                        if let AstNodeKind::Assignment { target, value } = &s.kind {
+                            if let AstNodeKind::Identifier { name: mname } = &target.kind {
+                                if let Some(v) = astnode_to_value(value) {
+                                    members_map.insert(mname.clone(), v);
+                                }
+                            }
+                        }
+                    }
+                }
+                self.projects.insert(name.clone(), members_map);
                 None
             }
             AstNodeKind::Stage { name, args, body } => {
@@ -183,8 +295,6 @@ impl IrModule {
                 }
 
                 self.walk_node(body);
-                // Ensure function returns by halting if none
-                self.ops.push(IROp::Halt);
                 self.pop_locals_scope();
                 None
             }
@@ -242,6 +352,7 @@ impl IrModule {
                     // load loop var into a register
                     let lv = self.alloc_reg();
                     self.ops.push(IROp::LLocal { dest: lv, local_index: idx });
+                    self.llocal_map.insert(lv, idx);
                     let cmp = self.alloc_reg();
                     self.ops.push(IROp::Lt { dest: cmp, src1: lv, src2: limit_reg });
                     self.emit_brfalse_to(cmp, end_lbl.clone());
@@ -252,6 +363,9 @@ impl IrModule {
                     let newv = self.alloc_reg();
                     self.ops.push(IROp::Add { dest: newv, src1: lv, src2: one });
                     self.ops.push(IROp::SLocal { src: newv, local_index: idx });
+                    if let Some(v) = self.reg_constants.get(&newv) {
+                        self.local_constants.insert(idx, v.clone());
+                    }
                     self.emit_jump_to(start_lbl.clone());
                 }
 
@@ -259,7 +373,8 @@ impl IrModule {
                 None
             }
             AstNodeKind::ForIn { iterator, iterable, body } => {
-                // If iterable is a literal list, unroll into sequential executions
+                // If iterable is a literal list, or a statically-known local list,
+                // unroll into sequential executions
                 if let AstNodeKind::List { elements } = &iterable.kind {
                     // ensure iterator local exists
                     let locals = self.current_locals_mut();
@@ -287,7 +402,34 @@ impl IrModule {
                             self.walk_node(elem).unwrap_or_else(|| self.alloc_reg())
                         };
                         self.ops.push(IROp::SLocal { src: val_reg, local_index: idx_local });
+                        if let Some(v) = self.reg_constants.get(&val_reg) {
+                            self.local_constants.insert(idx_local, v.clone());
+                        }
                         self.walk_node(body);
+                    }
+                } else if let AstNodeKind::Identifier { name: iter_name } = &iterable.kind {
+                    // If this identifier refers to a static list we discovered
+                    // earlier in the workspace, unroll using those element ids.
+                    if let Some(elems) = self.static_list_locals.get(iter_name).cloned() {
+                        let idx_local = {
+                            let locals = self.current_locals_mut();
+                            if let Some(i) = locals.get(iterator) { *i } else { let ni = locals.len(); locals.insert(iterator.clone(), ni); ni }
+                        };
+                        for elem_name in elems.iter() {
+                            // represent each element as a Symbol of the identifier
+                            let r = self.alloc_reg();
+                            let v = Value::Symbol(elem_name.clone());
+                            self.ops.push(IROp::LConst { dest: r, value: v.clone() });
+                            self.reg_constants.insert(r, v);
+                            self.ops.push(IROp::SLocal { src: r, local_index: idx_local });
+                            if let Some(v) = self.reg_constants.get(&r) {
+                                self.local_constants.insert(idx_local, v.clone());
+                            }
+                            self.walk_node(body);
+                        }
+                    } else {
+                        // General case (runtime helpers)
+                        
                     }
                 } else {
                     // General iterable lowering using runtime helpers `len(iterable)` and `index(iterable, idx)`.
@@ -312,6 +454,9 @@ impl IrModule {
                     let zero = self.alloc_reg();
                     self.ops.push(IROp::LConst { dest: zero, value: Value::Int(0) });
                     self.ops.push(IROp::SLocal { src: zero, local_index: idx_local });
+                    if let Some(v) = self.reg_constants.get(&zero) {
+                        self.local_constants.insert(idx_local, v.clone());
+                    }
 
                     let start_lbl = self.new_label();
                     let end_lbl = self.new_label();
@@ -320,6 +465,7 @@ impl IrModule {
                     // load idx and compare idx < len_dest
                     let idx_r = self.alloc_reg();
                     self.ops.push(IROp::LLocal { dest: idx_r, local_index: idx_local });
+                    self.llocal_map.insert(idx_r, idx_local);
                     let cmp = self.alloc_reg();
                     self.ops.push(IROp::Lt { dest: cmp, src1: idx_r, src2: len_dest });
                     self.emit_brfalse_to(cmp, end_lbl.clone());
@@ -331,6 +477,9 @@ impl IrModule {
                     self.ops.push(IROp::Call { dest: val_dest, func: index_func, args: vec![iter_reg, idx_r] });
                     // store into iterator local
                     self.ops.push(IROp::SLocal { src: val_dest, local_index: iter_local_idx });
+                    if let Some(v) = self.reg_constants.get(&val_dest) {
+                        self.local_constants.insert(iter_local_idx, v.clone());
+                    }
 
                     // body
                     self.walk_node(body);
@@ -341,6 +490,9 @@ impl IrModule {
                     let newv = self.alloc_reg();
                     self.ops.push(IROp::Add { dest: newv, src1: idx_r, src2: one });
                     self.ops.push(IROp::SLocal { src: newv, local_index: idx_local });
+                    if let Some(v) = self.reg_constants.get(&newv) {
+                        self.local_constants.insert(idx_local, v.clone());
+                    }
                     self.emit_jump_to(start_lbl.clone());
                     self.emit_label(end_lbl);
                 }
@@ -367,6 +519,9 @@ impl IrModule {
                         new_idx
                     };
                     self.ops.push(IROp::SLocal { src: val_reg, local_index: idx });
+                    if let Some(v) = self.reg_constants.get(&val_reg) {
+                        self.local_constants.insert(idx, v.clone());
+                    }
                 }
                 Some(val_reg)
             }
@@ -395,31 +550,42 @@ impl IrModule {
                 if let Some(idx) = found_idx {
                     let dest = self.alloc_reg();
                     self.ops.push(IROp::LLocal { dest, local_index: idx });
+                    self.llocal_map.insert(dest, idx);
                     return Some(dest);
                 }
-                // not found: treat as constant string reference to name
+                // not found: treat as a symbolic reference to the named object
                 let dest = self.alloc_reg();
-                self.ops.push(IROp::LConst { dest, value: Value::Str(name.clone()) });
+                let val = Value::Symbol(name.clone());
+                self.ops.push(IROp::LConst { dest, value: val.clone() });
+                self.reg_constants.insert(dest, val);
                 Some(dest)
             }
             AstNodeKind::Integer { value } => {
                 let dest = self.alloc_reg();
-                self.ops.push(IROp::LConst { dest, value: Value::Int(*value) });
+                let val = Value::Int(*value);
+                self.ops.push(IROp::LConst { dest, value: val.clone() });
+                self.reg_constants.insert(dest, val);
                 Some(dest)
             }
             AstNodeKind::Float { value } => {
                 let dest = self.alloc_reg();
-                self.ops.push(IROp::LConst { dest, value: Value::Float(*value) });
+                let val = Value::Float(*value);
+                self.ops.push(IROp::LConst { dest, value: val.clone() });
+                self.reg_constants.insert(dest, val);
                 Some(dest)
             }
             AstNodeKind::Bool { value } => {
                 let dest = self.alloc_reg();
-                self.ops.push(IROp::LConst { dest, value: Value::Bool(*value) });
+                let val = Value::Bool(*value);
+                self.ops.push(IROp::LConst { dest, value: val.clone() });
+                self.reg_constants.insert(dest, val);
                 Some(dest)
             }
             AstNodeKind::String { value } => {
                 let dest = self.alloc_reg();
-                self.ops.push(IROp::LConst { dest, value: Value::Str(value.clone()) });
+                let val = Value::Str(value.clone());
+                self.ops.push(IROp::LConst { dest, value: val.clone() });
+                self.reg_constants.insert(dest, val);
                 Some(dest)
             }
             AstNodeKind::BinaryOp { left, op, right } => {
@@ -471,6 +637,32 @@ impl IrModule {
                                 arg_regs.push(ar);
                             }
                         }
+
+                        // Try to substitute any argument that ultimately comes from
+                        // a local that was assigned a compile-time constant (e.g. a
+                        // project Symbol). If found, replace the arg with a fresh
+                        // LConst register so the call receives a constant.
+                        // First, collect candidate constant values for each arg without
+                        // performing any mutable operations (avoids borrow conflicts).
+                        let mut substitutes: Vec<Option<Value>> = Vec::with_capacity(arg_regs.len());
+                        for &reg in arg_regs.iter() {
+                            if let Some(&local_idx) = self.llocal_map.get(&reg) {
+                                substitutes.push(self.local_constants.get(&local_idx).cloned());
+                            } else {
+                                substitutes.push(self.reg_constants.get(&reg).cloned());
+                            }
+                        }
+
+                        // Now apply substitutions where we have a constant value.
+                        for (i, sub) in substitutes.into_iter().enumerate() {
+                            if let Some(val) = sub {
+                                let const_r = self.alloc_reg();
+                                self.ops.push(IROp::LConst { dest: const_r, value: val.clone() });
+                                self.reg_constants.insert(const_r, val);
+                                arg_regs[i] = const_r;
+                            }
+                        }
+
                         let dest = self.alloc_reg();
                         self.ops.push(IROp::CallLabel { dest, label_index: label_idx, args: arg_regs });
                         return Some(dest);
@@ -480,7 +672,7 @@ impl IrModule {
                 // Fallback: represent function as a register (string const or evaluated expr)
                 let func_reg = if let AstNodeKind::Identifier { name } = &callee.kind {
                     let r = self.alloc_reg();
-                    self.ops.push(IROp::LConst { dest: r, value: Value::Str(name.clone()) });
+                    self.ops.push(IROp::LConst { dest: r, value: Value::Symbol(name.clone()) });
                     r
                 } else {
                     let fr_opt = self.walk_node(callee);
@@ -506,8 +698,9 @@ impl IrModule {
                         AstNodeKind::Bool { value } => vals.push(Value::Bool(*value)),
                         AstNodeKind::String { value } => vals.push(Value::Str(value.clone())),
                         AstNodeKind::Identifier { name } => {
-                            // Preserve identifier as a string value in the array literal
-                            vals.push(Value::Str(name.clone()));
+                            // Preserve identifier as a symbolic reference in the array literal
+                            // so downstream passes/runtimes can distinguish named objects
+                            vals.push(Value::Symbol(name.clone()));
                         }
                         _ => {
                             // For complex elements, attempt to evaluate them; if lowering
@@ -519,20 +712,116 @@ impl IrModule {
                     }
                 }
                 let dest = self.alloc_reg();
-                self.ops.push(IROp::LConst { dest, value: Value::Array(vals) });
+                let val = Value::Array(vals);
+                self.ops.push(IROp::LConst { dest, value: val.clone() });
+                self.reg_constants.insert(dest, val);
                 Some(dest)
             }
             _ => None,
         }
     }
+
 }
 
 use std::fmt;
 
+fn astnode_to_value(node: &AstNode) -> Option<Value> {
+    match &node.kind {
+        AstNodeKind::Integer { value } => Some(Value::Int(*value)),
+        AstNodeKind::Float { value } => Some(Value::Float(*value)),
+        AstNodeKind::Bool { value } => Some(Value::Bool(*value)),
+        AstNodeKind::String { value } => Some(Value::Str(value.clone())),
+        AstNodeKind::Identifier { name } => Some(Value::Symbol(name.clone())),
+        AstNodeKind::List { elements } => {
+            let mut vals = Vec::new();
+            for e in elements.iter() {
+                if let Some(v) = astnode_to_value(e) {
+                    vals.push(v);
+                } else {
+                    vals.push(Value::Null);
+                }
+            }
+            Some(Value::Array(vals))
+        }
+        _ => None,
+    }
+}
+
 impl std::fmt::Display for IrModule {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Build a mapping from op index -> label name for human-friendly printing
+        let mut label_pos: HashMap<usize, String> = HashMap::new();
+        for (i, op) in self.ops.iter().enumerate() {
+            if let IROp::Label { name } = op {
+                label_pos.insert(i, name.clone());
+            }
+        }
+
         for op in self.ops.iter() {
-            writeln!(f, "{}", op)?;
+            match op {
+                IROp::LConst { dest, value } => {
+                    match value {
+                        Value::Int(v) => writeln!(f, "LConst r{} <- Int({})", dest, v)?,
+                        Value::Float(v) => writeln!(f, "LConst r{} <- Float({})", dest, v)?,
+                        Value::Bool(v) => writeln!(f, "LConst r{} <- Bool({})", dest, v)?,
+                        Value::Str(s) => writeln!(f, "LConst r{} <- Str(\"{}\")", dest, s)?,
+                        Value::Symbol(s) => {
+                            if self.stage_labels.contains_key(s) {
+                                writeln!(f, "LConst r{} <- Symbol(stage:{})", dest, s)?;
+                            } else {
+                                writeln!(f, "LConst r{} <- Symbol({})", dest, s)?;
+                            }
+                        }
+                        Value::Array(arr) => writeln!(f, "LConst r{} <- Array({:?})", dest, arr)?,
+                        Value::Null => writeln!(f, "LConst r{} <- Null", dest)?,
+                    }
+                }
+                IROp::LLocal { dest, local_index } => writeln!(f, "LLocal r{} <- local[{}]", dest, local_index)?,
+                IROp::SLocal { src, local_index } => writeln!(f, "SLocal local[{}] <- r{}", local_index, src)?,
+                IROp::Add { dest, src1, src2 } => writeln!(f, "Add r{} <- r{} + r{}", dest, src1, src2)?,
+                IROp::Sub { dest, src1, src2 } => writeln!(f, "Sub r{} <- r{} - r{}", dest, src1, src2)?,
+                IROp::Mul { dest, src1, src2 } => writeln!(f, "Mul r{} <- r{} * r{}", dest, src1, src2)?,
+                IROp::Div { dest, src1, src2 } => writeln!(f, "Div r{} <- r{} / r{}", dest, src1, src2)?,
+                IROp::Mod { dest, src1, src2 } => writeln!(f, "Mod r{} <- r{} % r{}", dest, src1, src2)?,
+                IROp::Eq { dest, src1, src2 } => writeln!(f, "Eq r{} <- r{} == r{}", dest, src1, src2)?,
+                IROp::Neq { dest, src1, src2 } => writeln!(f, "Neq r{} <- r{} != r{}", dest, src1, src2)?,
+                IROp::Lt { dest, src1, src2 } => writeln!(f, "Lt r{} <- r{} < r{}", dest, src1, src2)?,
+                IROp::Lte { dest, src1, src2 } => writeln!(f, "Lte r{} <- r{} <= r{}", dest, src1, src2)?,
+                IROp::Gt { dest, src1, src2 } => writeln!(f, "Gt r{} <- r{} > r{}", dest, src1, src2)?,
+                IROp::Gte { dest, src1, src2 } => writeln!(f, "Gte r{} <- r{} >= r{}", dest, src1, src2)?,
+                IROp::And { dest, src1, src2 } => writeln!(f, "And r{} <- r{} && r{}", dest, src1, src2)?,
+                IROp::Or { dest, src1, src2 } => writeln!(f, "Or r{} <- r{} || r{}", dest, src1, src2)?,
+                IROp::Not { dest, src } => writeln!(f, "Not r{} <- !r{}", dest, src)?,
+                IROp::Inc { dest } => writeln!(f, "Inc r{} ++", dest)?,
+                IROp::Dec { dest } => writeln!(f, "Dec r{} --", dest)?,
+                IROp::Label { name } => writeln!(f, "Label {}", name)?,
+                IROp::Jump { target } => writeln!(f, "Jump {}", target)?,
+                IROp::BrTrue { cond, target } => writeln!(f, "BrTrue r{} -> {}", cond, target)?,
+                IROp::BrFalse { cond, target } => writeln!(f, "BrFalse r{} -> {}", cond, target)?,
+                IROp::Halt => writeln!(f, "Halt")?,
+                IROp::AllocClosure { dest } => writeln!(f, "AllocClosure r{}", dest)?,
+                IROp::CStore { closure, field, src } => writeln!(f, "CStore clo[r{}].{} <- r{}", closure, field, src)?,
+                IROp::CLoad { dest, closure, field } => writeln!(f, "CLoad r{} <- clo[r{}].{}", dest, closure, field)?,
+                IROp::Call { dest, func, args } => {
+                    write!(f, "Call r{} <- r{}(", dest, func)?;
+                    for (i, arg) in args.iter().enumerate() {
+                        if i > 0 { write!(f, ", ")?; }
+                        write!(f, "r{}", arg)?;
+                    }
+                    writeln!(f, ")")?;
+                }
+                IROp::CallLabel { dest, label_index, args } => {
+                    // Try to resolve the label index to a human-friendly name
+                    let name = label_pos.get(label_index).cloned().unwrap_or_else(|| format!("L{}", label_index));
+                    write!(f, "CallLabel r{} <- {}(", dest, name)?;
+                    for (i, arg) in args.iter().enumerate() {
+                        if i > 0 { write!(f, ", ")?; }
+                        write!(f, "r{}", arg)?;
+                    }
+                    writeln!(f, ")")?;
+                }
+                IROp::Ret { src } => writeln!(f, "Ret r{}", src)?,
+            }
         }
         Ok(())
     }

@@ -1,0 +1,45 @@
+Magic: MSBC
+Version: 1
+Op count: 41
+
+0000  Label load_stage
+0001  LConst r0 <- Symbol(read)
+0002  LLocal r1 <- local[0]
+0003  Call r2 <- r0(r1)
+0004  Ret r2
+0005  Halt
+0006  Label process_project_stage
+0007  Eq r5 <- r3 , r4
+0008  BrFalse r5 -> 13
+0009  LConst r6 <- Symbol(say)
+0010  LConst r7 <- Str(""No sources found."")
+0011  Call r8 <- r6(r7)
+0012  LConst r9 <- Symbol(return)
+0013  Label L_internal_0
+0014  CallLabel r10 <- L0()
+0015  SLocal local[1] <- r10
+0016  LConst r11 <- Symbol(say)
+0017  LLocal r12 <- local[1]
+0018  Call r13 <- r11(r12)
+0019  Halt
+0020  LConst r14 <- Array([Symbol(test_pj)])
+0021  SLocal local[0] <- r14
+0022  LLocal r15 <- local[0]
+0023  LConst r16 <- Str("len")
+0024  Call r17 <- r16(r15)
+0025  LConst r18 <- Int(0)
+0026  SLocal local[2] <- r18
+0027  Label L_internal_1
+0028  LLocal r19 <- local[2]
+0029  Lt r20 <- r19 , r17
+0030  BrFalse r20 -> 40
+0031  LConst r21 <- Str("index")
+0032  Call r22 <- r21(r15, r19)
+0033  SLocal local[1] <- r22
+0034  LLocal r23 <- local[1]
+0035  CallLabel r24 <- L6(r23)
+0036  LConst r25 <- Int(1)
+0037  Add r26 <- r19 , r25
+0038  SLocal local[2] <- r26
+0039  Jump 27
+0040  Label L_internal_2

@@ -1,7 +1,6 @@
 use super::symbol::{Symbol, SymbolKind};
 use std::collections::HashMap;
 use crate::error::MainstageErrorExt;
-use crate::ast::AstNode;
 
 /// Diagnostics collected during analysis are stored on the SymbolTable so
 /// analyzer passes (which receive only `&mut SymbolTable`) can push warnings
