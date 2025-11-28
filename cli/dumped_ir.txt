@@ -1,3 +1,4 @@
+Jump 19
 Label load_stage
 LConst r0 <- Symbol(read)
 LLocal r1 <- local[0]
@@ -5,13 +6,13 @@ Call r2 <- r0(r1)
 Ret r2
 Label process_project_stage
 Eq r5 <- r3 == r4
-BrFalse r5 -> 12
+BrFalse r5 -> 0
 LConst r6 <- Symbol(say)
 LConst r7 <- Str(""No sources found."")
 Call r8 <- r6(r7)
 LConst r9 <- Symbol(return)
 Label L_internal_0
-CallLabel r10 <- load_stage()
+CallLabel r10 <- L0()
 SLocal local[1] <- r10
 LConst r11 <- Symbol(say)
 LLocal r12 <- local[1]
@@ -23,5 +24,18 @@ LConst r15 <- Symbol(test_pj)
 SLocal local[1] <- r15
 LLocal r16 <- local[1]
 LConst r17 <- Symbol(test_pj)
-CallLabel r18 <- process_project_stage(r17)
+Eq r21 <- r19 == r20
+BrFalse r21 -> 0
+LConst r22 <- Symbol(say)
+LConst r23 <- Str(""No sources found."")
+Call r24 <- r22(r23)
+LConst r25 <- Symbol(return)
+Label L_internal_1
+CallLabel r26 <- L0()
+SLocal local[2] <- r26
+LConst r27 <- Symbol(say)
+LLocal r28 <- local[2]
+Call r29 <- r27(r28)
+LLocal r18 <- local[1]
+Label L_internal_2
 Halt

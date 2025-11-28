@@ -26,6 +26,12 @@ pub struct IrModule {
     local_constants: HashMap<usize, Value>,
     /// Map dest register produced by an `LLocal` -> local_index (for tracking origins)
     llocal_map: HashMap<usize, usize>,
+    /// Preserve the AST for top-level stages so we can specialize/inline them
+    stage_asts: HashMap<String, AstNode>,
+    /// Map label op index -> label name (reverse of `stage_labels`)
+    label_index_to_name: HashMap<usize, String>,
+    /// When true, `emit_label` will not register stage labels into `stage_labels`
+    inlining: bool,
 }
 
 impl IrModule {
@@ -42,6 +48,9 @@ impl IrModule {
             reg_constants: HashMap::new(),
             local_constants: HashMap::new(),
             llocal_map: HashMap::new(),
+            stage_asts: HashMap::new(),
+            label_index_to_name: HashMap::new(),
+            inlining: false,
         }
     }
 
@@ -66,9 +75,11 @@ impl IrModule {
         // First, lower stage declarations so their labels exist for calls.
         if let AstNodeKind::Script { body } = &ast.kind {
             for n in body.iter() {
-                if let AstNodeKind::Stage { .. } = &n.kind {
-                    // When lowering a stage we only want to register its label and
-                    // body; walk_node handles that.
+                if let AstNodeKind::Stage { name, .. } = &n.kind {
+                    // Record the stage AST so we can specialize/inline it later.
+                    self.stage_asts.insert(name.clone(), n.clone());
+                    // Also lower the stage now as usual so non-specialized
+                    // runs still have a global callable version.
                     self.walk_node(n);
                 }
             }
@@ -89,6 +100,10 @@ impl IrModule {
                         if name == entrypoint {
                             // Lower the entire workspace/project node (not just its body)
                             self.walk_node(n);
+                            // Ensure execution starts at the selected entrypoint label by
+                            // inserting a Jump at position 0 that relocates to the label.
+                            self.ops.insert(0, IROp::Jump { target: 0 });
+                            self.relocations.push((0, name.clone()));
                             // After lowering entrypoint, resolve relocations and return
                             self.patch_relocations();
                             return;
@@ -101,7 +116,17 @@ impl IrModule {
 
         // If entrypoint wasn't found, lower the first workspace or project container
         if let Some(cont) = fallback {
+            // extract its name to make it the implicit entrypoint
+            let cont_name = match &cont.kind {
+                AstNodeKind::Workspace { name, .. } => name.clone(),
+                AstNodeKind::Project { name, .. } => name.clone(),
+                _ => "entry".to_string(),
+            };
             self.walk_node(cont);
+            // Prepend a Jump to the chosen container label so bytecode execution
+            // begins at the intended entrypoint.
+            self.ops.insert(0, IROp::Jump { target: 0 });
+            self.relocations.push((0, cont_name));
         }
 
         // Resolve label relocations (jump targets)
@@ -117,7 +142,13 @@ impl IrModule {
     fn emit_label(&mut self, name: String) {
         let pos = self.ops.len();
         self.ops.push(IROp::Label { name: name.clone() });
-        self.stage_labels.insert(name, pos);
+        // Only register top-level stage labels when not inlining specialized
+        // bodies. When inlining we still emit a Label op but do not treat it
+        // as a top-level stage label mapping.
+        if !self.inlining {
+            self.stage_labels.insert(name.clone(), pos);
+            self.label_index_to_name.insert(pos, name);
+        }
     }
 
     fn emit_jump_to(&mut self, label: String) {
@@ -627,7 +658,7 @@ impl IrModule {
                 Some(dest)
             }
             AstNodeKind::Call { callee, args } => {
-                // If the callee is a stage identifier and we have its label, emit a direct CallLabel
+                // If the callee is a stage identifier and we have its label, try a direct CallLabel
                 if let AstNodeKind::Identifier { name } = &callee.kind {
                     if let Some(&label_idx) = self.stage_labels.get(name) {
                         // lower args
@@ -638,12 +669,7 @@ impl IrModule {
                             }
                         }
 
-                        // Try to substitute any argument that ultimately comes from
-                        // a local that was assigned a compile-time constant (e.g. a
-                        // project Symbol). If found, replace the arg with a fresh
-                        // LConst register so the call receives a constant.
-                        // First, collect candidate constant values for each arg without
-                        // performing any mutable operations (avoids borrow conflicts).
+                        // Collect candidate constant substitutions (without mutating) to avoid borrow issues
                         let mut substitutes: Vec<Option<Value>> = Vec::with_capacity(arg_regs.len());
                         for &reg in arg_regs.iter() {
                             if let Some(&local_idx) = self.llocal_map.get(&reg) {
@@ -653,7 +679,7 @@ impl IrModule {
                             }
                         }
 
-                        // Now apply substitutions where we have a constant value.
+                        // Apply substitutions: replace arg reg with fresh LConst register when constant
                         for (i, sub) in substitutes.into_iter().enumerate() {
                             if let Some(val) = sub {
                                 let const_r = self.alloc_reg();
@@ -663,6 +689,102 @@ impl IrModule {
                             }
                         }
 
+                        // Attempt conservative inlining/specialization: only when we have the stage AST
+                        if let Some(stage_ast) = self.stage_asts.get(name).cloned() {
+                            // collect parameter names
+                            let mut param_names: Vec<String> = Vec::new();
+                            if let AstNodeKind::Stage { args: maybe_args, .. } = &stage_ast.kind {
+                                if let Some(params_node) = maybe_args {
+                                    if let AstNodeKind::Arguments { args: params } = &params_node.kind {
+                                        for p in params.iter() {
+                                            if let AstNodeKind::Identifier { name: pname } = &p.kind {
+                                                param_names.push(pname.clone());
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Determine constant bindings for parameters (from arg_regs)
+                            let mut param_bindings: HashMap<String, Value> = HashMap::new();
+                            for (i, pname) in param_names.iter().enumerate() {
+                                if i < arg_regs.len() {
+                                    let reg = arg_regs[i];
+                                    if let Some(v) = self.reg_constants.get(&reg) {
+                                        param_bindings.insert(pname.clone(), v.clone());
+                                    }
+                                }
+                            }
+
+                            // Only inline if all parameters are constants
+                            if param_bindings.len() == param_names.len() {
+                                let dest = self.alloc_reg();
+
+                                // Push locals scope and register parameter locals seeded with constants
+                                self.push_locals_scope();
+                                if !param_names.is_empty() {
+                                    // Insert parameter names into locals, collecting seeded constants
+                                    let mut seeded: Vec<(usize, Value)> = Vec::new();
+                                    {
+                                        let locals = self.current_locals_mut();
+                                        for pname in param_names.iter() {
+                                            let idx = locals.len();
+                                            locals.insert(pname.clone(), idx);
+                                            if let Some(v) = param_bindings.get(pname) {
+                                                seeded.push((idx, v.clone()));
+                                            }
+                                        }
+                                    }
+                                    // Now that the locals borrow is dropped, populate local_constants
+                                    for (idx, v) in seeded.into_iter() {
+                                        self.local_constants.insert(idx, v);
+                                    }
+                                }
+
+                                // Create temp return local
+                                let ret_local_idx = self.current_locals_mut().len();
+                                self.current_locals_mut().insert("__inl_ret".to_string(), ret_local_idx);
+
+                                // Inline the callee body without registering its top-level labels
+                                if let AstNodeKind::Stage { body, .. } = &stage_ast.kind {
+                                    self.inlining = true;
+                                    let start = self.ops.len();
+                                    self.walk_node(body);
+                                    let end = self.ops.len();
+                                    self.inlining = false;
+
+                                    // Prepare after-inline label and patch any Ret -> store+jump
+                                    let after_lbl = self.new_label();
+                                    let mut ret_positions: Vec<usize> = Vec::new();
+                                    for i in start..end {
+                                        if let IROp::Ret { .. } = &self.ops[i] {
+                                            ret_positions.push(i);
+                                        }
+                                    }
+
+                                    let mut offset = 0;
+                                    for pos in ret_positions.iter() {
+                                        let p = *pos + offset;
+                                        if let IROp::Ret { src } = self.ops[p].clone() {
+                                            self.ops[p] = IROp::SLocal { src, local_index: ret_local_idx };
+                                            let jpos = p + 1;
+                                            self.ops.insert(jpos, IROp::Jump { target: 0 });
+                                            self.relocations.push((jpos, after_lbl.clone()));
+                                            offset += 1;
+                                        }
+                                    }
+
+                                    // Load return local into dest and emit after-inline label
+                                    self.ops.push(IROp::LLocal { dest, local_index: ret_local_idx });
+                                    self.emit_label(after_lbl);
+                                }
+
+                                self.pop_locals_scope();
+                                return Some(dest);
+                            }
+                        }
+
+                        // Not specialized/inlined: emit a normal CallLabel
                         let dest = self.alloc_reg();
                         self.ops.push(IROp::CallLabel { dest, label_index: label_idx, args: arg_regs });
                         return Some(dest);

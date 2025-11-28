@@ -69,6 +69,9 @@ pub fn disassemble(bytes: &[u8]) -> Result<String, String> {
     // First pass: parse all ops into a vector and collect label positions
     let mut ops: Vec<ParsedOp> = Vec::with_capacity(op_count);
     let mut label_map: HashMap<usize, String> = HashMap::new();
+    // Also record labels by ordinal (the Nth Label seen) because bytecode
+    // may encode targets as label ordinals rather than absolute op indices.
+    let mut label_ordinals: Vec<String> = Vec::new();
 
     for i in 0..op_count {
         let code = read_u8(&mut cur)?;
@@ -114,12 +117,19 @@ pub fn disassemble(bytes: &[u8]) -> Result<String, String> {
             other => return Err(format!("unknown opcode 0x{:02x} at op {}", other, i)),
         };
 
-        // if this op was a Label, record it against this op index
+        // if this op was a Label, record it against this op index and its ordinal
         if let ParsedOp::Label { name } = &parsed {
             label_map.insert(i, name.clone());
+            label_ordinals.push(name.clone());
         }
 
         ops.push(parsed);
+    }
+
+    // Build mapping name -> ordinal for nicer label printing
+    let mut name_to_ord: HashMap<String, usize> = HashMap::new();
+    for (idx, name) in label_ordinals.iter().enumerate() {
+        name_to_ord.insert(name.clone(), idx);
     }
 
     // Second pass: render ops, resolving numeric targets to label names when possible
@@ -133,29 +143,41 @@ pub fn disassemble(bytes: &[u8]) -> Result<String, String> {
             ParsedOp::Not { dest, src } => out.push_str(&format!("{:04}  Not r{} <- !r{}\n", i, dest, src)),
             ParsedOp::Inc { dest } => out.push_str(&format!("{:04}  Inc r{} ++\n", i, dest)),
             ParsedOp::Dec { dest } => out.push_str(&format!("{:04}  Dec r{} --\n", i, dest)),
-            ParsedOp::Label { name } => out.push_str(&format!("{:04}  Label {}\n", i, name)),
+            ParsedOp::Label { name } => {
+                if let Some(ord) = name_to_ord.get(name) {
+                    out.push_str(&format!("{:04}  Label {} (op {}, ord {})\n", i, name, i, ord));
+                } else {
+                    out.push_str(&format!("{:04}  Label {} (op {})\n", i, name, i));
+                }
+            }
             ParsedOp::Jump { target } => {
                 let t = *target as usize;
                 if let Some(name) = label_map.get(&t) {
-                    out.push_str(&format!("{:04}  Jump {}\n", i, name));
+                    out.push_str(&format!("{:04}  Jump {} ({})\n", i, name, t));
+                } else if let Some(name) = label_ordinals.get(t) {
+                    out.push_str(&format!("{:04}  Jump {} (ord:{})\n", i, name, t));
                 } else {
-                    out.push_str(&format!("{:04}  Jump {}\n", i, target));
+                    out.push_str(&format!("{:04}  Jump L{}\n", i, t));
                 }
             }
             ParsedOp::BrTrue { cond, target } => {
                 let t = *target as usize;
                 if let Some(name) = label_map.get(&t) {
-                    out.push_str(&format!("{:04}  BrTrue r{} -> {}\n", i, cond, name));
+                    out.push_str(&format!("{:04}  BrTrue r{} -> {} ({})\n", i, cond, name, t));
+                } else if let Some(name) = label_ordinals.get(t) {
+                    out.push_str(&format!("{:04}  BrTrue r{} -> {} (ord:{})\n", i, cond, name, t));
                 } else {
-                    out.push_str(&format!("{:04}  BrTrue r{} -> {}\n", i, cond, target));
+                    out.push_str(&format!("{:04}  BrTrue r{} -> L{}\n", i, cond, t));
                 }
             }
             ParsedOp::BrFalse { cond, target } => {
                 let t = *target as usize;
                 if let Some(name) = label_map.get(&t) {
-                    out.push_str(&format!("{:04}  BrFalse r{} -> {}\n", i, cond, name));
+                    out.push_str(&format!("{:04}  BrFalse r{} -> {} ({})\n", i, cond, name, t));
+                } else if let Some(name) = label_ordinals.get(t) {
+                    out.push_str(&format!("{:04}  BrFalse r{} -> {} (ord:{})\n", i, cond, name, t));
                 } else {
-                    out.push_str(&format!("{:04}  BrFalse r{} -> {}\n", i, cond, target));
+                    out.push_str(&format!("{:04}  BrFalse r{} -> L{}\n", i, cond, t));
                 }
             }
             ParsedOp::Halt => out.push_str(&format!("{:04}  Halt\n", i)),
