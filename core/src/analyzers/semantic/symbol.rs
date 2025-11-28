@@ -11,8 +11,7 @@ pub enum SymbolKind {
 #[derive(Debug, Clone)]
 pub enum SymbolScope {
     Global,
-    Local,
-    Builtin
+    Local
 }
 
 #[derive(Debug, Clone)]
@@ -131,15 +130,6 @@ impl Symbol {
     pub fn kind(&self) -> &SymbolKind {
         &self.kind
     }
-
-    pub fn scope(&self) -> &SymbolScope {
-        &self.scope
-    }
-
-    pub fn parameters(&self) -> Option<&Vec<Symbol>> {
-        self.parameters.as_ref()
-    }
-
     pub fn returns(&self) -> Option<&InferredKind> {
         self.returns.as_ref()
     }
@@ -176,23 +166,8 @@ impl Symbol {
         }
     }
 
-    /// Get an immutable reference to a property symbol, if present.
-    pub fn get_property(&self, name: &str) -> Option<&Symbol> {
-        self.properties.as_ref()?.get(name)
-    }
-
     /// Get a mutable reference to a property symbol, if present.
     pub fn get_property_mut(&mut self, name: &str) -> Option<&mut Symbol> {
         self.properties.as_mut()?.get_mut(name)
-    }
-
-    /// Return recorded usage sites (if any).
-    pub fn usages(&self) -> &Vec<(crate::location::Location, Option<crate::location::Span>)> {
-        &self.usages
-    }
-
-    /// Return the last recorded usage site, if any.
-    pub fn last_usage(&self) -> Option<&(crate::location::Location, Option<crate::location::Span>)> {
-        self.usages.last()
     }
 }

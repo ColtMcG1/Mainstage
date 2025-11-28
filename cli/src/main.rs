@@ -1,5 +1,5 @@
 use clap::{Arg, ArgMatches, Command};
-use mainstage_core::{analyze_semantic_rules, ast::generate_ast_from_source};
+use mainstage_core::{analyze_semantic_rules, analyze_acyclic_rules, ast::generate_ast_from_source};
 use std::fs;
 
 fn main() {
@@ -84,9 +84,20 @@ fn dispatch_commands(matches: &ArgMatches) {
                 }
             };
 
-            analyze_semantic_rules(&mut ast).map_err(|e| {
-                e.iter().for_each(|f| println!("Semantic analysis error: {f}"));
-            }).ok();
+            let entry = match analyze_semantic_rules(&mut ast) {
+                Ok(name) => name,
+                Err(diags) => {
+                    diags.iter().for_each(|d| println!("Semantic analysis error: {d}"));
+                    return;
+                }
+            };
+
+            if let Err(e) = analyze_acyclic_rules(&ast) {
+                println!("Acyclic analysis error: {}", e);
+                return;
+            }
+
+            let ir_module = mainstage_core::ir::lower_ast_to_ir(&ast, &entry);
 
             if let Some(output_file) = out {
                 fs::write(output_file, format!("{:#?}", ast)).expect("Failed to write output file");
@@ -97,6 +108,10 @@ fn dispatch_commands(matches: &ArgMatches) {
                     "ast" => {
                         fs::write("dumped_ast.txt", format!("{:#?}", ast))
                             .expect("Failed to write dumped AST");
+                    }
+                    "ir" => {
+                        fs::write("dumped_ir.txt", format!("{}", ir_module))
+                            .expect("Failed to write dumped IR");
                     }
                     _ => {
                         println!("Unknown dump stage: {}", dump_stage);

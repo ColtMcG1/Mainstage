@@ -1,4 +1,5 @@
 
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum Value {
     Int(i64),
     Float(f64),

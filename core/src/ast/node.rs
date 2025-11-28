@@ -6,6 +6,7 @@ use super::kind::AstNodeKind;
 pub struct AstNode {
     id: usize,
     pub kind: AstNodeKind,
+    pub attributes: Vec<String>,
     pub location: Option<location::Location>,
     pub span: Option<location::Span>,
 }
@@ -28,6 +29,7 @@ impl AstNode {
             kind: node_type,
             location,
             span,
+            attributes: vec![],
         }
     }
 
@@ -37,6 +39,10 @@ impl AstNode {
     }
     pub fn with_span(mut self, span: crate::location::Span) -> Self {
         self.span = Some(span);
+        self
+    }
+    pub fn with_attributes(mut self, attributes: Vec<String>) -> Self {
+        self.attributes = attributes;
         self
     }
 
@@ -100,6 +106,9 @@ impl fmt::Display for AstNode {
         } else {
             fmt_indent(f, "span: None\n", 2)?;
         }
+
+        // Attributes
+        fmt_indent(f, &format!("attributes: {:?}\n", self.attributes), 2)?;
 
         writeln!(f, "}}")?;
         Ok(())

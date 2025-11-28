@@ -15,11 +15,17 @@ impl Analyzer {
 
     pub fn analyze(&mut self, node: &mut AstNode) -> Result<(), Box<dyn MainstageErrorExt>> {
         // Delegate to stmt analyzer, keep the table owned by Analyzer.
-        stmt_mod::analyze_script_statements(node, &mut self.tbl)
+        stmt_mod::analyze_script_statements(node, &mut self.tbl)?;
+        Ok(())
     }
 
     /// Return any diagnostics (warnings/infos) collected during analysis.
     pub fn take_diagnostics(&mut self) -> Vec<Box<dyn MainstageErrorExt>> {
         self.tbl.take_diagnostics()
+    }
+
+    /// Get the symbol table after analysis.
+    pub fn get_symbol_table(&self) -> &SymbolTable {
+        &self.tbl
     }
 }

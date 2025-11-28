@@ -1,3 +1,4 @@
+[entrypoint]
 workspace demo_ws {
     projects = [test_pj];
 

@@ -336,6 +336,9 @@ pub(crate) fn analyze_expression(
             // an object symbol, look up the property.
             if let crate::ast::AstNodeKind::Identifier { name } = &mut object.kind {
                 if let Some(obj_sym) = tbl.get_latest_symbol_mut(name) {
+                    // Record that the object itself was referenced (e.g. `prj` in `prj.sources`).
+                    obj_sym.increment_ref_count();
+                    obj_sym.record_usage(object.location.clone(), object.span.clone());
                     // Try to find the property on the object
                     if let Some(prop_mut) = obj_sym.get_property_mut(property) {
                         // record usage on the property symbol
@@ -365,6 +368,15 @@ pub(crate) fn analyze_expression(
             Ok(InferredKind::dynamic())
         }
         crate::ast::AstNodeKind::Index { object, index } => {
+            // If the object is a plain identifier, mark it referenced so parameters
+            // like `prj` are not reported as unused when only member/index reads occur.
+            if let crate::ast::AstNodeKind::Identifier { name } = &mut object.kind {
+                if let Some(obj_sym) = tbl.get_latest_symbol_mut(name) {
+                    obj_sym.increment_ref_count();
+                    obj_sym.record_usage(object.location.clone(), object.span.clone());
+                }
+            }
+
             // Evaluate object expression and if it's an array, return element kind
             let obj_kind = super::node::analyze_node(object, tbl)?.unwrap_or_else(|| InferredKind::dynamic());
             if obj_kind.kind == crate::analyzers::semantic::kind::Kind::Array {

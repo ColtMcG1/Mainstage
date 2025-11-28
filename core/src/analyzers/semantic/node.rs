@@ -20,7 +20,9 @@ pub(crate) fn analyze_node(
         | AstNodeKind::Null
         | AstNodeKind::UnaryOp { .. }
         | AstNodeKind::BinaryOp { .. }
-        | AstNodeKind::Call { .. } => super::expr::analyze_expression(node, tbl).map(Some),
+        | AstNodeKind::Call { .. }
+        | AstNodeKind::Member { .. }
+        | AstNodeKind::Index { .. } => super::expr::analyze_expression(node, tbl).map(Some),
         AstNodeKind::If { .. } => super::expr::analyze_if(node, tbl),
         AstNodeKind::IfElse { .. } => super::expr::analyze_ifelse(node, tbl),
         AstNodeKind::ForIn { .. } => super::expr::analyze_forin(node, tbl),

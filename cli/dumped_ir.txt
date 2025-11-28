@@ -1,0 +1,41 @@
+Label load_stage
+LConst r0 <- Str("read")
+LLocal r1 <- local[0]
+Call r2 <- r0(r1)
+Ret r2
+Halt
+Label process_project_stage
+Eq r5 <- r3 == r4
+BrFalse r5 -> 13
+LConst r6 <- Str("say")
+LConst r7 <- Str("\"No sources found.\"")
+Call r8 <- r6(r7)
+LConst r9 <- Str("return")
+Label L_internal_0
+CallLabel r10 <- L0()
+SLocal local[1] <- r10
+LConst r11 <- Str("say")
+LLocal r12 <- local[1]
+Call r13 <- r11(r12)
+Halt
+LConst r14 <- Array([Str("test_pj")])
+SLocal local[0] <- r14
+LLocal r15 <- local[0]
+LConst r16 <- Str("len")
+Call r17 <- r16(r15)
+LConst r18 <- Int(0)
+SLocal local[2] <- r18
+Label L_internal_1
+LLocal r19 <- local[2]
+Lt r20 <- r19 < r17
+BrFalse r20 -> 40
+LConst r21 <- Str("index")
+Call r22 <- r21(r15, r19)
+SLocal local[1] <- r22
+LLocal r23 <- local[1]
+CallLabel r24 <- L6(r23)
+LConst r25 <- Int(1)
+Add r26 <- r19 + r25
+SLocal local[2] <- r26
+Jump 27
+Label L_internal_2

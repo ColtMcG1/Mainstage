@@ -25,12 +25,37 @@ pub(crate) fn analyze_script_statements(
         }
     };
 
+    // Determine the workspace entrypoint: prefer a workspace explicitly
+    // marked with the `entrypoint` attribute; otherwise select the first
+    // Workspace node encountered in the script body.
+    let mut chosen: Option<String> = None;
+    let mut first_workspace: Option<String> = None;
+    for stmt in script_body.iter() {
+        if let AstNodeKind::Workspace { name, .. } = &stmt.kind {
+            if first_workspace.is_none() {
+                first_workspace = Some(name.clone());
+            }
+            // Check attributes vector on the node for "entrypoint"
+            if stmt.attributes.iter().any(|a| a == "entrypoint") {
+                chosen = Some(name.clone());
+                break;
+            }
+        }
+    }
+    if chosen.is_none() {
+        chosen = first_workspace.clone();
+    }
+    if let Some(name) = chosen {
+        tbl.set_entrypoint(name);
+    }
+
     for statement in script_body.iter_mut() {
         analyze_statement(statement, tbl)?;
     }
 
     Ok(())
 }
+
 
 fn analyze_statement(
     node: &mut AstNode,

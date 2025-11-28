@@ -189,6 +189,11 @@ fn parse_declaration_rule(
     let mut inner_pairs = next_pair.clone().into_inner();
     match next_pair.as_rule() {
         Rule::workspace_decl => {
+            // attributes are optional; only consume them if present
+            let attributes = if inner_pairs.peek().map(|p| p.as_rule() == Rule::attributes).unwrap_or(false) {
+                let attrs_pair = rules::fetch_next_pair(&mut inner_pairs, &location, &span)?;
+                parse_attributes_rule(attrs_pair, script)
+            } else { vec![] };
             let identifier_pair = rules::fetch_next_pair(&mut inner_pairs, &location, &span)?;
             let body_pair = rules::fetch_next_pair(&mut inner_pairs, &location, &span)?;
             Ok(AstNode::new(
@@ -198,9 +203,14 @@ fn parse_declaration_rule(
                 },
                 location,
                 span,
-            ))
+            ).with_attributes(attributes))
         }
         Rule::project_decl => {
+            // attributes are optional; only consume them if present
+            let attributes = if inner_pairs.peek().map(|p| p.as_rule() == Rule::attributes).unwrap_or(false) {
+                let attrs_pair = rules::fetch_next_pair(&mut inner_pairs, &location, &span)?;
+                parse_attributes_rule(attrs_pair, script)
+            } else { vec![] };
             let identifier_pair = rules::fetch_next_pair(&mut inner_pairs, &location, &span)?;
             let body_pair = rules::fetch_next_pair(&mut inner_pairs, &location, &span)?;
             Ok(AstNode::new(
@@ -210,10 +220,14 @@ fn parse_declaration_rule(
                 },
                 location,
                 span,
-            ))
+            ).with_attributes(attributes))
         }
         Rule::stage_decl => {
-            // Attribute parsing can be added here in the future. Will likely be deprecated.
+            // attributes are optional; only consume them if present
+            let attributes = if inner_pairs.peek().map(|p| p.as_rule() == Rule::attributes).unwrap_or(false) {
+                let attrs_pair = rules::fetch_next_pair(&mut inner_pairs, &location, &span)?;
+                parse_attributes_rule(attrs_pair, script)
+            } else { vec![] };
             let identifier_pair = rules::fetch_next_pair(&mut inner_pairs, &location, &span)?;
             let mut args_pair = None;
             let mut body_pair = None;
@@ -244,7 +258,7 @@ fn parse_declaration_rule(
                 },
                 location,
                 span,
-            ))
+            ).with_attributes(attributes))
         }
         _ => Err(Box::<dyn MainstageErrorExt>::from(Box::new(
             crate::ast::err::SyntaxError::with(
@@ -256,6 +270,31 @@ fn parse_declaration_rule(
             ),
         ))),
     }
+}
+
+fn parse_attributes_rule(
+    pair: pest::iterators::Pair<Rule>,
+    script: &script::Script,
+) -> Vec<String> {
+    // If the provided pair is not an attributes node, return empty.
+    if pair.as_rule() != Rule::attributes {
+        return vec![];
+    }
+
+    let (inner_pairs, _location, _span) = rules::get_data_from_rule(&pair, script);
+    // Collect identifier text for each attribute; join with commas.
+    let mut attrs: Vec<String> = Vec::new();
+    for p in inner_pairs {
+        // attribute -> identifier, but be defensive and inspect inner
+        if p.as_rule() == Rule::attribute {
+            if let Some(id_pair) = p.into_inner().next() {
+                attrs.push(id_pair.as_str().to_string());
+            }
+        } else if p.as_rule() == Rule::identifier {
+            attrs.push(p.as_str().to_string());
+        }
+    }
+    attrs
 }
 
 fn parse_arguments_rule(

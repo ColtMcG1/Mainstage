@@ -1,6 +1,7 @@
 use super::symbol::{Symbol, SymbolKind};
 use std::collections::HashMap;
 use crate::error::MainstageErrorExt;
+use crate::ast::AstNode;
 
 /// Diagnostics collected during analysis are stored on the SymbolTable so
 /// analyzer passes (which receive only `&mut SymbolTable`) can push warnings
@@ -17,6 +18,10 @@ pub struct SymbolTable {
     /// skip unused-variable warnings for object fields assigned inside those
     /// declaration bodies.
     object_contexts: Vec<Option<String>>,
+    /// Optional entrypoint workspace name for the script. Set during analysis
+    /// if a workspace is marked with the `entrypoint` attribute; otherwise
+    /// the first workspace encountered will be used.
+    entrypoint: Option<String>,
 }
 
 
@@ -26,6 +31,7 @@ impl SymbolTable {
             symbols: vec![HashMap::new()],
             diagnostics: Vec::new(),
             object_contexts: vec![None],
+            entrypoint: None,
         }
     }
 
@@ -94,6 +100,17 @@ impl SymbolTable {
     /// mutable access.
     pub fn current_object_name(&self) -> Option<String> {
         self.object_contexts.last().and_then(|o| o.clone())
+    }
+
+    /// Set the entrypoint workspace name. Analyzer should call this once the
+    /// chosen workspace name is determined.
+    pub fn set_entrypoint(&mut self, name: String) {
+        self.entrypoint = Some(name);
+    }
+
+    /// Get the configured entrypoint workspace name, if any.
+    pub fn entrypoint(&self) -> Option<String> {
+        self.entrypoint.clone()
     }
 
     /// ------- Symbol Helpers -------
