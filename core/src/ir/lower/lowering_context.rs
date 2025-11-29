@@ -1,0 +1,154 @@
+use std::collections::HashMap;
+
+use crate::analyzers::output::{AnalyzerOutput, NodeId};
+use crate::ir::module::IrModule;
+
+/// LoweringContext holds mappings and helper state that lowering passes use.
+///
+/// This is a lightweight, in-memory scaffold: analyzers produce an
+/// `AnalyzerOutput` which lowering can consume to pre-populate symbol tables
+/// and create prototypes. For now this file uses provisional numeric IDs for
+/// functions/objects; replace the provisional registration with calls into
+/// `IrModule` when wiring to real IR creation APIs.
+pub struct LoweringContext {
+    pub functions: HashMap<NodeId, u32>,
+    pub objects: HashMap<NodeId, u32>,
+    /// Map object IR id -> runtime register so lookup by declared symbol works
+    pub object_id_regs: HashMap<u32, usize>,
+    pub object_regs: HashMap<NodeId, usize>,
+    pub symbols: HashMap<String, u32>,
+    pub functions_params: HashMap<NodeId, Vec<String>>,
+    pub list_arrays: HashMap<NodeId, usize>,
+    /// Temporary identifier -> reg bindings used during lowering of constructs
+    /// like workspace `for x in ...` so module-level lowering can resolve
+    /// the loop iterator name to the per-iteration register when needed.
+    pub temp_idents: HashMap<String, usize>,
+    // next_provisional_id is no longer used - IR module provides real ids
+}
+
+impl LoweringContext {
+    /// Create an empty lowering context.
+    pub fn new() -> Self {
+        LoweringContext {
+            functions: HashMap::new(),
+            objects: HashMap::new(),
+            symbols: HashMap::new(),
+            functions_params: HashMap::new(),
+            list_arrays: HashMap::new(),
+            object_regs: HashMap::new(),
+            object_id_regs: HashMap::new(),
+            temp_idents: HashMap::new(),
+        }
+    }
+
+    /// Construct a context pre-populated from analyzer output and register the
+    /// prototypes/objects with the provided `IrModule` so lowering emits can
+    /// reference real IR ids instead of provisional placeholders.
+    pub fn from_analyzer_output(analysis: &AnalyzerOutput, ir_mod: &mut IrModule) -> Self {
+        let mut ctx = LoweringContext::new();
+
+        for func in &analysis.functions {
+            let name = func.name.as_deref().unwrap_or("<anon>");
+            let id = ir_mod.declare_function(name);
+            ctx.functions.insert(func.node_id, id);
+            if let Some(name) = &func.name {
+                ctx.symbols.insert(name.clone(), id);
+            }
+            // capture parameter names for later per-function lowering
+            let params = func.params.iter().map(|p| p.name.clone()).collect::<Vec<_>>();
+            ctx.functions_params.insert(func.node_id, params);
+        }
+
+        for obj in &analysis.objects {
+            let id = ir_mod.declare_object(&obj.name);
+            ctx.objects.insert(obj.node_id, id);
+            ctx.symbols.insert(obj.name.clone(), id);
+        }
+
+        // Note: scopes and call_graph are available in `analysis` for more
+        // advanced population of the context (scoped symbol tables, topo order).
+
+        ctx
+    }
+
+
+
+    pub fn get_function_id(&self, node_id: NodeId) -> Option<u32> {
+        self.functions.get(&node_id).copied()
+    }
+
+    pub fn get_object_id(&self, node_id: NodeId) -> Option<u32> {
+        self.objects.get(&node_id).copied()
+    }
+
+    pub fn bind_function_id(&mut self, node_id: NodeId, id: u32) {
+        self.functions.insert(node_id, id);
+    }
+
+    pub fn bind_object_id(&mut self, node_id: NodeId, id: u32) {
+        self.objects.insert(node_id, id);
+    }
+
+    /// Bind a module-level register that will hold the runtime object for
+    /// the given AST node id (workspace/project). This lets other lowering
+    /// phases reference the same runtime slot for property ops.
+    pub fn bind_object_reg(&mut self, node_id: NodeId, reg: usize) {
+        eprintln!("[lower-debug] bind_object_reg node_id={} reg=r{}", node_id, reg);
+        self.object_regs.insert(node_id, reg);
+    }
+
+    /// Bind a runtime register for an object by its declared object id
+    /// (the numeric id returned by `IrModule::declare_object`). This lets
+    /// lowering look up object runtime slots by symbol->object id mapping.
+    pub fn bind_object_reg_by_objid(&mut self, obj_id: u32, reg: usize) {
+        eprintln!("[lower-debug] bind_object_reg_by_objid obj_id={} reg=r{}", obj_id, reg);
+        self.object_id_regs.insert(obj_id, reg);
+    }
+
+    pub fn get_object_reg(&self, node_id: NodeId) -> Option<usize> {
+        let v = self.object_regs.get(&node_id).copied();
+        eprintln!("[lower-debug] get_object_reg node_id={} -> {:?}", node_id, v);
+        v
+    }
+
+    pub fn get_object_reg_by_objid(&self, obj_id: u32) -> Option<usize> {
+        let v = self.object_id_regs.get(&obj_id).copied();
+        eprintln!("[lower-debug] get_object_reg_by_objid obj_id={} -> {:?}", obj_id, v);
+        v
+    }
+
+    /// Bind a statically-created list (variable name) to a module register
+    /// so other lowering passes can reference the array register.
+    pub fn bind_list_array(&mut self, node_id: NodeId, reg: usize) {
+        eprintln!("[lower-debug] bind_list_array node_id={} reg=r{}", node_id, reg);
+        self.list_arrays.insert(node_id, reg);
+    }
+
+    /// Lookup a previously bound list array register by the AST node id of
+    /// the assignment target or iterable identifier.
+    pub fn get_list_array(&self, node_id: NodeId) -> Option<usize> {
+        let v = self.list_arrays.get(&node_id).copied();
+        eprintln!("[lower-debug] get_list_array node_id={} -> {:?}", node_id, v);
+        v
+    }
+
+    /// Bind a temporary identifier name to a runtime register for the
+    /// duration of a lowering operation (e.g. lowering a workspace for-in
+    /// body). This lets module-level lowering (which sometimes runs in the
+    /// same pass) refer to the item register by name.
+    pub fn bind_temp_ident(&mut self, name: &str, reg: usize) {
+        eprintln!("[lower-debug] bind_temp_ident name='{}' reg=r{}", name, reg);
+        self.temp_idents.insert(name.to_string(), reg);
+    }
+
+    pub fn unbind_temp_ident(&mut self, name: &str) {
+        eprintln!("[lower-debug] unbind_temp_ident name='{}'", name);
+        self.temp_idents.remove(name);
+    }
+
+    pub fn get_temp_ident(&self, name: &str) -> Option<usize> {
+        let v = self.temp_idents.get(name).copied();
+        eprintln!("[lower-debug] get_temp_ident name='{}' -> {:?}", name, v);
+        v
+    }
+}

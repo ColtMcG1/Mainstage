@@ -2,7 +2,7 @@ use super::value::Value;
 
 type Register = usize;
 
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum IROp {
     LConst { dest: Register, value: Value },
     
@@ -36,6 +36,14 @@ pub enum IROp {
     AllocClosure { dest: Register },
     CStore { closure: Register, field: usize, src: Register },
     CLoad { dest: Register, closure: Register, field: usize },
+    
+    // Array and property operations
+    ArrayNew { dest: Register, elems: Vec<Register> },
+    ArrayGet { dest: Register, array: Register, index: Register },
+    ArraySet { array: Register, index: Register, src: Register },
+
+    GetProp { dest: Register, obj: Register, key: Register },
+    SetProp { obj: Register, key: Register, src: Register },
 
     Call { dest: Register, func: Register, args: Vec<Register> },
     CallLabel { dest: Register, label_index: usize, args: Vec<Register> },
@@ -93,6 +101,18 @@ impl std::fmt::Display for IROp {
                 write!(f, ")")
             }
             IROp::Ret { src } => write!(f, "Ret r{}", src),
+            IROp::ArrayNew { dest, elems } => {
+                write!(f, "ArrayNew r{} <- [", dest)?;
+                for (i, r) in elems.iter().enumerate() {
+                    if i > 0 { write!(f, ", ")?; }
+                    write!(f, "r{}", r)?;
+                }
+                write!(f, "]")
+            }
+            IROp::ArrayGet { dest, array, index } => write!(f, "ArrayGet r{} <- r{}[r{}]", dest, array, index),
+            IROp::ArraySet { array, index, src } => write!(f, "ArraySet r{}[r{}] <- r{}", array, index, src),
+            IROp::GetProp { dest, obj, key } => write!(f, "GetProp r{} <- r{}.r{}", dest, obj, key),
+            IROp::SetProp { obj, key, src } => write!(f, "SetProp r{}.r{} <- r{}", obj, key, src),
         }
     }
 }

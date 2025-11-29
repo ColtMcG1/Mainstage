@@ -4,6 +4,8 @@ workspace demo_ws {
 
     for p in projects
     {
+        say("Processing project:");
+        say(p.sources);
         process_project_stage(p);
     }
 }
@@ -14,7 +16,10 @@ project test_pj {
 
 stage load_stage(var)
 {
-    return read(var);
+    say(var);
+    in = read(var);
+    say(in);
+    return in;
 }
 
 stage process_project_stage(prj)
@@ -23,6 +28,8 @@ stage process_project_stage(prj)
         say("No sources found.");
         return;
     }
-    in = load_stage(prj.sources[0]);
+    var = prj.sources[0];
+    say(var);
+    in = load_stage(var);
     say(in);
 }

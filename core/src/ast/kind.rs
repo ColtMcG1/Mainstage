@@ -67,6 +67,38 @@ pub enum AstNodeKind {
     Null,
 }
 
+impl AstNodeKind {
+    pub fn is_expression(&self) -> bool {
+        matches!(
+            self,
+            AstNodeKind::UnaryOp { .. }
+                | AstNodeKind::BinaryOp { .. }
+                | AstNodeKind::Assignment { .. }
+                | AstNodeKind::Call { .. }
+                | AstNodeKind::Member { .. }
+                | AstNodeKind::Index { .. }
+                | AstNodeKind::Identifier { .. }
+                | AstNodeKind::String { .. }
+                | AstNodeKind::Integer { .. }
+                | AstNodeKind::Float { .. }
+                | AstNodeKind::Bool { .. }
+                | AstNodeKind::List { .. }
+                | AstNodeKind::Null
+        )
+    }
+
+    /// If this kind is a container (Workspace or Project), return a reference
+    /// to the contained body `AstNode`.
+    pub fn container_body(&self) -> Option<&AstNode> {
+        match self {
+            AstNodeKind::Workspace { body, .. } | AstNodeKind::Project { body, .. } | AstNodeKind::Stage { body, .. } => {
+                Some(body.as_ref())
+            }
+            _ => None,
+        }
+    }
+}
+
 use std::fmt;
 
 impl fmt::Display for AstNodeKind {

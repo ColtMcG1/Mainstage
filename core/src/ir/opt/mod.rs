@@ -1,5 +1,5 @@
 //! IR optimizer module: constant-folding and simple interprocedural substitution
-use crate::ir::lower::IrModule;
+use crate::ir::module::IrModule;
 use crate::ir::op::IROp;
 use crate::ir::value::Value;
 use std::collections::HashMap;

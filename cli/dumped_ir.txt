@@ -1,51 +1,54 @@
-Jump 20
-Label load_stage
-LConst r0 <- Symbol(read)
-LLocal r1 <- local[0]
-Call r2 <- r0(r1)
-Ret r2
-Label process_project_stage
-Eq r5 <- r3 == r4
-BrFalse r5 -> 14
-LConst r6 <- Symbol(say)
-LConst r7 <- Str("No sources found.")
-Call r8 <- r6(r7)
-LConst r9 <- Symbol(return)
-Label L_internal_0
-CallLabel r11 <- L0(r10)
-SLocal local[1] <- r11
-LConst r12 <- Symbol(say)
-LLocal r13 <- local[1]
-Call r14 <- r12(r13)
-Label demo_ws
-LConst r15 <- Array([Symbol("test_pj")])
-SLocal local[0] <- r15
-LConst r16 <- Symbol(test_pj)
-SLocal local[1] <- r16
-LConst r17 <- Symbol(test_pj)
-LConst r18 <- Symbol(test_pj)
-LConst r20 <- Array([Str("./samples/e2e/*.ms")])
-Eq r22 <- r20 == r21
-BrFalse r22 -> 34
-LConst r23 <- Symbol(say)
-LConst r24 <- Str("No sources found.")
-Call r25 <- r23(r24)
-LConst r26 <- Symbol(return)
-Label L_internal_1
-LConst r27 <- Array([Str("./samples/e2e/*.ms")])
-LConst r28 <- Str("./samples/e2e/*.ms")
-LConst r29 <- Str("./samples/e2e/*.ms")
-LConst r31 <- Symbol(read)
-LConst r32 <- Array([Symbol("test_pj")])
-Call r33 <- r31(r32)
-SLocal local[1] <- r33
-Jump 44
-LLocal r30 <- local[1]
-Label L_internal_2
-SLocal local[2] <- r30
-LConst r34 <- Symbol(say)
-LLocal r35 <- local[2]
-Call r36 <- r34(r35)
-LLocal r19 <- local[1]
-Label L_internal_3
-Halt
+0000: LConst r0 <- Object({})
+0001: LConst r1 <- Array([Str("./samples/e2e/*.ms")])
+0002: LConst r2 <- Symbol("sources")
+0003: SetProp r0.r2 <- r1
+0004: LConst r3 <- Array([Symbol("test_pj")])
+0005: LConst r4 <- Str("Processing project:")
+0006: LConst r5 <- Symbol("say")
+0007: Call r6 <- r5(r4)
+0008: LConst r7 <- Symbol("sources")
+0009: LConst r8 <- Symbol("p")
+0010: GetProp r9 <- r8.r7
+0011: LConst r10 <- Symbol("say")
+0012: Call r11 <- r10(r9)
+0013: LConst r12 <- Symbol("p")
+0014: CallLabel r13 <- L0(r12)
+0015: LConst r14 <- Symbol("var")
+0016: Label L1
+0017: LLocal r15 <- local[0]
+0018: LConst r16 <- Symbol("say")
+0019: Call r17 <- r16(r15)
+0020: LConst r18 <- Symbol("read")
+0021: Call r19 <- r18(r14)
+0022: SLocal local[1] <- r19
+0023: LLocal r20 <- local[1]
+0024: LConst r21 <- Symbol("say")
+0025: Call r22 <- r21(r20)
+0026: LLocal r23 <- local[1]
+0027: Ret r23
+0028: LConst r24 <- Symbol("var")
+0029: Label L0
+0030: LConst r25 <- Symbol("sources")
+0031: LLocal r26 <- local[0]
+0032: GetProp r27 <- r26.r25
+0033: LConst r28 <- Null
+0034: Eq r29 <- r27 == r28
+0035: BrFalse r29 -> 39
+0036: LConst r30 <- Str("No sources found.")
+0037: LConst r31 <- Symbol("say")
+0038: Call r32 <- r31(r30)
+0039: LConst r33 <- Int(0)
+0040: LConst r34 <- Symbol("sources")
+0041: LLocal r35 <- local[0]
+0042: GetProp r36 <- r35.r34
+0043: ArrayGet r37 <- r36[r33]
+0044: SLocal local[1] <- r37
+0045: LLocal r38 <- local[1]
+0046: LConst r39 <- Symbol("say")
+0047: Call r40 <- r39(r38)
+0048: CallLabel r41 <- L1(r24)
+0049: SLocal local[2] <- r41
+0050: LLocal r42 <- local[2]
+0051: LConst r43 <- Symbol("say")
+0052: Call r44 <- r43(r42)
+0053: Halt

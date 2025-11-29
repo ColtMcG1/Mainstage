@@ -21,6 +21,7 @@ enum RunValue {
     Str(String),
     Symbol(String),
     Array(Vec<RunValue>),
+    Object(std::collections::HashMap<String, RunValue>),
     Null,
 }
 
@@ -33,6 +34,7 @@ impl From<Value> for RunValue {
             Value::Str(s) => RunValue::Str(s),
             Value::Symbol(s) => RunValue::Symbol(s),
             Value::Array(a) => RunValue::Array(a.into_iter().map(From::from).collect()),
+            Value::Object(m) => RunValue::Object(m.into_iter().map(|(k,v)| (k, v.into())).collect()),
             Value::Null => RunValue::Null,
         }
     }
@@ -47,6 +49,7 @@ impl RunValue {
             RunValue::Str(s) => !s.is_empty(),
             RunValue::Symbol(_) => true,
             RunValue::Array(a) => !a.is_empty(),
+            RunValue::Object(m) => !m.is_empty(),
             RunValue::Null => false,
         }
     }
@@ -59,6 +62,7 @@ impl RunValue {
             RunValue::Str(s) => Value::Str(s.clone()),
             RunValue::Symbol(s) => Value::Symbol(s.clone()),
             RunValue::Array(a) => Value::Array(a.iter().map(|rv| rv.to_value()).collect()),
+            RunValue::Object(m) => Value::Object(m.iter().map(|(k,v)| (k.clone(), v.to_value())).collect()),
             RunValue::Null => Value::Null,
         }
     }
@@ -132,6 +136,11 @@ enum Op {
     Halt,
     Call { dest: usize, func: usize, args: Vec<usize> },
     CallLabel { dest: usize, label_index: usize, args: Vec<usize> },
+    ArrayNew { dest: usize, elems: Vec<usize> },
+    ArrayGet { dest: usize, array: usize, index: usize },
+    ArraySet { array: usize, index: usize, src: usize },
+    GetProp { dest: usize, obj: usize, key: usize },
+    SetProp { obj: usize, key: usize, src: usize },
     Ret { src: usize },
 }
 
@@ -156,7 +165,10 @@ pub fn run_bytecode(bytes: &[u8]) -> Result<(), String> {
 
     // parse ops and collect label positions
     let mut ops: Vec<Op> = Vec::with_capacity(op_count);
+    // map: op_index -> label_name (used for printing)
     let mut label_pos: HashMap<usize, String> = HashMap::new();
+    // map: label_name -> op_index (used for resolving CallLabel by name)
+    let mut label_by_name: HashMap<String, usize> = HashMap::new();
     for i in 0..op_count {
         let code = read_u8(&mut cur)?;
         match code {
@@ -183,7 +195,7 @@ pub fn run_bytecode(bytes: &[u8]) -> Result<(), String> {
             0x28 => { let dest = read_u32(&mut cur)? as usize; let src = read_u32(&mut cur)? as usize; ops.push(Op::Not { dest, src }); }
             0x30 => { let dest = read_u32(&mut cur)? as usize; ops.push(Op::Inc { dest }); }
             0x31 => { let dest = read_u32(&mut cur)? as usize; ops.push(Op::Dec { dest }); }
-            0x40 => { let name = read_string(&mut cur)?; ops.push(Op::Label); label_pos.insert(i, name); }
+            0x40 => { let name = read_string(&mut cur)?; ops.push(Op::Label); label_pos.insert(i, name.clone()); label_by_name.insert(name.clone(), i); }
             0x41 => { let target = read_u32(&mut cur)? as usize; ops.push(Op::Jump { target }); }
             0x42 => { let cond = read_u32(&mut cur)? as usize; let target = read_u32(&mut cur)? as usize; ops.push(Op::BrTrue { cond, target }); }
             0x43 => { let cond = read_u32(&mut cur)? as usize; let target = read_u32(&mut cur)? as usize; ops.push(Op::BrFalse { cond, target }); }
@@ -198,6 +210,37 @@ pub fn run_bytecode(bytes: &[u8]) -> Result<(), String> {
                 let dest = read_u32(&mut cur)? as usize; let lbl = read_u32(&mut cur)? as usize; let argc = read_u32(&mut cur)? as usize;
                 let mut args = Vec::new(); for _ in 0..argc { args.push(read_u32(&mut cur)? as usize); }
                 ops.push(Op::CallLabel { dest, label_index: lbl, args });
+            }
+            0x93 => {
+                let dest = read_u32(&mut cur)? as usize;
+                let obj = read_u32(&mut cur)? as usize;
+                let key = read_u32(&mut cur)? as usize;
+                ops.push(Op::GetProp { dest, obj, key });
+            }
+            0x94 => {
+                let obj = read_u32(&mut cur)? as usize;
+                let key = read_u32(&mut cur)? as usize;
+                let src = read_u32(&mut cur)? as usize;
+                ops.push(Op::SetProp { obj, key, src });
+            }
+            0x90 => {
+                let dest = read_u32(&mut cur)? as usize;
+                let len = read_u32(&mut cur)? as usize;
+                let mut elems = Vec::new();
+                for _ in 0..len { elems.push(read_u32(&mut cur)? as usize); }
+                ops.push(Op::ArrayNew { dest, elems });
+            }
+            0x91 => {
+                let dest = read_u32(&mut cur)? as usize;
+                let array = read_u32(&mut cur)? as usize;
+                let index = read_u32(&mut cur)? as usize;
+                ops.push(Op::ArrayGet { dest, array, index });
+            }
+            0x92 => {
+                let array = read_u32(&mut cur)? as usize;
+                let index = read_u32(&mut cur)? as usize;
+                let src = read_u32(&mut cur)? as usize;
+                ops.push(Op::ArraySet { array, index, src });
             }
             0x80 => { let src = read_u32(&mut cur)? as usize; ops.push(Op::Ret { src }); }
             other => return Err(format!("unknown opcode 0x{:02x} at op {}", other, i)),
@@ -219,9 +262,20 @@ pub fn run_bytecode(bytes: &[u8]) -> Result<(), String> {
     };
     // start execution at op 0
     let mut pc: usize = 0;
+    let mut steps: usize = 0;
+
+    // debug: dump parsed ops and label positions
+    eprintln!("[vm] parsed ops={} labels={:?}", ops.len(), label_pos);
+    for (i, o) in ops.iter().enumerate() {
+        eprintln!("[vm] op {:04} {:?}", i, o);
+    }
 
     // call-site frame management when invoking CallLabel: we need to set return_pc and return_reg
     while pc < ops.len() {
+        steps += 1;
+        if steps > 200 {
+            return Err("VM step limit exceeded".to_string());
+        }
         let op = &ops[pc];
         match op {
             Op::LConst { dest, val } => {
@@ -303,9 +357,21 @@ pub fn run_bytecode(bytes: &[u8]) -> Result<(), String> {
             Op::Inc { dest } => { ensure_reg(&mut regs, *dest); if let RunValue::Int(i)= &mut regs[*dest] { *i += 1 } ; pc+=1; }
             Op::Dec { dest } => { ensure_reg(&mut regs, *dest); if let RunValue::Int(i)= &mut regs[*dest] { *i -= 1 } ; pc+=1; }
             Op::Label { .. } => { pc += 1; }
-            Op::Jump { target } => { pc = *target; }
-            Op::BrTrue { cond, target } => { ensure_reg(&mut regs, *cond); if regs[*cond].as_bool() { pc = *target } else { pc += 1 } }
-            Op::BrFalse { cond, target } => { ensure_reg(&mut regs, *cond); if !regs[*cond].as_bool() { pc = *target } else { pc += 1 } }
+            Op::Jump { target } => { eprintln!("[vm] pc={} Jump target={}", pc, target); pc = *target; }
+            Op::BrTrue { cond, target } => {
+                ensure_reg(&mut regs, *cond);
+                let val = regs[*cond].to_value();
+                let tgt_name = label_pos.get(target);
+                eprintln!("[vm] pc={} BrTrue cond_reg={} val={:?} target={} name={:?}", pc, cond, val, target, tgt_name);
+                if regs[*cond].as_bool() { pc = *target } else { pc += 1 }
+            }
+            Op::BrFalse { cond, target } => {
+                ensure_reg(&mut regs, *cond);
+                let val = regs[*cond].to_value();
+                let tgt_name = label_pos.get(target);
+                eprintln!("[vm] pc={} BrFalse cond_reg={} val={:?} target={} name={:?}", pc, cond, val, target, tgt_name);
+                if !regs[*cond].as_bool() { pc = *target } else { pc += 1 }
+            }
             Op::Halt => { break; }
             Op::Call { dest, func, args } => {
                 ensure_reg(&mut regs, *func);
@@ -329,14 +395,128 @@ pub fn run_bytecode(bytes: &[u8]) -> Result<(), String> {
                 let return_pc = pc + 1;
                 // seed frame locals with args from registers
                 let mut f = Frame { locals: Vec::new(), return_pc: Some(return_pc), return_reg: Some(*dest) };
+                let mut arg_vals: Vec<RunValue> = Vec::new();
                 for (i, &areg) in args.iter().enumerate() {
                     ensure_reg(&mut regs, areg);
                     if i >= f.locals.len() { f.locals.resize(i+1, RunValue::Null); }
                     f.locals[i] = regs[areg].clone();
+                    arg_vals.push(regs[areg].clone());
                 }
+                // CallLabel encodes a label ordinal (L{n}). Resolve to op index.
+                let label_name = format!("L{}", label_index);
+                let resolved = label_by_name.get(&label_name).copied();
+                eprintln!("[vm] pc={} CallLabel lbl={} name={:?} resolved_idx={:?} args_regs={:?} arg_vals={:?}", pc, label_index, label_by_name.get(&label_name), resolved, args, arg_vals.iter().map(|v| v.to_value()).collect::<Vec<_>>());
                 frames.push(f);
-                // jump to the label (the label op is at label_index, start after it)
-                pc = *label_index + 1;
+                // jump to the label (the label op is at resolved op index, start after it)
+                if let Some(idx) = resolved { pc = idx + 1; } else { return Err(format!("CallLabel: unknown label '{}'", label_name)); }
+            }
+            Op::ArrayNew { dest, elems } => {
+                // build a new array from the values in the specified registers
+                let mut items: Vec<RunValue> = Vec::new();
+                for &r in elems.iter() { ensure_reg(&mut regs, r); items.push(regs[r].clone()); }
+                ensure_reg(&mut regs, *dest);
+                regs[*dest] = RunValue::Array(items);
+                pc += 1;
+            }
+            Op::ArrayGet { dest, array, index } => {
+                ensure_reg(&mut regs, *array); ensure_reg(&mut regs, *index); ensure_reg(&mut regs, *dest);
+                // Clone the array and index values so we don't hold multiple borrows
+                let arr_val = regs[*array].clone();
+                let idx_val = regs[*index].clone();
+                match arr_val {
+                    RunValue::Array(a) => {
+                        if let RunValue::Int(i) = idx_val {
+                            let idx = i as isize;
+                            if idx >= 0 && (idx as usize) < a.len() { regs[*dest] = a[idx as usize].clone(); }
+                            else { regs[*dest] = RunValue::Null; }
+                        } else { regs[*dest] = RunValue::Null; }
+                    }
+                    _ => { regs[*dest] = RunValue::Null; }
+                }
+                pc += 1;
+            }
+            Op::ArraySet { array, index, src } => {
+                ensure_reg(&mut regs, *array); ensure_reg(&mut regs, *index); ensure_reg(&mut regs, *src);
+                // Clone index and src values ahead of the mutable borrow
+                let idx_val = regs[*index].clone();
+                let src_val = regs[*src].clone();
+                // ensure the array register contains an Array, creating one if necessary
+                match &mut regs[*array] {
+                    RunValue::Array(a) => {
+                        if let RunValue::Int(i) = idx_val {
+                            let idx = i as usize;
+                            if idx >= a.len() { a.resize(idx+1, RunValue::Null); }
+                            a[idx] = src_val;
+                        }
+                    }
+                    other => {
+                        // replace with a new array big enough to hold the index
+                        if let RunValue::Int(i) = idx_val {
+                            let idx = i as usize;
+                            let mut a: Vec<RunValue> = Vec::new();
+                            a.resize(idx+1, RunValue::Null);
+                            a[idx] = src_val;
+                            *other = RunValue::Array(a);
+                        }
+                    }
+                }
+                pc += 1;
+            }
+            Op::GetProp { dest, obj, key } => {
+                ensure_reg(&mut regs, *obj); ensure_reg(&mut regs, *key); ensure_reg(&mut regs, *dest);
+                match &regs[*obj] {
+                    RunValue::Object(map) => {
+                        // key can be Symbol or Str
+                        let k = match &regs[*key] {
+                            RunValue::Symbol(s) => s.clone(),
+                            RunValue::Str(s) => s.clone(),
+                            _ => String::new(),
+                        };
+                        if let Some(v) = map.get(&k) { regs[*dest] = v.clone(); } else { regs[*dest] = RunValue::Null; }
+                    }
+                    RunValue::Array(a) => {
+                        // support array.length property
+                        match &regs[*key] {
+                            RunValue::Symbol(s) | RunValue::Str(s) => {
+                                if s == "length" { regs[*dest] = RunValue::Int(a.len() as i64); }
+                                else { regs[*dest] = RunValue::Null; }
+                            }
+                            _ => { regs[*dest] = RunValue::Null; }
+                        }
+                    }
+                    RunValue::Str(s) => {
+                        // support string.length property
+                        match &regs[*key] {
+                            RunValue::Symbol(k) | RunValue::Str(k) => {
+                                if k == "length" { regs[*dest] = RunValue::Int(s.chars().count() as i64); }
+                                else { regs[*dest] = RunValue::Null; }
+                            }
+                            _ => { regs[*dest] = RunValue::Null; }
+                        }
+                    }
+                    _ => { regs[*dest] = RunValue::Null; }
+                }
+                pc += 1;
+            }
+            Op::SetProp { obj, key, src } => {
+                ensure_reg(&mut regs, *obj); ensure_reg(&mut regs, *key); ensure_reg(&mut regs, *src);
+                // ensure obj is an Object; if not, replace it with a new object
+                let key_str = match &regs[*key] {
+                    RunValue::Symbol(s) => s.clone(),
+                    RunValue::Str(s) => s.clone(),
+                    _ => String::new(),
+                };
+                let src_val = regs[*src].clone();
+                match &mut regs[*obj] {
+                    RunValue::Object(map) => { map.insert(key_str, src_val); }
+                    other => {
+                        // replace non-object with an object that holds the property
+                        let mut m = std::collections::HashMap::new();
+                        m.insert(key_str, src_val);
+                        *other = RunValue::Object(m);
+                    }
+                }
+                pc += 1;
             }
             Op::Ret { src } => {
                 ensure_reg(&mut regs, *src);
@@ -365,6 +545,8 @@ pub fn run_bytecode(bytes: &[u8]) -> Result<(), String> {
 }
 
 fn run_host_fn(name: &str, args: &Vec<RunValue>) -> Result<RunValue, String> {
+    // Debug: log host calls and argument values for tracing lowering/runtime issues
+    eprintln!("[vm] host call '{}' args={:?}", name, args.iter().map(|a| a.to_value()).collect::<Vec<_>>());
     match name {
         "ask" => {
             use std::io::{self, Write};
@@ -488,6 +670,16 @@ fn read_value(cur: &mut Cursor<&[u8]>) -> Result<RunValue, String> {
         0x04 => { let s = read_string(cur)?; Ok(RunValue::Str(s)) }
         0x05 => { let s = read_string(cur)?; Ok(RunValue::Symbol(s)) }
         0x06 => { let len = read_u32(cur)? as usize; let mut items = Vec::new(); for _ in 0..len { items.push(read_value(cur)?); } Ok(RunValue::Array(items)) }
+            0x08 => {
+                let len = read_u32(cur)? as usize;
+                let mut map = std::collections::HashMap::new();
+                for _ in 0..len {
+                    let key = read_string(cur)?;
+                    let val = read_value(cur)?;
+                    map.insert(key, val);
+                }
+                Ok(RunValue::Object(map))
+            }
         0x07 => Ok(RunValue::Null),
         other => Err(format!("unknown value tag 0x{:02x}", other)),
     }

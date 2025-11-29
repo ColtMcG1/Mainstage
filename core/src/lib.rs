@@ -43,7 +43,10 @@ pub fn run_ir_in_vm(_ir: &str) -> Result<String, Box<dyn MainstageErrorExt>> {
 
 pub fn compile_source_to_ir(source: &Script) -> Result<String, Box<dyn MainstageErrorExt>> {
     let mut ast = ast::generate_ast_from_source(source)?;
-    let _analysis = analyze_semantic_rules(&mut ast);
+    let (_entry, _analysis) = match analyze_semantic_rules(&mut ast) {
+        Ok((name, analysis)) => (name, analysis),
+        Err(diags) => return Err(diags.into_iter().next().unwrap()),
+    };
     //let ir = generate_ir_from_ast("", &ast)?;
     //let optimized_ir = optimize_ir(&ir)?;
     //Ok(optimized_ir)

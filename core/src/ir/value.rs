@@ -1,5 +1,5 @@
 
-#[derive(Debug, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     Int(i64),
     Float(f64),
@@ -7,5 +7,6 @@ pub enum Value {
     Str(String),
     Symbol(String),
     Array(Vec<Value>),
+    Object(std::collections::HashMap<String, Value>),
     Null,
 }

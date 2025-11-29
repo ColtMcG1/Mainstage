@@ -112,8 +112,8 @@ fn dispatch_commands(matches: &ArgMatches) {
                 }
             };
 
-            let entry = match analyze_semantic_rules(&mut ast) {
-                Ok(name) => name,
+            let (entry, analysis) = match analyze_semantic_rules(&mut ast) {
+                Ok((name, analysis)) => (name, analysis),
                 Err(diags) => {
                     diags.iter().for_each(|d| println!("Semantic analysis error: {d}"));
                     return;
@@ -125,7 +125,7 @@ fn dispatch_commands(matches: &ArgMatches) {
                 return;
             }
 
-            let ir_module = mainstage_core::ir::lower_ast_to_ir(&ast, &entry, optimize);
+            let ir_module = mainstage_core::ir::lower_ast_to_ir(&ast, &entry, optimize, Some(&analysis));
 
             let bytecode = mainstage_core::ir::emit_bytecode(&ir_module);
 
@@ -166,8 +166,8 @@ fn dispatch_commands(matches: &ArgMatches) {
                 }
             };
 
-            let entry = match analyze_semantic_rules(&mut ast) {
-                Ok(name) => name,
+            let (entry, _analysis) = match analyze_semantic_rules(&mut ast) {
+                Ok((name, analysis)) => (name, analysis),
                 Err(diags) => {
                     diags.iter().for_each(|d| println!("Semantic analysis error: {d}"));
                     return;
@@ -179,7 +179,7 @@ fn dispatch_commands(matches: &ArgMatches) {
                 return;
             }
 
-            let ir_module = mainstage_core::ir::lower_ast_to_ir(&ast, &entry, optimize);
+            let ir_module = mainstage_core::ir::lower_ast_to_ir(&ast, &entry, optimize, Some(&_analysis));
 
             let bytecode = mainstage_core::ir::emit_bytecode(&ir_module);
             // Run the bytecode in the VM
