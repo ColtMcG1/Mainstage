@@ -4,7 +4,7 @@ This project is licensed to you (the "Licensee") under the following terms (the 
 
 ## Definitions
 
-- **Licensor**: The author or copyright holder of the software. (github.com/ColtMcG1)
+- **Licensor**: The author or copyright holder of the software. [ColtMcG1](https://github.com/ColtMcG1)
 - **Licensee**: Any individual or entity using, copying, modifying, or distributing the software under this License.
 - **Software**: The source code, binary code, and associated documentation provided under this License.
 - **Commercial Use**: Any use of the software for profit or commercial purposes.
@@ -28,7 +28,7 @@ The Licensee agrees to comply with all applicable laws and regulations regarding
 The Licensee agrees to indemnify and hold harmless the Licensor from any claims, damages, liabilities, costs, and expenses arising from the Licensee's use of the software.
 The Licensee agrees that any modifications made to the software shall be clearly marked as such and shall not be misrepresented as the original software.
 The Licensee agrees to include a copy of this License with any distribution of the software.
-The Licensee agrees that this License shall be governed by and construed in accordance with the laws of the jurisdiction in which the Licensor resides, without regard to its conflict of law principles.
+The Licensee agrees that this License shall be governed by and construed in accordance with the laws of the jurisdiction in which the Licensor resides.
 
 ## Attribution
 
@@ -53,7 +53,7 @@ This License is effective until terminated. The Licensee's rights under this Lic
 
 ## Miscellaneous
 
-This License allows free use of the software for personal, educational, and commercial purposes, provided the Licensee's annual gross revenue derived from the use of this software does not exceed $100,000.00. If the Licensee's commercial use exceeds this threshold, the Licensee must obtain a commercial license by contacting the Licensor at the email address provided in the repository.
+This License allows free use of the software for personal, educational, and commercial purposes, provided the Licensee's annual gross revenue does not exceed $100,000.00 (one hundred thousand dollars). If the Licensee's annual gross revenue exceeds this threshold, the Licensee must obtain a commercial license by contacting the Licensor at the email address provided in the repository, or by opening an issue on the GitHub repository.
 
 This License does not grant any rights to use the Licensor's trademarks, service marks, or trade names.
 
@@ -63,7 +63,7 @@ By using, copying, modifying, or distributing the software, you acknowledge that
 
 ## Contact Information
 
-For any questions or concerns regarding this License, please contact the Licensor at the email address provided in the repository.
+For any questions or concerns regarding this License, please contact the Licensor at the email address provided in the repository, or by opening an issue on the GitHub repository.
 
 ## Severability
 

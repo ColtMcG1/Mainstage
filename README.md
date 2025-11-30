@@ -49,9 +49,13 @@ mainstage your_script.ms
 
 This will execute the script and print "Hello, World!" to the console.
 
+See the `examples/` directory for more sample scripts and use cases.
+
 ## Documentation
 
-For detailed documentation on Mainstage, including syntax, built-in functions, and examples, please visit the [official documentation site](https://mainstage-docs.example.com).
+For detailed documentation on Mainstage, including syntax, built-in functions, and examples, please visit the [official documentation site]().
+
+See the `docs/` directory for local documentation files.
 
 ## Contributing
 
