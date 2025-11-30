@@ -1,5 +1,7 @@
 use clap::{Arg, ArgMatches, Command};
-use mainstage_core::{analyze_acyclic_rules, analyze_semantic_rules, ast::generate_ast_from_source};
+use mainstage_core::{
+    analyze_acyclic_rules, analyze_semantic_rules, ast::generate_ast_from_source,
+};
 use std::fs;
 
 mod disassembler;
@@ -67,26 +69,25 @@ fn setup_cli(cli: Command) -> Command {
                     .short('O')
                     .long("optimize")
                     .action(clap::ArgAction::SetTrue),
-            )
+            ),
     )
     .subcommand(
         Command::new("disasm")
-        .about("Disassemble a .msx file")
-        .arg(
-            Arg::new("file")
-                .help("The .msx file to disassemble")
-                .required(true)
-                .index(1),
-        )
-        .arg(
-            Arg::new("output")
-                .help("Specify the output file for disassembly")
-                .short('o')
-                .long("output")
-                .value_parser(clap::value_parser!(String))
-                .value_name("FILE")
-                .required(true),
-        )
+            .about("Disassemble a .msx file")
+            .arg(
+                Arg::new("file")
+                    .help("The .msx file to disassemble")
+                    .required(true)
+                    .index(1),
+            )
+            .arg(
+                Arg::new("output")
+                    .help("Specify the output file for disassembly")
+                    .short('o')
+                    .long("output")
+                    .value_parser(clap::value_parser!(String))
+                    .value_name("FILE"),
+            ),
     )
 }
 
@@ -115,7 +116,9 @@ fn dispatch_commands(matches: &ArgMatches) {
             let (entry, analysis) = match analyze_semantic_rules(&mut ast) {
                 Ok((name, analysis)) => (name, analysis),
                 Err(diags) => {
-                    diags.iter().for_each(|d| println!("Semantic analysis error: {d}"));
+                    diags
+                        .iter()
+                        .for_each(|d| println!("Semantic analysis error: {d}"));
                     return;
                 }
             };
@@ -125,12 +128,14 @@ fn dispatch_commands(matches: &ArgMatches) {
                 return;
             }
 
-            let ir_module = mainstage_core::ir::lower_ast_to_ir(&ast, &entry, optimize, Some(&analysis));
+            let ir_module =
+                mainstage_core::ir::lower_ast_to_ir(&ast, &entry, optimize, Some(&analysis));
 
             let bytecode = mainstage_core::ir::emit_bytecode(&ir_module);
 
             if let Some(output_file) = out {
-                fs::write(output_file.to_owned() + ".msx", &bytecode).expect("Failed to write output file");
+                fs::write(output_file.to_owned() + ".msx", &bytecode)
+                    .expect("Failed to write output file");
             }
 
             if let Some(dump_stage) = sub_m.get_one::<String>("dump") {
@@ -169,7 +174,9 @@ fn dispatch_commands(matches: &ArgMatches) {
             let (entry, _analysis) = match analyze_semantic_rules(&mut ast) {
                 Ok((name, analysis)) => (name, analysis),
                 Err(diags) => {
-                    diags.iter().for_each(|d| println!("Semantic analysis error: {d}"));
+                    diags
+                        .iter()
+                        .for_each(|d| println!("Semantic analysis error: {d}"));
                     return;
                 }
             };
@@ -179,7 +186,8 @@ fn dispatch_commands(matches: &ArgMatches) {
                 return;
             }
 
-            let ir_module = mainstage_core::ir::lower_ast_to_ir(&ast, &entry, optimize, Some(&_analysis));
+            let ir_module =
+                mainstage_core::ir::lower_ast_to_ir(&ast, &entry, optimize, Some(&_analysis));
 
             let bytecode = mainstage_core::ir::emit_bytecode(&ir_module);
             // Run the bytecode in the VM
@@ -190,14 +198,18 @@ fn dispatch_commands(matches: &ArgMatches) {
         }
         Some(("disasm", sub_m)) => {
             let file = sub_m.get_one::<String>("file").expect("required argument");
-            let output_file = sub_m.get_one::<String>("output").expect("required argument");
+            let output_file = sub_m.get_one::<String>("output");
 
             let bytecode = fs::read(file).expect("Failed to read .msx file");
 
             match disassembler::disassemble(&bytecode) {
                 Ok(f) => {
-                    if let Err(e) = fs::write(output_file, f) {
-                        println!("Failed to write disassembly output file: {}", e);
+                    if let Some(output_file) = output_file {
+                        if let Err(e) = fs::write(output_file, f) {
+                            println!("Failed to write disassembly output file: {}", e);
+                        }
+                    } else {
+                        println!("{}", f);
                     }
                 }
                 Err(e) => {

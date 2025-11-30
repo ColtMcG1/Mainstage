@@ -1,8 +1,9 @@
-use crate::ir::value::Value;
 use glob::glob;
 use std::collections::HashMap;
 use std::fs;
 use std::io::Cursor;
+
+use crate::vm::{ op::Op, value::Value };
 
 /// Simple runtime VM for MSBC bytecode.
 /// Currently implements a minimal interpreter for a subset of ops used by samples:
@@ -13,97 +14,39 @@ use std::io::Cursor;
 ///
 /// This VM is intentionally small and designed for prototyping.
 
-#[derive(Debug, Clone)]
-enum RunValue {
-    Int(i64),
-    Float(f64),
-    Bool(bool),
-    Str(String),
-    Symbol(String),
-    Array(Vec<RunValue>),
-    Object(std::collections::HashMap<String, RunValue>),
-    Null,
-}
 
-impl From<Value> for RunValue {
-    fn from(v: Value) -> Self {
-        match v {
-            Value::Int(i) => RunValue::Int(i),
-            Value::Float(f) => RunValue::Float(f),
-            Value::Bool(b) => RunValue::Bool(b),
-            Value::Str(s) => RunValue::Str(s),
-            Value::Symbol(s) => RunValue::Symbol(s),
-            Value::Array(a) => RunValue::Array(a.into_iter().map(From::from).collect()),
-            Value::Object(m) => {
-                RunValue::Object(m.into_iter().map(|(k, v)| (k, v.into())).collect())
-            }
-            Value::Null => RunValue::Null,
-        }
-    }
-}
-
-impl RunValue {
-    fn as_bool(&self) -> bool {
-        match self {
-            RunValue::Bool(b) => *b,
-            RunValue::Int(i) => *i != 0,
-            RunValue::Float(f) => *f != 0.0,
-            RunValue::Str(s) => !s.is_empty(),
-            RunValue::Symbol(_) => true,
-            RunValue::Array(a) => !a.is_empty(),
-            RunValue::Object(m) => !m.is_empty(),
-            RunValue::Null => false,
-        }
-    }
-
-    fn to_value(&self) -> Value {
-        match self {
-            RunValue::Int(i) => Value::Int(*i),
-            RunValue::Float(f) => Value::Float(*f),
-            RunValue::Bool(b) => Value::Bool(*b),
-            RunValue::Str(s) => Value::Str(s.clone()),
-            RunValue::Symbol(s) => Value::Symbol(s.clone()),
-            RunValue::Array(a) => Value::Array(a.iter().map(|rv| rv.to_value()).collect()),
-            RunValue::Object(m) => {
-                Value::Object(m.iter().map(|(k, v)| (k.clone(), v.to_value())).collect())
-            }
-            RunValue::Null => Value::Null,
-        }
-    }
-}
-
-fn coerce_to_f64(a: &RunValue) -> Option<f64> {
+fn coerce_to_f64(a: &Value) -> Option<f64> {
     match a {
-        RunValue::Int(i) => Some(*i as f64),
-        RunValue::Float(f) => Some(*f),
-        RunValue::Str(s) => s.parse::<f64>().ok(),
+        Value::Int(i) => Some(*i as f64),
+        Value::Float(f) => Some(*f),
+        Value::Str(s) => s.parse::<f64>().ok(),
         _ => None,
     }
 }
 
 fn numeric_bin(
-    a: &RunValue,
-    b: &RunValue,
+    a: &Value,
+    b: &Value,
     int_op: fn(i64, i64) -> i64,
     float_op: fn(f64, f64) -> f64,
-) -> RunValue {
+) -> Value {
     match (a, b) {
-        (RunValue::Int(x), RunValue::Int(y)) => RunValue::Int(int_op(*x, *y)),
+        (Value::Int(x), Value::Int(y)) => Value::Int(int_op(*x, *y)),
         _ => {
             let ax = coerce_to_f64(a);
             let bx = coerce_to_f64(b);
             if let (Some(x), Some(y)) = (ax, bx) {
-                RunValue::Float(float_op(x, y))
+                Value::Float(float_op(x, y))
             } else {
-                RunValue::Null
+                Value::Null
             }
         }
     }
 }
 
-fn numeric_cmp(a: &RunValue, b: &RunValue) -> Option<std::cmp::Ordering> {
+fn numeric_cmp(a: &Value, b: &Value) -> Option<std::cmp::Ordering> {
     match (a, b) {
-        (RunValue::Int(x), RunValue::Int(y)) => Some(x.cmp(y)),
+        (Value::Int(x), Value::Int(y)) => Some(x.cmp(y)),
         _ => {
             let ax = coerce_to_f64(a);
             let bx = coerce_to_f64(b);
@@ -122,154 +65,8 @@ fn numeric_cmp(a: &RunValue, b: &RunValue) -> Option<std::cmp::Ordering> {
     }
 }
 
-// Parsed runtime op to execute
-#[derive(Debug, Clone)]
-enum Op {
-    LConst {
-        dest: usize,
-        val: RunValue,
-    },
-    LLocal {
-        dest: usize,
-        local: usize,
-    },
-    SLocal {
-        src: usize,
-        local: usize,
-    },
-    Add {
-        dest: usize,
-        a: usize,
-        b: usize,
-    },
-    Sub {
-        dest: usize,
-        a: usize,
-        b: usize,
-    },
-    Mul {
-        dest: usize,
-        a: usize,
-        b: usize,
-    },
-    Div {
-        dest: usize,
-        a: usize,
-        b: usize,
-    },
-    Mod {
-        dest: usize,
-        a: usize,
-        b: usize,
-    },
-    Eq {
-        dest: usize,
-        a: usize,
-        b: usize,
-    },
-    Neq {
-        dest: usize,
-        a: usize,
-        b: usize,
-    },
-    Lt {
-        dest: usize,
-        a: usize,
-        b: usize,
-    },
-    Lte {
-        dest: usize,
-        a: usize,
-        b: usize,
-    },
-    Gt {
-        dest: usize,
-        a: usize,
-        b: usize,
-    },
-    Gte {
-        dest: usize,
-        a: usize,
-        b: usize,
-    },
-    And {
-        dest: usize,
-        a: usize,
-        b: usize,
-    },
-    Or {
-        dest: usize,
-        a: usize,
-        b: usize,
-    },
-    Not {
-        dest: usize,
-        src: usize,
-    },
-    Inc {
-        dest: usize,
-    },
-    Dec {
-        dest: usize,
-    },
-    Label,
-    Jump {
-        target: usize,
-    },
-    BrTrue {
-        cond: usize,
-        target: usize,
-    },
-    BrFalse {
-        cond: usize,
-        target: usize,
-    },
-    Halt,
-    Call {
-        dest: usize,
-        func: usize,
-        args: Vec<usize>,
-    },
-    CallLabel {
-        dest: usize,
-        label_index: usize,
-        args: Vec<usize>,
-    },
-    ArrayNew {
-        dest: usize,
-        elems: Vec<usize>,
-    },
-    LoadGlobal {
-        dest: usize,
-        src: usize,
-    },
-    ArrayGet {
-        dest: usize,
-        array: usize,
-        index: usize,
-    },
-    ArraySet {
-        array: usize,
-        index: usize,
-        src: usize,
-    },
-    GetProp {
-        dest: usize,
-        obj: usize,
-        key: usize,
-    },
-    SetProp {
-        obj: usize,
-        key: usize,
-        src: usize,
-    },
-    Ret {
-        src: usize,
-    },
-}
-
 struct Frame {
-    locals: Vec<RunValue>,
+    locals: Vec<Value>,
     return_pc: Option<usize>,
     return_reg: Option<usize>,
 }
@@ -504,7 +301,7 @@ pub fn run_bytecode(bytes: &[u8]) -> Result<(), String> {
     }
 
     // runtime state: registers and call frames
-    let mut regs: Vec<RunValue> = Vec::new();
+    let mut regs: Vec<Value> = Vec::new();
     let mut frames: Vec<Frame> = Vec::new();
 
     // create a root frame so top-level `SLocal`/`LLocal` operations work
@@ -515,9 +312,9 @@ pub fn run_bytecode(bytes: &[u8]) -> Result<(), String> {
     });
 
     // helper to ensure register exists
-    let ensure_reg = |regs: &mut Vec<RunValue>, idx: usize| {
+    let ensure_reg = |regs: &mut Vec<Value>, idx: usize| {
         if idx >= regs.len() {
-            regs.resize_with(idx + 1, || RunValue::Null);
+            regs.resize_with(idx + 1, || Value::Null);
         }
     };
     // start execution at op 0
@@ -543,10 +340,10 @@ pub fn run_bytecode(bytes: &[u8]) -> Result<(), String> {
                     if *local < frame.locals.len() {
                         regs[*dest] = frame.locals[*local].clone();
                     } else {
-                        regs[*dest] = RunValue::Null;
+                        regs[*dest] = Value::Null;
                     }
                 } else {
-                    regs[*dest] = RunValue::Null;
+                    regs[*dest] = Value::Null;
                 }
                 pc += 1;
             }
@@ -554,7 +351,7 @@ pub fn run_bytecode(bytes: &[u8]) -> Result<(), String> {
                 ensure_reg(&mut regs, *src);
                 if let Some(frame) = frames.last_mut() {
                     if *local >= frame.locals.len() {
-                        frame.locals.resize(*local + 1, RunValue::Null);
+                        frame.locals.resize(*local + 1, Value::Null);
                     }
                     frame.locals[*local] = regs[*src].clone();
                 }
@@ -586,9 +383,9 @@ pub fn run_bytecode(bytes: &[u8]) -> Result<(), String> {
                 ensure_reg(&mut regs, *b);
                 ensure_reg(&mut regs, *dest);
                 // division: prefer float if any operand is float or non-divisible
-                if let (RunValue::Int(x), RunValue::Int(y)) = (&regs[*a], &regs[*b]) {
+                if let (Value::Int(x), Value::Int(y)) = (&regs[*a], &regs[*b]) {
                     if *y != 0 && x % y == 0 {
-                        regs[*dest] = RunValue::Int(x / y);
+                        regs[*dest] = Value::Int(x / y);
                     } else {
                         regs[*dest] = numeric_bin(&regs[*a], &regs[*b], |x, y| x / y, |x, y| x / y);
                     }
@@ -601,14 +398,14 @@ pub fn run_bytecode(bytes: &[u8]) -> Result<(), String> {
                 ensure_reg(&mut regs, *a);
                 ensure_reg(&mut regs, *b);
                 ensure_reg(&mut regs, *dest);
-                if let (RunValue::Int(x), RunValue::Int(y)) = (&regs[*a], &regs[*b]) {
+                if let (Value::Int(x), Value::Int(y)) = (&regs[*a], &regs[*b]) {
                     if *y != 0 {
-                        regs[*dest] = RunValue::Int(x % y);
+                        regs[*dest] = Value::Int(x % y);
                     } else {
-                        regs[*dest] = RunValue::Null;
+                        regs[*dest] = Value::Null;
                     }
                 } else {
-                    regs[*dest] = RunValue::Null;
+                    regs[*dest] = Value::Null;
                 }
                 pc += 1;
             }
@@ -618,9 +415,9 @@ pub fn run_bytecode(bytes: &[u8]) -> Result<(), String> {
                 ensure_reg(&mut regs, *dest);
                 // numeric-aware equality
                 if let Some(ord) = numeric_cmp(&regs[*a], &regs[*b]) {
-                    regs[*dest] = RunValue::Bool(ord == std::cmp::Ordering::Equal);
+                    regs[*dest] = Value::Bool(ord == std::cmp::Ordering::Equal);
                 } else {
-                    regs[*dest] = RunValue::Bool(regs[*a].to_value() == regs[*b].to_value());
+                    regs[*dest] = Value::Bool(regs[*a].to_value() == regs[*b].to_value());
                 }
                 pc += 1;
             }
@@ -629,9 +426,9 @@ pub fn run_bytecode(bytes: &[u8]) -> Result<(), String> {
                 ensure_reg(&mut regs, *b);
                 ensure_reg(&mut regs, *dest);
                 if let Some(ord) = numeric_cmp(&regs[*a], &regs[*b]) {
-                    regs[*dest] = RunValue::Bool(ord != std::cmp::Ordering::Equal);
+                    regs[*dest] = Value::Bool(ord != std::cmp::Ordering::Equal);
                 } else {
-                    regs[*dest] = RunValue::Bool(regs[*a].to_value() != regs[*b].to_value());
+                    regs[*dest] = Value::Bool(regs[*a].to_value() != regs[*b].to_value());
                 }
                 pc += 1;
             }
@@ -640,36 +437,36 @@ pub fn run_bytecode(bytes: &[u8]) -> Result<(), String> {
                 ensure_reg(&mut regs, *b);
                 ensure_reg(&mut regs, *dest);
                 if let Some(ord) = numeric_cmp(&regs[*a], &regs[*b]) {
-                    regs[*dest] = RunValue::Bool(ord == std::cmp::Ordering::Less);
+                    regs[*dest] = Value::Bool(ord == std::cmp::Ordering::Less);
                 } else {
-                    regs[*dest] = RunValue::Bool(false);
+                    regs[*dest] = Value::Bool(false);
                 }
                 pc += 1;
             }
             Op::Lte { dest, a, b } => {
                 ensure_reg(&mut regs, *dest);
                 if let Some(ord) = numeric_cmp(&regs[*a], &regs[*b]) {
-                    regs[*dest] = RunValue::Bool(ord != std::cmp::Ordering::Greater);
+                    regs[*dest] = Value::Bool(ord != std::cmp::Ordering::Greater);
                 } else {
-                    regs[*dest] = RunValue::Bool(false);
+                    regs[*dest] = Value::Bool(false);
                 }
                 pc += 1;
             }
             Op::Gt { dest, a, b } => {
                 ensure_reg(&mut regs, *dest);
                 if let Some(ord) = numeric_cmp(&regs[*a], &regs[*b]) {
-                    regs[*dest] = RunValue::Bool(ord == std::cmp::Ordering::Greater);
+                    regs[*dest] = Value::Bool(ord == std::cmp::Ordering::Greater);
                 } else {
-                    regs[*dest] = RunValue::Bool(false);
+                    regs[*dest] = Value::Bool(false);
                 }
                 pc += 1;
             }
             Op::Gte { dest, a, b } => {
                 ensure_reg(&mut regs, *dest);
                 if let Some(ord) = numeric_cmp(&regs[*a], &regs[*b]) {
-                    regs[*dest] = RunValue::Bool(ord != std::cmp::Ordering::Less);
+                    regs[*dest] = Value::Bool(ord != std::cmp::Ordering::Less);
                 } else {
-                    regs[*dest] = RunValue::Bool(false);
+                    regs[*dest] = Value::Bool(false);
                 }
                 pc += 1;
             }
@@ -678,7 +475,7 @@ pub fn run_bytecode(bytes: &[u8]) -> Result<(), String> {
                 ensure_reg(&mut regs, *b);
                 ensure_reg(&mut regs, *dest);
                 let v = regs[*a].as_bool() && regs[*b].as_bool();
-                regs[*dest] = RunValue::Bool(v);
+                regs[*dest] = Value::Bool(v);
                 pc += 1;
             }
             Op::Or { dest, a, b } => {
@@ -686,25 +483,25 @@ pub fn run_bytecode(bytes: &[u8]) -> Result<(), String> {
                 ensure_reg(&mut regs, *b);
                 ensure_reg(&mut regs, *dest);
                 let v = regs[*a].as_bool() || regs[*b].as_bool();
-                regs[*dest] = RunValue::Bool(v);
+                regs[*dest] = Value::Bool(v);
                 pc += 1;
             }
             Op::Not { dest, src } => {
                 ensure_reg(&mut regs, *src);
                 ensure_reg(&mut regs, *dest);
-                regs[*dest] = RunValue::Bool(!regs[*src].as_bool());
+                regs[*dest] = Value::Bool(!regs[*src].as_bool());
                 pc += 1;
             }
             Op::Inc { dest } => {
                 ensure_reg(&mut regs, *dest);
-                if let RunValue::Int(i) = &mut regs[*dest] {
+                if let Value::Int(i) = &mut regs[*dest] {
                     *i += 1
                 };
                 pc += 1;
             }
             Op::Dec { dest } => {
                 ensure_reg(&mut regs, *dest);
-                if let RunValue::Int(i) = &mut regs[*dest] {
+                if let Value::Int(i) = &mut regs[*dest] {
                     *i -= 1
                 };
                 pc += 1;
@@ -738,14 +535,14 @@ pub fn run_bytecode(bytes: &[u8]) -> Result<(), String> {
                 ensure_reg(&mut regs, *func);
                 let func_val = regs[*func].clone();
                 // evaluate args
-                let mut arg_vals: Vec<RunValue> = Vec::new();
+                let mut arg_vals: Vec<Value> = Vec::new();
                 for &r in args.iter() {
                     ensure_reg(&mut regs, r);
                     arg_vals.push(regs[r].clone());
                 }
                 // only support Symbol host functions for now
                 match func_val {
-                    RunValue::Symbol(name) => {
+                    Value::Symbol(name) => {
                         let ret = run_host_fn(&name, &arg_vals)?;
                         ensure_reg(&mut regs, *dest);
                         regs[*dest] = ret;
@@ -767,11 +564,11 @@ pub fn run_bytecode(bytes: &[u8]) -> Result<(), String> {
                     return_pc: Some(return_pc),
                     return_reg: Some(*dest),
                 };
-                let mut arg_vals: Vec<RunValue> = Vec::new();
+                let mut arg_vals: Vec<Value> = Vec::new();
                 for (i, &areg) in args.iter().enumerate() {
                     ensure_reg(&mut regs, areg);
                     if i >= f.locals.len() {
-                        f.locals.resize(i + 1, RunValue::Null);
+                        f.locals.resize(i + 1, Value::Null);
                     }
                     f.locals[i] = regs[areg].clone();
                     arg_vals.push(regs[areg].clone());
@@ -789,13 +586,13 @@ pub fn run_bytecode(bytes: &[u8]) -> Result<(), String> {
             }
             Op::ArrayNew { dest, elems } => {
                 // build a new array from the values in the specified registers
-                let mut items: Vec<RunValue> = Vec::new();
+                let mut items: Vec<Value> = Vec::new();
                 for &r in elems.iter() {
                     ensure_reg(&mut regs, r);
                     items.push(regs[r].clone());
                 }
                 ensure_reg(&mut regs, *dest);
-                regs[*dest] = RunValue::Array(items);
+                regs[*dest] = Value::Array(items);
                 pc += 1;
             }
             Op::LoadGlobal { dest, src } => {
@@ -813,20 +610,20 @@ pub fn run_bytecode(bytes: &[u8]) -> Result<(), String> {
                 let arr_val = regs[*array].clone();
                 let idx_val = regs[*index].clone();
                 match arr_val {
-                    RunValue::Array(a) => {
-                        if let RunValue::Int(i) = idx_val {
+                    Value::Array(a) => {
+                        if let Value::Int(i) = idx_val {
                             let idx = i as isize;
                             if idx >= 0 && (idx as usize) < a.len() {
                                 regs[*dest] = a[idx as usize].clone();
                             } else {
-                                regs[*dest] = RunValue::Null;
+                                regs[*dest] = Value::Null;
                             }
                         } else {
-                            regs[*dest] = RunValue::Null;
+                            regs[*dest] = Value::Null;
                         }
                     }
                     _ => {
-                        regs[*dest] = RunValue::Null;
+                        regs[*dest] = Value::Null;
                     }
                 }
                 pc += 1;
@@ -840,23 +637,23 @@ pub fn run_bytecode(bytes: &[u8]) -> Result<(), String> {
                 let src_val = regs[*src].clone();
                 // ensure the array register contains an Array, creating one if necessary
                 match &mut regs[*array] {
-                    RunValue::Array(a) => {
-                        if let RunValue::Int(i) = idx_val {
+                    Value::Array(a) => {
+                        if let Value::Int(i) = idx_val {
                             let idx = i as usize;
                             if idx >= a.len() {
-                                a.resize(idx + 1, RunValue::Null);
+                                a.resize(idx + 1, Value::Null);
                             }
                             a[idx] = src_val;
                         }
                     }
                     other => {
                         // replace with a new array big enough to hold the index
-                        if let RunValue::Int(i) = idx_val {
+                        if let Value::Int(i) = idx_val {
                             let idx = i as usize;
-                            let mut a: Vec<RunValue> = Vec::new();
-                            a.resize(idx + 1, RunValue::Null);
+                            let mut a: Vec<Value> = Vec::new();
+                            a.resize(idx + 1, Value::Null);
                             a[idx] = src_val;
-                            *other = RunValue::Array(a);
+                            *other = Value::Array(a);
                         }
                     }
                 }
@@ -867,51 +664,51 @@ pub fn run_bytecode(bytes: &[u8]) -> Result<(), String> {
                 ensure_reg(&mut regs, *key);
                 ensure_reg(&mut regs, *dest);
                 match &regs[*obj] {
-                    RunValue::Object(map) => {
+                    Value::Object(map) => {
                         // key can be Symbol or Str
                         let k = match &regs[*key] {
-                            RunValue::Symbol(s) => s.clone(),
-                            RunValue::Str(s) => s.clone(),
+                            Value::Symbol(s) => s.clone(),
+                            Value::Str(s) => s.clone(),
                             _ => String::new(),
                         };
                         if let Some(v) = map.get(&k) {
                             regs[*dest] = v.clone();
                         } else {
-                            regs[*dest] = RunValue::Null;
+                            regs[*dest] = Value::Null;
                         }
                     }
-                    RunValue::Array(a) => {
+                    Value::Array(a) => {
                         // support array.length property
                         match &regs[*key] {
-                            RunValue::Symbol(s) | RunValue::Str(s) => {
+                            Value::Symbol(s) | Value::Str(s) => {
                                 if s == "length" {
-                                    regs[*dest] = RunValue::Int(a.len() as i64);
+                                    regs[*dest] = Value::Int(a.len() as i64);
                                 } else {
-                                    regs[*dest] = RunValue::Null;
+                                    regs[*dest] = Value::Null;
                                 }
                             }
                             _ => {
-                                regs[*dest] = RunValue::Null;
+                                regs[*dest] = Value::Null;
                             }
                         }
                     }
-                    RunValue::Str(s) => {
+                    Value::Str(s) => {
                         // support string.length property
                         match &regs[*key] {
-                            RunValue::Symbol(k) | RunValue::Str(k) => {
+                            Value::Symbol(k) | Value::Str(k) => {
                                 if k == "length" {
-                                    regs[*dest] = RunValue::Int(s.chars().count() as i64);
+                                    regs[*dest] = Value::Int(s.chars().count() as i64);
                                 } else {
-                                    regs[*dest] = RunValue::Null;
+                                    regs[*dest] = Value::Null;
                                 }
                             }
                             _ => {
-                                regs[*dest] = RunValue::Null;
+                                regs[*dest] = Value::Null;
                             }
                         }
                     }
                     _ => {
-                        regs[*dest] = RunValue::Null;
+                        regs[*dest] = Value::Null;
                     }
                 }
                 pc += 1;
@@ -922,20 +719,20 @@ pub fn run_bytecode(bytes: &[u8]) -> Result<(), String> {
                 ensure_reg(&mut regs, *src);
                 // ensure obj is an Object; if not, replace it with a new object
                 let key_str = match &regs[*key] {
-                    RunValue::Symbol(s) => s.clone(),
-                    RunValue::Str(s) => s.clone(),
+                    Value::Symbol(s) => s.clone(),
+                    Value::Str(s) => s.clone(),
                     _ => String::new(),
                 };
                 let src_val = regs[*src].clone();
                 match &mut regs[*obj] {
-                    RunValue::Object(map) => {
+                    Value::Object(map) => {
                         map.insert(key_str, src_val);
                     }
                     other => {
                         // replace non-object with an object that holds the property
                         let mut m = std::collections::HashMap::new();
                         m.insert(key_str, src_val);
-                        *other = RunValue::Object(m);
+                        *other = Value::Object(m);
                     }
                 }
                 pc += 1;
@@ -966,11 +763,11 @@ pub fn run_bytecode(bytes: &[u8]) -> Result<(), String> {
     Ok(())
 }
 
-fn run_host_fn(name: &str, args: &Vec<RunValue>) -> Result<RunValue, String> {
+fn run_host_fn(name: &str, args: &Vec<Value>) -> Result<Value, String> {
     match name {
         "ask" => {
             use std::io::{self, Write};
-            if let Some(RunValue::Str(prompt)) = args.get(0) {
+            if let Some(Value::Str(prompt)) = args.get(0) {
                 print!("{}", prompt);
                 io::stdout()
                     .flush()
@@ -984,35 +781,35 @@ fn run_host_fn(name: &str, args: &Vec<RunValue>) -> Result<RunValue, String> {
                 // Try boolean
                 let low = s_trim.to_ascii_lowercase();
                 if low == "true" {
-                    return Ok(RunValue::Bool(true));
+                    return Ok(Value::Bool(true));
                 } else if low == "false" {
-                    return Ok(RunValue::Bool(false));
+                    return Ok(Value::Bool(false));
                 }
                 // Try integer
                 if let Ok(i) = s_trim.parse::<i64>() {
-                    return Ok(RunValue::Int(i));
+                    return Ok(Value::Int(i));
                 }
                 // Try float
                 if let Ok(f) = s_trim.parse::<f64>() {
-                    return Ok(RunValue::Float(f));
+                    return Ok(Value::Float(f));
                 }
                 // Fallback to string
-                Ok(RunValue::Str(s))
+                Ok(Value::Str(s))
             } else {
-                Ok(RunValue::Str(String::new()))
+                Ok(Value::Str(String::new()))
             }
         }
         "say" => {
             if let Some(a) = args.get(0) {
                 match a {
-                    RunValue::Str(s) => println!("{}", s),
-                    RunValue::Symbol(s) => println!("{}", s),
-                    RunValue::Array(arr) => {
+                    Value::Str(s) => println!("{}", s),
+                    Value::Symbol(s) => println!("{}", s),
+                    Value::Array(arr) => {
                         // Print each array element on its own line if possible
                         for item in arr {
                             match item {
-                                RunValue::Str(s) => println!("{}", s),
-                                RunValue::Symbol(sym) => println!("{}", sym),
+                                Value::Str(s) => println!("{}", s),
+                                Value::Symbol(sym) => println!("{}", sym),
                                 other => println!("{:?}", other.to_value()),
                             }
                         }
@@ -1020,34 +817,33 @@ fn run_host_fn(name: &str, args: &Vec<RunValue>) -> Result<RunValue, String> {
                     _ => println!("{:?}", a.to_value()),
                 }
             }
-            Ok(RunValue::Null)
+            Ok(Value::Null)
         }
         "read" => {
-            if let Some(RunValue::Str(glob_pat)) = args.get(0) {
-                println!("Reading files matching pattern: {}", glob_pat);
+            if let Some(Value::Str(glob_pat)) = args.get(0) {
                 match glob(glob_pat) {
                     Ok(paths) => {
-                        let mut out: Vec<RunValue> = Vec::new();
+                        let mut out: Vec<Value> = Vec::new();
                         for p in paths.flatten() {
                             if let Ok(s) = fs::read_to_string(&p) {
-                                out.push(RunValue::Str(s));
+                                out.push(Value::Str(s));
                             }
                         }
                         // Return an array (possibly empty) of file contents
-                        Ok(RunValue::Array(out))
+                        Ok(Value::Array(out))
                     }
                     Err(e) => Err(format!("glob error: {}", e)),
                 }
             } else {
-                Ok(RunValue::Array(Vec::new()))
+                Ok(Value::Array(Vec::new()))
             }
         }
         "write" => {
-            if let (Some(RunValue::Str(path)), Some(RunValue::Str(content))) =
+            if let (Some(Value::Str(path)), Some(Value::Str(content))) =
                 (args.get(0), args.get(1))
             {
                 match fs::write(path, content) {
-                    Ok(_) => Ok(RunValue::Bool(true)),
+                    Ok(_) => Ok(Value::Bool(true)),
                     Err(e) => Err(format!("write error: {}", e)),
                 }
             } else {
@@ -1089,7 +885,7 @@ fn read_string(cur: &mut Cursor<&[u8]>) -> Result<String, String> {
     String::from_utf8(buf).map_err(|e| format!("invalid utf8: {}", e))
 }
 
-fn read_value(cur: &mut Cursor<&[u8]>) -> Result<RunValue, String> {
+fn read_value(cur: &mut Cursor<&[u8]>) -> Result<Value, String> {
     use std::io::Read;
     let mut tag = [0u8; 1];
     cur.read_exact(&mut tag)
@@ -1097,25 +893,25 @@ fn read_value(cur: &mut Cursor<&[u8]>) -> Result<RunValue, String> {
     match tag[0] {
         0x01 => {
             let v = read_u64(cur)? as i64;
-            Ok(RunValue::Int(v))
+            Ok(Value::Int(v))
         }
         0x02 => {
             let bits = read_u64(cur)?;
-            Ok(RunValue::Float(f64::from_bits(bits)))
+            Ok(Value::Float(f64::from_bits(bits)))
         }
         0x03 => {
             let mut b = [0u8; 1];
             cur.read_exact(&mut b)
                 .map_err(|e| format!("eof bool: {}", e))?;
-            Ok(RunValue::Bool(b[0] != 0))
+            Ok(Value::Bool(b[0] != 0))
         }
         0x04 => {
             let s = read_string(cur)?;
-            Ok(RunValue::Str(s))
+            Ok(Value::Str(s))
         }
         0x05 => {
             let s = read_string(cur)?;
-            Ok(RunValue::Symbol(s))
+            Ok(Value::Symbol(s))
         }
         0x06 => {
             let len = read_u32(cur)? as usize;
@@ -1123,7 +919,7 @@ fn read_value(cur: &mut Cursor<&[u8]>) -> Result<RunValue, String> {
             for _ in 0..len {
                 items.push(read_value(cur)?);
             }
-            Ok(RunValue::Array(items))
+            Ok(Value::Array(items))
         }
         0x08 => {
             let len = read_u32(cur)? as usize;
@@ -1133,9 +929,9 @@ fn read_value(cur: &mut Cursor<&[u8]>) -> Result<RunValue, String> {
                 let val = read_value(cur)?;
                 map.insert(key, val);
             }
-            Ok(RunValue::Object(map))
+            Ok(Value::Object(map))
         }
-        0x07 => Ok(RunValue::Null),
+        0x07 => Ok(Value::Null),
         other => Err(format!("unknown value tag 0x{:02x}", other)),
     }
 }

@@ -3,67 +3,64 @@
 0002: LConst r2 <- Symbol("sources")
 0003: SetProp r0.r2 <- r1
 0004: ArrayNew r3 <- [r0]
-0005: LConst r4 <- Symbol("test_pj")
-0006: Label L11
-0007: ArrayNew r5 <- [r9]
+0005: Label L11
+0006: LoadGlobal r4 <- r0
+0007: ArrayNew r5 <- [r4]
 0008: SLocal local[0] <- r5
 0009: LLocal r6 <- local[0]
 0010: LConst r7 <- Int(0)
 0011: LConst r8 <- Str("length")
 0012: GetProp r9 <- r6.r8
 0013: Lt r10 <- r7 < r9
-0014: BrFalse r10 -> 28
+0014: BrFalse r10 -> 22
 0015: ArrayGet r11 <- r6[r7]
 0016: SLocal local[1] <- r11
-0017: LConst r12 <- Str("Processing project:")
-0018: LConst r13 <- Symbol("say")
-0019: Call r14 <- r13(r12)
-0020: LConst r15 <- Symbol("sources")
-0021: LLocal r16 <- local[1]
-0022: GetProp r17 <- r16.r15
-0023: LConst r18 <- Symbol("say")
-0024: Call r19 <- r18(r17)
-0025: LConst r20 <- Int(1)
-0026: Add r7 <- r7 + r20
-0027: Jump 13
-0028: Halt
-0029: CallLabel r21 <- L11()
-0030: LConst r22 <- Symbol("var")
-0031: Label L1
-0032: LLocal r23 <- local[0]
-0033: LConst r24 <- Symbol("say")
-0034: Call r25 <- r24(r23)
-0035: LConst r26 <- Symbol("read")
-0036: Call r27 <- r26(r22)
-0037: SLocal local[1] <- r27
-0038: LLocal r28 <- local[1]
-0039: LConst r29 <- Symbol("say")
-0040: Call r30 <- r29(r28)
-0041: LLocal r31 <- local[1]
-0042: Ret r31
-0043: LConst r32 <- Symbol("var")
-0044: Label L0
-0045: LConst r33 <- Symbol("sources")
-0046: LLocal r34 <- local[0]
-0047: GetProp r35 <- r34.r33
-0048: LConst r36 <- Null
-0049: Eq r37 <- r35 == r36
-0050: BrFalse r37 -> 54
-0051: LConst r38 <- Str("No sources found.")
-0052: LConst r39 <- Symbol("say")
-0053: Call r40 <- r39(r38)
-0054: LConst r41 <- Int(0)
-0055: LConst r42 <- Symbol("sources")
-0056: LLocal r43 <- local[0]
-0057: GetProp r44 <- r43.r42
-0058: ArrayGet r45 <- r44[r41]
-0059: SLocal local[1] <- r45
-0060: LLocal r46 <- local[1]
-0061: LConst r47 <- Symbol("say")
-0062: Call r48 <- r47(r46)
-0063: CallLabel r49 <- L1(r32)
-0064: SLocal local[2] <- r49
-0065: LLocal r50 <- local[2]
-0066: LConst r51 <- Symbol("say")
-0067: Call r52 <- r51(r50)
-0068: Halt
+0017: LLocal r12 <- local[1]
+0018: CallLabel r13 <- L0(r12)
+0019: LConst r14 <- Int(1)
+0020: Add r7 <- r7 + r14
+0021: Jump 13
+0022: Halt
+0023: CallLabel r15 <- L11()
+0024: Label L1
+0025: LLocal r16 <- local[0]
+0026: LConst r17 <- Symbol("read")
+0027: Call r18 <- r17(r16)
+0028: SLocal local[1] <- r18
+0029: LLocal r19 <- local[1]
+0030: Ret r19
+0031: Label L0
+0032: LConst r20 <- Symbol("sources")
+0033: LLocal r21 <- local[0]
+0034: GetProp r22 <- r21.r20
+0035: LConst r23 <- Null
+0036: Eq r24 <- r22 == r23
+0037: BrFalse r24 -> 41
+0038: LConst r25 <- Str("No sources found.")
+0039: LConst r26 <- Symbol("say")
+0040: Call r27 <- r26(r25)
+0041: LConst r28 <- Int(0)
+0042: LConst r29 <- Symbol("sources")
+0043: LLocal r30 <- local[0]
+0044: GetProp r31 <- r30.r29
+0045: ArrayGet r32 <- r31[r28]
+0046: CallLabel r33 <- L1(r32)
+0047: SLocal local[1] <- r33
+0048: LLocal r34 <- local[1]
+0049: LConst r35 <- Int(0)
+0050: LConst r36 <- Str("length")
+0051: GetProp r37 <- r34.r36
+0052: Lt r38 <- r35 < r37
+0053: BrFalse r38 -> 65
+0054: ArrayGet r39 <- r34[r35]
+0055: SLocal local[2] <- r39
+0056: LLocal r40 <- local[2]
+0057: LConst r41 <- Symbol("say")
+0058: Call r42 <- r41(r40)
+0059: LConst r43 <- Str("----")
+0060: LConst r44 <- Symbol("say")
+0061: Call r45 <- r44(r43)
+0062: LConst r46 <- Int(1)
+0063: Add r35 <- r35 + r46
+0064: Jump 52
+0065: Halt
