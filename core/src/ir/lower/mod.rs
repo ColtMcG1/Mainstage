@@ -1,4 +1,5 @@
 mod lower_objects;
+mod declare_builtins;
 pub mod lower_expr;
 pub mod lower_stmt;
 pub mod lowering_context;

@@ -220,6 +220,70 @@ pub fn analyze_semantic_rules(ast: &mut AstNode) -> Result<(String, AnalyzerOutp
         // Start traversal from script root
         collect_from_node(ast, None, &mut analysis, &func_name_to_node);
 
+        // Map the analyzer-chosen entrypoint name to an AST node id. Prefer
+        // a workspace explicitly marked with the "entrypoint" attribute,
+        // or fall back to the name returned by the symbol table. If no
+        // workspaces exist, return an error.
+        use crate::ast::AstNodeKind;
+        let mut workspaces: Vec<(usize, Option<String>, Vec<String>)> = Vec::new();
+        fn collect_workspaces(n: &crate::ast::AstNode, out: &mut Vec<(usize, Option<String>, Vec<String>)>) {
+            match n.get_kind() {
+                AstNodeKind::Workspace { name, body: _ } => {
+                    out.push((n.get_id(), Some(name.clone()), n.attributes.clone()));
+                }
+                AstNodeKind::Script { body } => {
+                    for b in body {
+                        collect_workspaces(b, out);
+                    }
+                }
+                AstNodeKind::Block { statements } => {
+                    for s in statements {
+                        collect_workspaces(s, out);
+                    }
+                }
+                _ => {}
+            }
+        }
+        collect_workspaces(ast, &mut workspaces);
+
+        if workspaces.is_empty() {
+            return Err(vec![Box::new(
+                err::SemanticError::with(
+                    crate::error::Level::Error,
+                    "No workspaces found in script; analyzer requires at least one workspace.".to_string(),
+                    "mainstage.analyzers.semantic.analyze_semantic_rules".to_string(),
+                    ast.location.clone(),
+                    ast.span.clone(),
+                ),
+            )]);
+        }
+
+        // Choose entrypoint: prefer explicit attribute, then match by name,
+        // otherwise pick the first workspace encountered.
+        let mut chosen: Option<usize> = None;
+        for (id, _name, attrs) in &workspaces {
+            if attrs.iter().any(|a| a == "entrypoint") {
+                chosen = Some(*id);
+                break;
+            }
+        }
+        if chosen.is_none() {
+            for (id, name_opt, _attrs) in &workspaces {
+                if let Some(name) = name_opt {
+                    if name == &node {
+                        chosen = Some(*id);
+                        break;
+                    }
+                }
+            }
+        }
+        if chosen.is_none() {
+            chosen = Some(workspaces[0].0);
+        }
+        if let Some(ep_nid) = chosen {
+            analysis.entry_point = ep_nid;
+        }
+
         Ok((node, analysis))
     } else {
         Err(vec![Box::new(

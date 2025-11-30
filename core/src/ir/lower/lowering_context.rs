@@ -23,6 +23,10 @@ pub struct LoweringContext {
     /// like workspace `for x in ...` so module-level lowering can resolve
     /// the loop iterator name to the per-iteration register when needed.
     pub temp_idents: HashMap<String, usize>,
+    /// When >0, module-level emission of side-effecting statements should
+    /// be suppressed (used while workspace bodies are being collected so
+    /// they can be lowered into wrappers instead of emitted at module scope).
+    pub suppress_module_emits: usize,
     // next_provisional_id is no longer used - IR module provides real ids
 }
 
@@ -38,7 +42,22 @@ impl LoweringContext {
             object_regs: HashMap::new(),
             object_id_regs: HashMap::new(),
             temp_idents: HashMap::new(),
+            suppress_module_emits: 0,
         }
+    }
+
+    pub fn push_suppress_module_emits(&mut self) {
+        self.suppress_module_emits = self.suppress_module_emits.saturating_add(1);
+    }
+
+    pub fn pop_suppress_module_emits(&mut self) {
+        if self.suppress_module_emits > 0 {
+            self.suppress_module_emits -= 1;
+        }
+    }
+
+    pub fn module_emits_suppressed(&self) -> bool {
+        self.suppress_module_emits > 0
     }
 
     /// Construct a context pre-populated from analyzer output and register the
@@ -93,7 +112,6 @@ impl LoweringContext {
     /// the given AST node id (workspace/project). This lets other lowering
     /// phases reference the same runtime slot for property ops.
     pub fn bind_object_reg(&mut self, node_id: NodeId, reg: usize) {
-        eprintln!("[lower-debug] bind_object_reg node_id={} reg=r{}", node_id, reg);
         self.object_regs.insert(node_id, reg);
     }
 
@@ -101,26 +119,22 @@ impl LoweringContext {
     /// (the numeric id returned by `IrModule::declare_object`). This lets
     /// lowering look up object runtime slots by symbol->object id mapping.
     pub fn bind_object_reg_by_objid(&mut self, obj_id: u32, reg: usize) {
-        eprintln!("[lower-debug] bind_object_reg_by_objid obj_id={} reg=r{}", obj_id, reg);
         self.object_id_regs.insert(obj_id, reg);
     }
 
     pub fn get_object_reg(&self, node_id: NodeId) -> Option<usize> {
         let v = self.object_regs.get(&node_id).copied();
-        eprintln!("[lower-debug] get_object_reg node_id={} -> {:?}", node_id, v);
         v
     }
 
     pub fn get_object_reg_by_objid(&self, obj_id: u32) -> Option<usize> {
         let v = self.object_id_regs.get(&obj_id).copied();
-        eprintln!("[lower-debug] get_object_reg_by_objid obj_id={} -> {:?}", obj_id, v);
         v
     }
 
     /// Bind a statically-created list (variable name) to a module register
     /// so other lowering passes can reference the array register.
     pub fn bind_list_array(&mut self, node_id: NodeId, reg: usize) {
-        eprintln!("[lower-debug] bind_list_array node_id={} reg=r{}", node_id, reg);
         self.list_arrays.insert(node_id, reg);
     }
 
@@ -128,7 +142,6 @@ impl LoweringContext {
     /// the assignment target or iterable identifier.
     pub fn get_list_array(&self, node_id: NodeId) -> Option<usize> {
         let v = self.list_arrays.get(&node_id).copied();
-        eprintln!("[lower-debug] get_list_array node_id={} -> {:?}", node_id, v);
         v
     }
 
@@ -137,18 +150,15 @@ impl LoweringContext {
     /// body). This lets module-level lowering (which sometimes runs in the
     /// same pass) refer to the item register by name.
     pub fn bind_temp_ident(&mut self, name: &str, reg: usize) {
-        eprintln!("[lower-debug] bind_temp_ident name='{}' reg=r{}", name, reg);
         self.temp_idents.insert(name.to_string(), reg);
     }
 
     pub fn unbind_temp_ident(&mut self, name: &str) {
-        eprintln!("[lower-debug] unbind_temp_ident name='{}'", name);
         self.temp_idents.remove(name);
     }
 
     pub fn get_temp_ident(&self, name: &str) -> Option<usize> {
         let v = self.temp_idents.get(name).copied();
-        eprintln!("[lower-debug] get_temp_ident name='{}' -> {:?}", name, v);
         v
     }
 }

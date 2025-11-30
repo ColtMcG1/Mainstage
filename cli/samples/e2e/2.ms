@@ -6,7 +6,6 @@ workspace demo_ws {
     {
         say("Processing project:");
         say(p.sources);
-        process_project_stage(p);
     }
 }
 

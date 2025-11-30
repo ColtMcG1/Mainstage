@@ -12,7 +12,7 @@ pub struct AnalyzerOutput {
     pub functions: Vec<FunctionInfo>,
     pub scopes: Vec<ScopeInfo>,
     pub call_graph: Vec<(NodeId, NodeId)>, // caller -> callee
-    pub entry_points: Vec<NodeId>,
+    pub entry_point: NodeId,
     pub diagnostics: Vec<DiagnosticInfo>,
     pub version: u32,
 }
@@ -24,7 +24,7 @@ impl AnalyzerOutput {
             functions: Vec::new(),
             scopes: Vec::new(),
             call_graph: Vec::new(),
-            entry_points: Vec::new(),
+            entry_point: 0,
             diagnostics: Vec::new(),
             version: 1,
         }

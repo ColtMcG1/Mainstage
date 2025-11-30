@@ -48,6 +48,15 @@ pub fn lower_expr_to_reg_helper(
                 if let Some(r) = ctx.get_temp_ident(name) {
                     return r;
                 }
+                // If the identifier names a declared module-level object
+                // (workspace/project), return its runtime register directly
+                // so property access targets the real object rather than a
+                // Symbol value.
+                if let Some(obj_id) = ctx.symbols.get(name).copied() {
+                    if let Some(reg) = ctx.get_object_reg_by_objid(obj_id) {
+                        return reg;
+                    }
+                }
             }
             let r = ir_mod.alloc_reg();
             ir_mod.emit_op(IROp::LConst { dest: r, value: crate::ir::value::Value::Symbol(name.clone()) });
@@ -77,7 +86,8 @@ pub fn lower_expr_to_reg_with_builder(
                 if let Some(id) = _ctx.symbols.get(name).copied() {
                     let mut regs = Vec::new();
                     for a in args.iter() {
-                        let r = lower_expr_to_reg_helper(a, ir_mod, Some(_ctx));
+                        let builder_arg = builder.as_mut().map(|b| &mut **b);
+                        let r = lower_expr_to_reg_with_builder(a, ir_mod, _ctx, builder_arg);
                         regs.push(r);
                     }
                     // If this is a known builtin host function, emit a Call (host)
@@ -88,14 +98,12 @@ pub fn lower_expr_to_reg_with_builder(
                                 let func_reg = b.alloc_reg();
                                 b.emit_op(IROp::LConst { dest: func_reg, value: crate::ir::value::Value::Symbol(name.clone()) });
                                 let dest = b.alloc_reg();
-                                eprintln!("[lower-debug] builder emitting Call (host) dest=r{} func_reg=r{} name='{}' args={:?}", dest, func_reg, name, regs);
                                 b.emit_op(IROp::Call { dest, func: func_reg, args: regs });
                                 return dest;
                             } else {
                                 let func_reg = ir_mod.alloc_reg();
                                 ir_mod.emit_op(IROp::LConst { dest: func_reg, value: crate::ir::value::Value::Symbol(name.clone()) });
                                 let dest = ir_mod.alloc_reg();
-                                eprintln!("[lower-debug] module emitting Call (host) dest=r{} func_reg=r{} name='{}' args={:?}", dest, func_reg, name, regs);
                                 ir_mod.emit_op(IROp::Call { dest, func: func_reg, args: regs });
                                 return dest;
                             }
@@ -104,13 +112,11 @@ pub fn lower_expr_to_reg_with_builder(
                             if let Some(b) = builder.as_mut() {
                                 let dest = b.alloc_reg();
                                 let label_idx = (id as usize).saturating_sub(1);
-                                eprintln!("[lower-debug] builder emitting CallLabel dest=r{} label_idx=L{} args={:?}", dest, label_idx, regs);
                                 b.emit_op(IROp::CallLabel { dest, label_index: label_idx, args: regs });
                                 return dest;
                             } else {
                                 let dest = ir_mod.alloc_reg();
                                 let label_idx = (id as usize).saturating_sub(1);
-                                eprintln!("[lower-debug] module emitting CallLabel dest=r{} label_idx=L{} args={:?}", dest, label_idx, regs);
                                 ir_mod.emit_op(IROp::CallLabel { dest, label_index: label_idx, args: regs });
                                 return dest;
                             }
@@ -119,7 +125,7 @@ pub fn lower_expr_to_reg_with_builder(
                 }
             }
             // fallback: evaluate args for side-effects and return Null
-            for a in args.iter() { let _ = lower_expr_to_reg_helper(a, ir_mod, Some(_ctx)); }
+            for a in args.iter() { let builder_arg = builder.as_mut().map(|b| &mut **b); let _ = lower_expr_to_reg_with_builder(a, ir_mod, _ctx, builder_arg); }
             if let Some(b) = builder.as_mut() { let r = (*b).alloc_reg(); (*b).emit_op(IROp::LConst { dest: r, value: crate::ir::value::Value::Null }); return r; } else { let r = ir_mod.alloc_reg(); ir_mod.emit_op(IROp::LConst { dest: r, value: crate::ir::value::Value::Null }); return r; }
         }
         AstNodeKind::String { value } => {
@@ -213,6 +219,16 @@ pub fn lower_expr_to_reg_with_builder(
                     let r = b.alloc_reg();
                     b.emit_op(IROp::LLocal { dest: r, local_index: local_idx });
                     return r;
+                }
+                // If this identifier names a declared module-level object,
+                // load its module register into a function-local via
+                // `LoadGlobal` so we reference the real object at runtime.
+                if let Some(obj_id) = _ctx.symbols.get(name).copied() {
+                    if let Some(mod_reg) = _ctx.get_object_reg_by_objid(obj_id) {
+                        let r = b.alloc_reg();
+                        b.emit_op(IROp::LoadGlobal { dest: r, src: mod_reg });
+                        return r;
+                    }
                 }
                 let r = b.alloc_reg();
                 b.emit_op(IROp::LConst { dest: r, value: crate::ir::value::Value::Symbol(name.clone()) });
@@ -435,7 +451,8 @@ pub fn lower_expr_to_reg_with_builder(
                 // non-constant list: build elements into regs and emit ArrayNew
                 let mut regs: Vec<usize> = Vec::new();
                 for el in elements.iter() {
-                    let r = lower_expr_to_reg_helper(el, ir_mod, Some(_ctx));
+                    let builder_arg = builder.as_mut().map(|b| &mut **b);
+                    let r = lower_expr_to_reg_with_builder(el, ir_mod, _ctx, builder_arg);
                     regs.push(r);
                 }
                 if let Some(b) = builder.as_mut() {

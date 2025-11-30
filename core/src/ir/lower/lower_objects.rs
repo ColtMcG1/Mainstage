@@ -6,43 +6,60 @@ pub fn lower_script_objects(
     ir_mod: &mut crate::ir::module::IrModule,
     analysis: Option<&crate::analyzers::output::AnalyzerOutput>,
 ) {
+
     // Create a lowering context from analyzer output if provided so lowering
     // can use pre-resolved symbols and prototypes.
     let mut ctx = match analysis {
         Some(a) => super::lowering_context::LoweringContext::from_analyzer_output(a, ir_mod),
         None => super::lowering_context::LoweringContext::new(),
     };
+
     // Ensure a small set of builtin runtime functions are declared so calls
     // like `say(...)` and `read(...)` lower to CallLabel rather than
     // falling back to Null producers.
-    if ctx.symbols.get("say").is_none() {
-        let id = ir_mod.declare_function("say");
-        ctx.symbols.insert("say".to_string(), id);
-    }
-    if ctx.symbols.get("read").is_none() {
-        let id = ir_mod.declare_function("read");
-        ctx.symbols.insert("read".to_string(), id);
-    }
+    super::declare_builtins::declare_builtin_functions(ir_mod, &mut ctx);
+
     if let Some(body) = match script.get_kind() {
         crate::ast::AstNodeKind::Script { body, .. } => Some(body),
         _ => None,
     } {
-        // First pass: register prototypes (stages/projects) so calls can refer to them.
-        // Defer workspace lowering (arrays/loops) to the second pass so that
-        // project objects and list arrays are declared before any module-level
-        // code that might reference them.
+        // First pass: register prototypes. Register projects first so that
+        // stages (which may reference project prototypes) can rely on
+        // project symbols being present during later lowering.
         for stmt in body.iter() {
-            match stmt.get_kind() {
-                crate::ast::AstNodeKind::Project { .. } => lower_project_object(stmt, ir_mod, &mut ctx),
-                crate::ast::AstNodeKind::Stage { .. } => lower_stage_object(stmt, ir_mod, &mut ctx),
-                _ => {}
+            if let crate::ast::AstNodeKind::Project { .. } = stmt.get_kind() {
+                lower_project_object(stmt, ir_mod, &mut ctx);
+            }
+        }
+        // Then register stages (function prototypes)
+        for stmt in body.iter() {
+            if let crate::ast::AstNodeKind::Stage { .. } = stmt.get_kind() {
+                lower_stage_object(stmt, ir_mod, &mut ctx);
+            }
+        }
+
+        // If analyzer provided entry_points, ensure any workspace entrypoints
+        // are declared as functions so later lowering can emit entrypoint
+        // wrappers and module-level calls. This bridges analyzer output
+        // (which may mark a workspace as an entrypoint) to the IR module.
+        if let Some(a) = analysis {
+            for stmt in body.iter() {
+                if let crate::ast::AstNodeKind::Workspace { name, .. } = stmt.get_kind() {
+                    if a.entry_point == stmt.get_id() {
+                        if ctx.get_function_id(stmt.get_id()).is_none() {
+                            let func_name = name.clone();
+                            let fid = ir_mod.declare_function(&func_name);
+                            ctx.bind_function_id(stmt.get_id(), fid);
+                            // also populate symbols so calls can resolve by name
+                            ctx.symbols.insert(func_name, fid);
+                        }
+                    }
+                }
             }
         }
 
         // Second pass: walk the AST and emit simple CallLabel ops for Call nodes
-        eprintln!("[lower] second pass: top-level nodes = {}", body.len());
         for stmt in body.iter() {
-            eprintln!("[lower] visiting top node: {}", stmt.get_kind());
             match stmt.get_kind() {
                 // Now perform workspace lowering in the second pass so that
                 // project declarations and other prototypes are already in
@@ -57,6 +74,7 @@ pub fn lower_script_objects(
     }
     // Resolve any deferred branch targets (labels emitted later)
     ir_mod.patch_unresolved_branches();
+    // Emit a final Halt to terminate execution cleanly
     ir_mod.emit_op(IROp::Halt);
 }
 
@@ -135,32 +153,65 @@ fn lower_workspace_object(
 
     // Collect the workspace body statements (do not lower them yet) so we
     // can detect project declarations and static list assignments to emit
-    // array constants and wire iteration lowering.
+    // array constants and wire iteration lowering. While collecting we
+    // suppress module-level emission so any side-effecting statements that
+    // belong to the workspace body aren't emitted at module scope.
+    ctx.push_suppress_module_emits();
     let members = collect_member_definitions(body, ir_mod, ctx);
+    ctx.pop_suppress_module_emits();
+
+    // list collected members (debug removed)
 
     // First pass: emit array constants for assignments like `ident = [a, b]`
     for stmt in members.iter() {
         if let crate::ast::AstNodeKind::Assignment { target, value } = stmt.get_kind() {
                     if let crate::ast::AstNodeKind::Identifier { .. } = target.get_kind() {
                 if let crate::ast::AstNodeKind::List { elements } = value.get_kind() {
-                    // Build an array of Symbol values for each identifier element
-                    let mut items: Vec<crate::ir::value::Value> = Vec::new();
-                    let mut all_idents = true;
+                    // Attempt to build an array of the actual project object runtime
+                    // registers. Prefer emitting an `ArrayNew` that references the
+                    // object regs directly so consumers get real objects, not
+                    // bare symbols. Fall back to the previous Symbol-valued
+                    // constant array if any element cannot be resolved to a
+                    // runtime object register.
+                    let mut elem_regs: Vec<usize> = Vec::new();
+                    let mut fallback_items: Vec<crate::ir::value::Value> = Vec::new();
+                    let mut all_resolved = true;
                     for el in elements.iter() {
                         if let crate::ast::AstNodeKind::Identifier { name } = el.get_kind() {
-                            items.push(crate::ir::value::Value::Symbol(name.clone()));
+                            // try to resolve the identifier name to a declared
+                            // object id via the lowering context symbol map and
+                            // then to a runtime register holding that object.
+                            if let Some(&obj_id) = ctx.symbols.get(name) {
+                                if let Some(obj_reg) = ctx.get_object_reg_by_objid(obj_id) {
+                                    elem_regs.push(obj_reg);
+                                    continue;
+                                }
+                            }
+                            // couldn't resolve to a runtime object reg; record
+                            // a Symbol fallback and mark as not fully resolved.
+                            fallback_items.push(crate::ir::value::Value::Symbol(name.clone()));
+                            all_resolved = false;
                         } else {
-                            all_idents = false;
+                            all_resolved = false;
                             break;
                         }
                     }
-                        if all_idents && !items.is_empty() {
-                        let arr_val = crate::ir::value::Value::Array(items);
+                    if all_resolved && !elem_regs.is_empty() {
+                        // Emit an ArrayNew that constructs the array at runtime
+                        // from the element registers (which reference project
+                        // object runtime slots).
                         let arr_reg = ir_mod.alloc_reg();
-                        ir_mod.emit_op(IROp::LConst { dest: arr_reg, value: arr_val });
-                        // persist the array register keyed by the AST node id
+                        ir_mod.emit_op(IROp::ArrayNew { dest: arr_reg, elems: elem_regs });
                         ctx.bind_list_array(target.get_id(), arr_reg);
                         // don't lower this assignment later
+                    } else if !fallback_items.is_empty() {
+                        // Fall back to previous behavior: emit a constant array
+                        // of Symbols if we couldn't resolve all elements to
+                        // object regs.
+                        let arr_val = crate::ir::value::Value::Array(fallback_items);
+                        let arr_reg = ir_mod.alloc_reg();
+                        ir_mod.emit_op(IROp::LConst { dest: arr_reg, value: arr_val });
+                        ctx.bind_list_array(target.get_id(), arr_reg);
                     }
                 }
             }
@@ -200,7 +251,6 @@ fn lower_workspace_object(
                     // loop_cond: cmp = idx < len
                     let loop_cond_pos = ir_mod.len();
                     let cmp_reg = ir_mod.alloc_reg();
-                    eprintln!("[lower-debug] workspace emitting Lt dest=r{} src1=r{} src2=r{} at op_index={}", cmp_reg, idx_reg, len_reg, ir_mod.len());
                     ir_mod.emit_op(IROp::Lt { dest: cmp_reg, src1: idx_reg, src2: len_reg });
                     // placeholder BrFalse (will be patched to a generated label)
                     let br_pos = ir_mod.len();
@@ -209,7 +259,6 @@ fn lower_workspace_object(
                     ir_mod.emit_op(IROp::BrFalse { cond: cmp_reg, target: 0 });
                     // record unresolved branch pointing to our after-label
                     ir_mod.record_unresolved_branch(br_pos, after_label.clone());
-                    eprintln!("[lower] workspace loop: loop_cond_pos={} br_pos={} cmp_reg={} after_label={}", loop_cond_pos, br_pos, cmp_reg, after_label);
 
                     // body: item = ArrayGet arr[idx]
                     let item_reg = ir_mod.alloc_reg();
@@ -235,14 +284,13 @@ fn lower_workspace_object(
                     // create a local for the iterator name so args[0] seeds it
                     fb.get_or_create_local(iterator);
                     let label_name = format!("L{}", label_idx);
-                    fb.emit_op(IROp::Label { name: label_name });
+                    fb.emit_op(IROp::Label { name: label_name.clone() });
                     // lower the loop body into the function builder
                     super::lower_stmt::emit_calls_in_node_with_builder(body, &mut fb, ir_mod, ctx);
                     fb.finalize_into(ir_mod);
 
                     // Now call the wrapper from the loop body with the item as arg
                     let dest = ir_mod.alloc_reg();
-                    eprintln!("[lower-debug] workspace loop emitting CallLabel dest=r{} label_idx=L{} loop_fn_id={} args=[r{}] (loop_fn_name={})", dest, label_idx, loop_fn_id, item_reg, loop_fn_name);
                     ir_mod.emit_op(IROp::CallLabel { dest, label_index: label_idx, args: vec![item_reg] });
 
                     // increment idx: idx = idx + 1
@@ -281,7 +329,19 @@ fn lower_workspace_object(
         let label_name = format!("L{}", label_idx);
         fb.emit_op(IROp::Label { name: label_name });
         super::lower_stmt::emit_calls_in_node_with_builder(body, &mut fb, ir_mod, ctx);
+        // Ensure the entrypoint function terminates the program cleanly.
+        // Without this, control could fall through into subsequent module
+        // code and produce unintended execution paths. Emitting a Halt
+        // here stops the VM once the entrypoint completes.
+        fb.emit_op(IROp::Halt);
         fb.finalize_into(ir_mod);
+        // Emit a module-level call to the workspace entrypoint so it runs
+        // at program startup. The call targets the function label index we
+        // declared above and uses no arguments.
+        let call_dest = ir_mod.alloc_reg();
+        ir_mod.emit_op(IROp::CallLabel { dest: call_dest, label_index: label_idx, args: vec![] });
+    } else {
+        // no entrypoint function id; nothing to emit
     }
 }
 
@@ -356,8 +416,8 @@ fn lower_stage_object(
 /// Collect member definitions from a container body node.
 fn collect_member_definitions(
     object_node: &crate::ast::AstNode,
-    ir_mod: &mut crate::ir::module::IrModule,
-    ctx: &mut super::lowering_context::LoweringContext,
+    _ir_mod: &mut crate::ir::module::IrModule,
+    _ctx: &mut super::lowering_context::LoweringContext,
 ) -> Vec<crate::ast::AstNode> {
     let mut members: Vec<crate::ast::AstNode> = Vec::new();
     if let crate::ast::AstNodeKind::Block { statements } = object_node.get_kind() {
@@ -373,8 +433,14 @@ fn collect_member_definitions(
                 crate::ast::AstNodeKind::Assignment { .. } => { members.push(stmt.clone()); }
                 crate::ast::AstNodeKind::ForIn { .. } => { members.push(stmt.clone()); }
                 _ => {
-                    // preserve side-effecting top-level statements by lowering them
-                    super::lower_stmt::lower_statment(stmt, ir_mod, ctx);
+                    // Preserve side-effecting top-level statements by collecting
+                    // them for the second pass. We previously lowered these
+                    // eagerly which could cause bodies (e.g. ForIn inner
+                    // statements) to be emitted at module scope before wrapper
+                    // functions were created. Collecting here lets the
+                    // workspace lowering decide how to lower each member in
+                    // the correct context (module vs wrapper).
+                    members.push(stmt.clone());
                 }
             }
         }

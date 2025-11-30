@@ -37,8 +37,6 @@ impl IrModule {
         let idx = self.ops.len();
         // push the op
         self.ops.push(op.clone());
-        // Debug: log each emission so we can trace which lowering emitted which ops
-        eprintln!("[ir-emit] idx={} op={}", idx, op);
         // if this op is a Label, record its position for later patching
         if let IROp::Label { name } = &op {
             self.labels.insert(name.clone(), idx);
@@ -94,60 +92,6 @@ impl IrModule {
     /// placeholders (which were emitted with a dummy target) to the final
     /// op indices where the corresponding `Label` ops were emitted.
     pub fn patch_unresolved_branches(&mut self) {
-        eprintln!("[ir] patch_unresolved_branches: labels={} unresolved={}", self.labels.len(), self.unresolved_branches.len());
-        // Diagnostic scan: find BrFalse ops whose condition is produced by
-        // an LConst Null (or otherwise note the last writer). This helps
-        // track down missing comparison emissions during lowering.
-        for (i, op) in self.ops.iter().enumerate() {
-            if let IROp::BrFalse { cond, target: _ } = op {
-                // search backwards for last op that wrote into `cond`
-                if let Some(j) = (0..i).rev().find(|&k| {
-                    match &self.ops[k] {
-                        IROp::LConst { dest, .. }
-                        | IROp::Add { dest, .. }
-                        | IROp::Lt { dest, .. }
-                        | IROp::Lte { dest, .. }
-                        | IROp::Gt { dest, .. }
-                        | IROp::Gte { dest, .. }
-                        | IROp::Eq { dest, .. }
-                        | IROp::Neq { dest, .. }
-                        | IROp::Not { dest, .. }
-                        | IROp::ArrayGet { dest, .. } => {
-                            *dest == *cond
-                        }
-                        _ => false,
-                    }
-                }) {
-                    eprintln!("[ir-diagnose] BrFalse at op={} cond=r{} last_writer_idx={} op={}", i, cond, j, self.ops[j]);
-                } else {
-                    eprintln!("[ir-diagnose] BrFalse at op={} cond=r{} has no prior writer", i, cond);
-                }
-            }
-        }
-
-        // Additional diagnostic: for any ArrayGet, report last writer for
-        // both the `array` and `index` registers so we can see why reads
-        // may return Null at runtime.
-        for (i, op) in self.ops.iter().enumerate() {
-            if let IROp::ArrayGet { dest: _, array, index } = op {
-                let find_writer = |reg: &usize| -> Option<usize> {
-                    (0..i).rev().find(|&k| match &self.ops[k] {
-                        IROp::LConst { dest, .. } if dest == reg => true,
-                        IROp::ArrayNew { dest, .. } if dest == reg => true,
-                        IROp::ArrayGet { dest, .. } if dest == reg => true,
-                        IROp::Call { dest, .. } if dest == reg => true,
-                        IROp::CallLabel { dest, .. } if dest == reg => true,
-                        IROp::Add { dest, .. } if dest == reg => true,
-                        IROp::Lt { dest, .. } if dest == reg => true,
-                        IROp::LLocal { dest, .. } if dest == reg => true,
-                        _ => false,
-                    })
-                };
-                let wa = find_writer(array);
-                let wi = find_writer(index);
-                eprintln!("[ir-diagnose] ArrayGet at op={} array=r{} last_writer_array={:?} index=r{} last_writer_index={:?}", i, array, wa, index, wi);
-            }
-        }
         for (op_index, label_name) in self.unresolved_branches.drain(..) {
             eprintln!("[ir] resolving branch at {} -> '{}'", op_index, label_name);
             if let Some(&target_idx) = self.labels.get(&label_name) {
@@ -217,7 +161,6 @@ impl IrModule {
     pub fn declare_function(&mut self, name: &str) -> u32 {
         let id = self.next_id;
         self.next_id = self.next_id.wrapping_add(1);
-            eprintln!("[ir-debug] declare_function -> id={} name='{}' next_function_id={}", id, name, self.next_id);
             self.functions.push(name.to_string());
         id
     }

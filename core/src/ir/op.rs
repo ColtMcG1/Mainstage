@@ -39,6 +39,11 @@ pub enum IROp {
     
     // Array and property operations
     ArrayNew { dest: Register, elems: Vec<Register> },
+    /// Load a module-level register into a function-local register.
+    /// `src` is a module-global register index and should not be remapped
+    /// during function finalization; `dest` is a function-local register
+    /// index that will be remapped into the module register space.
+    LoadGlobal { dest: Register, src: Register },
     ArrayGet { dest: Register, array: Register, index: Register },
     ArraySet { array: Register, index: Register, src: Register },
 
@@ -109,6 +114,7 @@ impl std::fmt::Display for IROp {
                 }
                 write!(f, "]")
             }
+            IROp::LoadGlobal { dest, src } => write!(f, "LoadGlobal r{} <- r{}", dest, src),
             IROp::ArrayGet { dest, array, index } => write!(f, "ArrayGet r{} <- r{}[r{}]", dest, array, index),
             IROp::ArraySet { array, index, src } => write!(f, "ArraySet r{}[r{}] <- r{}", array, index, src),
             IROp::GetProp { dest, obj, key } => write!(f, "GetProp r{} <- r{}.r{}", dest, obj, key),

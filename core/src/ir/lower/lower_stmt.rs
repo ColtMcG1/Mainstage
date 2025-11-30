@@ -7,6 +7,12 @@ pub fn lower_statment(
 
     match stmt_node.get_kind() {
         AstNodeKind::Call { .. } => {
+            // If workspace lowering has requested suppression of module-level
+            // emissions (we're collecting body statements to move into a
+            // wrapper), skip emitting calls at module scope here.
+            if ctx.module_emits_suppressed() {
+                return;
+            }
             // Reuse the same lowering as in the old top-level walker: call lowering
             // into module-level registers.
             if let AstNodeKind::Call { callee, args } = stmt_node.get_kind() {
@@ -24,13 +30,11 @@ pub fn lower_statment(
                                 let func_reg = ir_mod.alloc_reg();
                                 ir_mod.emit_op(crate::ir::op::IROp::LConst { dest: func_reg, value: crate::ir::value::Value::Symbol(name.clone()) });
                                 let dest = ir_mod.alloc_reg();
-                                eprintln!("[lower-debug] module emitting Call (host) (stmt) dest=r{} func_reg=r{} name='{}' args={:?}", dest, func_reg, name, regs);
                                 ir_mod.emit_op(crate::ir::op::IROp::Call { dest, func: func_reg, args: regs });
                             }
                             _ => {
                                 let dest = ir_mod.alloc_reg();
                                 let label_idx = (id as usize).saturating_sub(1);
-                                eprintln!("[lower-debug] module emitting CallLabel (stmt) dest=r{} label_idx=L{} args={:?}", dest, label_idx, regs);
                                 ir_mod.emit_op(crate::ir::op::IROp::CallLabel { dest, label_index: label_idx, args: regs });
                             }
                         }
@@ -60,9 +64,12 @@ pub fn lower_statment(
             lower_statment(if_body, ir_mod, ctx);
             lower_statment(else_body, ir_mod, ctx);
         }
-        AstNodeKind::ForIn { iterator: _, iterable, body } => {
+        AstNodeKind::ForIn { iterator: _, iterable, body: _ } => {
+            // When lowering at module scope, only lower the iterable
+            // expression (so array constants are produced). Do not lower
+            // the loop body here — workspace-level lowering will lower
+            // the body into wrapper functions where appropriate.
             lower_statment(iterable, ir_mod, ctx);
-            lower_statment(body, ir_mod, ctx);
         }
         AstNodeKind::ForTo { initializer, limit, body } => {
             lower_statment(initializer, ir_mod, ctx);
@@ -150,13 +157,11 @@ pub fn emit_calls_in_node_with_builder(
                             let func_reg = fb.alloc_reg();
                             fb.emit_op(IROp::LConst { dest: func_reg, value: crate::ir::value::Value::Symbol(name.clone()) });
                             let dest = fb.alloc_reg();
-                            eprintln!("[lower-debug] builder emitting Call (host) (stmt) dest=r{} func_reg=r{} name='{}' args={:?}", dest, func_reg, name, regs);
                             fb.emit_op(IROp::Call { dest, func: func_reg, args: regs });
                         }
                         _ => {
                             let dest = fb.alloc_reg();
                             let label_idx = (id as usize).saturating_sub(1);
-                            eprintln!("[lower-debug] builder emitting CallLabel (stmt) dest=r{} label_idx=L{} args={:?}", dest, label_idx, regs);
                             fb.emit_op(IROp::CallLabel { dest, label_index: label_idx, args: regs });
                         }
                     }
@@ -228,7 +233,7 @@ pub fn emit_calls_in_node_with_builder(
             // placeholder BrFalse to be patched after body
             let br_pos = fb.current_len();
             fb.emit_op(IROp::BrFalse { cond: cmp_reg, target: 0 });
-            eprintln!("[lower][builder] for-in: loop_cond_pos={} br_pos={} cmp_reg={}", loop_cond_pos, br_pos, cmp_reg);
+            // loop condition emitted
 
             // body: item = ArrayGet arr[idx]
             let item_reg = fb.alloc_reg();
@@ -252,7 +257,7 @@ pub fn emit_calls_in_node_with_builder(
 
             // patch BrFalse to jump here (after loop)
             let after = fb.current_len();
-            eprintln!("[lower][builder] for-in: after={} cmp_reg={} patching br_pos={}", after, cmp_reg, br_pos);
+            // patched for-in loop end
             fb.patch_op(br_pos, IROp::BrFalse { cond: cmp_reg, target: after });
         }
         AstNodeKind::ForTo { initializer, limit, body } => {

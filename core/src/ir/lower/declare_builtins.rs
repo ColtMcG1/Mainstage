@@ -1,0 +1,10 @@
+use crate::ir::{IrModule, lower::LoweringContext};
+pub(crate) fn declare_builtin_functions(ir_mod: &mut IrModule, ctx: &mut LoweringContext) {
+    let builtins = vec!["say", "ask", "read", "write", "time", "random"];
+    for name in builtins {
+        if ctx.symbols.get(name).is_none() {
+            let id = ir_mod.declare_function(name);
+            ctx.symbols.insert(name.to_string(), id);
+        }
+    }
+}

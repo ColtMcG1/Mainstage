@@ -214,6 +214,11 @@ pub fn emit_bytecode(module: &crate::ir::module::IrModule) -> Vec<u8> {
                     write_u32(&mut out, *r as u32);
                 }
             }
+            IROp::LoadGlobal { dest, src } => {
+                out.push(0x95);
+                write_u32(&mut out, *dest as u32);
+                write_u32(&mut out, *src as u32);
+            }
             IROp::ArrayGet { dest, array, index } => {
                 out.push(0x91);
                 write_u32(&mut out, *dest as u32);

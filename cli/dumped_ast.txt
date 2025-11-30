@@ -1,13 +1,13 @@
 AstNode {
-  id: 53,
+  id: 72,
   kind: Script {
     body: [
         AstNode {
-          id: 12,
+          id: 16,
           kind: Workspace {
             name: "demo_ws",
             body: AstNode {
-              id: 11,
+              id: 15,
               kind: Block {
                 statements: [
                     AstNode {
@@ -51,7 +51,7 @@ AstNode {
                     }
                     ,
                     AstNode {
-                      id: 10,
+                      id: 14,
                       kind: ForIn {
                         iterator: "p",
                         iterable: AstNode {
@@ -65,7 +65,7 @@ AstNode {
                         }
                         ,
                         body: AstNode {
-                          id: 9,
+                          id: 13,
                           kind: Block {
                             statements: [
                                 AstNode {
@@ -74,28 +74,69 @@ AstNode {
                                     callee: AstNode {
                                       id: 6,
                                       kind: Identifier {
-                                        name: "process_project_stage",
+                                        name: "say",
                                     },
                                       location: 2.ms:7:9
-                                      span: start=2.ms:7:9 end=2.ms:7:30
+                                      span: start=2.ms:7:9 end=2.ms:7:12
                                       attributes: []
                                     }
                                     ,
                                     args: [
                                         AstNode {
                                           id: 7,
-                                          kind: Identifier {
-                                            name: "p",
+                                          kind: String {
+                                            value: "Processing project:",
                                         },
-                                          location: 2.ms:7:31
-                                          span: start=2.ms:7:31 end=2.ms:7:32
+                                          location: 2.ms:7:13
+                                          span: start=2.ms:7:13 end=2.ms:7:34
                                           attributes: []
                                         }
                                         ,
                                     ],
                                 },
-                                  location: 2.ms:7:30
-                                  span: start=2.ms:7:30 end=2.ms:7:33
+                                  location: 2.ms:7:12
+                                  span: start=2.ms:7:12 end=2.ms:7:35
+                                  attributes: []
+                                }
+                                ,
+                                AstNode {
+                                  id: 12,
+                                  kind: Call {
+                                    callee: AstNode {
+                                      id: 9,
+                                      kind: Identifier {
+                                        name: "say",
+                                    },
+                                      location: 2.ms:8:9
+                                      span: start=2.ms:8:9 end=2.ms:8:12
+                                      attributes: []
+                                    }
+                                    ,
+                                    args: [
+                                        AstNode {
+                                          id: 11,
+                                          kind: Member {
+                                            object: AstNode {
+                                              id: 10,
+                                              kind: Identifier {
+                                                name: "p",
+                                            },
+                                              location: 2.ms:8:13
+                                              span: start=2.ms:8:13 end=2.ms:8:14
+                                              attributes: []
+                                            }
+                                            ,
+                                            property: "sources",
+                                        },
+                                          location: 2.ms:8:14
+                                          span: start=2.ms:8:14 end=2.ms:8:22
+                                          attributes: []
+                                        }
+                                        ,
+                                    ],
+                                },
+                                  location: 2.ms:8:12
+                                  span: start=2.ms:8:12 end=2.ms:8:23
                                   attributes: []
                                 }
                                 ,
@@ -108,7 +149,7 @@ AstNode {
                         ,
                     },
                       location: 2.ms:5:5
-                      span: start=2.ms:5:5 end=2.ms:8:6
+                      span: start=2.ms:5:5 end=2.ms:9:6
                       attributes: []
                     }
                     ,
@@ -121,55 +162,55 @@ AstNode {
             ,
         },
           location: 2.ms:1:1
-          span: start=2.ms:1:1 end=2.ms:9:2
+          span: start=2.ms:1:1 end=2.ms:10:2
           attributes: ["entrypoint"]
         }
         ,
         AstNode {
-          id: 18,
+          id: 22,
           kind: Project {
             name: "test_pj",
             body: AstNode {
-              id: 17,
+              id: 21,
               kind: Block {
                 statements: [
                     AstNode {
-                      id: 16,
+                      id: 20,
                       kind: Assignment {
                         target: AstNode {
-                          id: 13,
+                          id: 17,
                           kind: Identifier {
                             name: "sources",
                         },
-                          location: 2.ms:12:5
-                          span: start=2.ms:12:5 end=2.ms:12:12
+                          location: 2.ms:13:5
+                          span: start=2.ms:13:5 end=2.ms:13:12
                           attributes: []
                         }
                         ,
                         value: AstNode {
-                          id: 15,
+                          id: 19,
                           kind: List {
                             elements: [
                                 AstNode {
-                                  id: 14,
+                                  id: 18,
                                   kind: String {
-                                    value: "\"./samples/e2e/*.ms\"",
+                                    value: "./samples/e2e/*.ms",
                                 },
-                                  location: 2.ms:12:16
-                                  span: start=2.ms:12:16 end=2.ms:12:36
+                                  location: 2.ms:13:16
+                                  span: start=2.ms:13:16 end=2.ms:13:36
                                   attributes: []
                                 }
                                 ,
                             ],
                         },
-                          location: 2.ms:12:15
-                          span: start=2.ms:12:15 end=2.ms:12:37
+                          location: 2.ms:13:15
+                          span: start=2.ms:13:15 end=2.ms:13:37
                           attributes: []
                         }
                         ,
                     },
-                      location: 2.ms:12:5
-                      span: start=2.ms:12:5 end=2.ms:12:38
+                      location: 2.ms:13:5
+                      span: start=2.ms:13:5 end=2.ms:13:38
                       attributes: []
                     }
                     ,
@@ -181,81 +222,172 @@ AstNode {
             }
             ,
         },
-          location: 2.ms:11:1
-          span: start=2.ms:11:1 end=2.ms:13:2
+          location: 2.ms:12:1
+          span: start=2.ms:12:1 end=2.ms:14:2
           attributes: []
         }
         ,
         AstNode {
-          id: 26,
+          id: 39,
           kind: Stage {
             name: "load_stage",
             args: Some(
                 AstNode {
-                  id: 20,
+                  id: 24,
                   kind: Arguments {
                     args: [
                         AstNode {
-                          id: 19,
+                          id: 23,
                           kind: Identifier {
                             name: "var",
                         },
-                          location: 2.ms:15:18
-                          span: start=2.ms:15:18 end=2.ms:15:21
+                          location: 2.ms:16:18
+                          span: start=2.ms:16:18 end=2.ms:16:21
                           attributes: []
                         }
                         ,
                     ],
                 },
-                  location: 2.ms:15:18
-                  span: start=2.ms:15:18 end=2.ms:15:21
+                  location: 2.ms:16:18
+                  span: start=2.ms:16:18 end=2.ms:16:21
                   attributes: []
                 }
                 ,
             ),
             body: AstNode {
-              id: 25,
+              id: 38,
               kind: Block {
                 statements: [
                     AstNode {
-                      id: 24,
-                      kind: Return {
-                        value: Some(
+                      id: 27,
+                      kind: Call {
+                        callee: AstNode {
+                          id: 25,
+                          kind: Identifier {
+                            name: "say",
+                        },
+                          location: 2.ms:18:5
+                          span: start=2.ms:18:5 end=2.ms:18:8
+                          attributes: []
+                        }
+                        ,
+                        args: [
                             AstNode {
-                              id: 23,
-                              kind: Call {
-                                callee: AstNode {
-                                  id: 21,
+                              id: 26,
+                              kind: Identifier {
+                                name: "var",
+                            },
+                              location: 2.ms:18:9
+                              span: start=2.ms:18:9 end=2.ms:18:12
+                              attributes: []
+                            }
+                            ,
+                        ],
+                    },
+                      location: 2.ms:18:8
+                      span: start=2.ms:18:8 end=2.ms:18:13
+                      attributes: []
+                    }
+                    ,
+                    AstNode {
+                      id: 32,
+                      kind: Assignment {
+                        target: AstNode {
+                          id: 28,
+                          kind: Identifier {
+                            name: "in",
+                        },
+                          location: 2.ms:19:5
+                          span: start=2.ms:19:5 end=2.ms:19:7
+                          attributes: []
+                        }
+                        ,
+                        value: AstNode {
+                          id: 31,
+                          kind: Call {
+                            callee: AstNode {
+                              id: 29,
+                              kind: Identifier {
+                                name: "read",
+                            },
+                              location: 2.ms:19:10
+                              span: start=2.ms:19:10 end=2.ms:19:14
+                              attributes: []
+                            }
+                            ,
+                            args: [
+                                AstNode {
+                                  id: 30,
                                   kind: Identifier {
-                                    name: "read",
+                                    name: "var",
                                 },
-                                  location: 2.ms:17:12
-                                  span: start=2.ms:17:12 end=2.ms:17:16
+                                  location: 2.ms:19:15
+                                  span: start=2.ms:19:15 end=2.ms:19:18
                                   attributes: []
                                 }
                                 ,
-                                args: [
-                                    AstNode {
-                                      id: 22,
-                                      kind: Identifier {
-                                        name: "var",
-                                    },
-                                      location: 2.ms:17:17
-                                      span: start=2.ms:17:17 end=2.ms:17:20
-                                      attributes: []
-                                    }
-                                    ,
-                                ],
+                            ],
+                        },
+                          location: 2.ms:19:14
+                          span: start=2.ms:19:14 end=2.ms:19:19
+                          attributes: []
+                        }
+                        ,
+                    },
+                      location: 2.ms:19:5
+                      span: start=2.ms:19:5 end=2.ms:19:20
+                      attributes: []
+                    }
+                    ,
+                    AstNode {
+                      id: 35,
+                      kind: Call {
+                        callee: AstNode {
+                          id: 33,
+                          kind: Identifier {
+                            name: "say",
+                        },
+                          location: 2.ms:20:5
+                          span: start=2.ms:20:5 end=2.ms:20:8
+                          attributes: []
+                        }
+                        ,
+                        args: [
+                            AstNode {
+                              id: 34,
+                              kind: Identifier {
+                                name: "in",
                             },
-                              location: 2.ms:17:16
-                              span: start=2.ms:17:16 end=2.ms:17:21
+                              location: 2.ms:20:9
+                              span: start=2.ms:20:9 end=2.ms:20:11
+                              attributes: []
+                            }
+                            ,
+                        ],
+                    },
+                      location: 2.ms:20:8
+                      span: start=2.ms:20:8 end=2.ms:20:12
+                      attributes: []
+                    }
+                    ,
+                    AstNode {
+                      id: 37,
+                      kind: Return {
+                        value: Some(
+                            AstNode {
+                              id: 36,
+                              kind: Identifier {
+                                name: "in",
+                            },
+                              location: 2.ms:21:12
+                              span: start=2.ms:21:12 end=2.ms:21:14
                               attributes: []
                             }
                             ,
                         ),
                     },
-                      location: 2.ms:17:5
-                      span: start=2.ms:17:5 end=2.ms:17:22
+                      location: 2.ms:21:5
+                      span: start=2.ms:21:5 end=2.ms:21:15
                       attributes: []
                     }
                     ,
@@ -267,125 +399,125 @@ AstNode {
             }
             ,
         },
-          location: 2.ms:15:1
-          span: start=2.ms:15:1 end=2.ms:18:2
+          location: 2.ms:16:1
+          span: start=2.ms:16:1 end=2.ms:22:2
           attributes: []
         }
         ,
         AstNode {
-          id: 51,
+          id: 70,
           kind: Stage {
             name: "process_project_stage",
             args: Some(
                 AstNode {
-                  id: 28,
+                  id: 41,
                   kind: Arguments {
                     args: [
                         AstNode {
-                          id: 27,
+                          id: 40,
                           kind: Identifier {
                             name: "prj",
                         },
-                          location: 2.ms:20:29
-                          span: start=2.ms:20:29 end=2.ms:20:32
+                          location: 2.ms:24:29
+                          span: start=2.ms:24:29 end=2.ms:24:32
                           attributes: []
                         }
                         ,
                     ],
                 },
-                  location: 2.ms:20:29
-                  span: start=2.ms:20:29 end=2.ms:20:32
+                  location: 2.ms:24:29
+                  span: start=2.ms:24:29 end=2.ms:24:32
                   attributes: []
                 }
                 ,
             ),
             body: AstNode {
-              id: 50,
+              id: 69,
               kind: Block {
                 statements: [
                     AstNode {
-                      id: 38,
+                      id: 51,
                       kind: If {
                         condition: AstNode {
-                          id: 32,
+                          id: 45,
                           kind: BinaryOp {
                             left: AstNode {
-                              id: 30,
+                              id: 43,
                               kind: Member {
                                 object: AstNode {
-                                  id: 29,
+                                  id: 42,
                                   kind: Identifier {
                                     name: "prj",
                                 },
-                                  location: 2.ms:22:8
-                                  span: start=2.ms:22:8 end=2.ms:22:11
+                                  location: 2.ms:26:8
+                                  span: start=2.ms:26:8 end=2.ms:26:11
                                   attributes: []
                                 }
                                 ,
                                 property: "sources",
                             },
-                              location: 2.ms:22:11
-                              span: start=2.ms:22:11 end=2.ms:22:19
+                              location: 2.ms:26:11
+                              span: start=2.ms:26:11 end=2.ms:26:19
                               attributes: []
                             }
                             ,
                             op: Eq,
                             right: AstNode {
-                              id: 31,
+                              id: 44,
                               kind: Null,
-                              location: 2.ms:22:23
-                              span: start=2.ms:22:23 end=2.ms:22:27
+                              location: 2.ms:26:23
+                              span: start=2.ms:26:23 end=2.ms:26:27
                               attributes: []
                             }
                             ,
                         },
-                          location: 2.ms:22:20
-                          span: start=2.ms:22:20 end=2.ms:22:22
+                          location: 2.ms:26:20
+                          span: start=2.ms:26:20 end=2.ms:26:22
                           attributes: []
                         }
                         ,
                         body: AstNode {
-                          id: 37,
+                          id: 50,
                           kind: Block {
                             statements: [
                                 AstNode {
-                                  id: 35,
+                                  id: 48,
                                   kind: Call {
                                     callee: AstNode {
-                                      id: 33,
+                                      id: 46,
                                       kind: Identifier {
                                         name: "say",
                                     },
-                                      location: 2.ms:23:9
-                                      span: start=2.ms:23:9 end=2.ms:23:12
+                                      location: 2.ms:27:9
+                                      span: start=2.ms:27:9 end=2.ms:27:12
                                       attributes: []
                                     }
                                     ,
                                     args: [
                                         AstNode {
-                                          id: 34,
+                                          id: 47,
                                           kind: String {
-                                            value: "\"No sources found.\"",
+                                            value: "No sources found.",
                                         },
-                                          location: 2.ms:23:13
-                                          span: start=2.ms:23:13 end=2.ms:23:32
+                                          location: 2.ms:27:13
+                                          span: start=2.ms:27:13 end=2.ms:27:32
                                           attributes: []
                                         }
                                         ,
                                     ],
                                 },
-                                  location: 2.ms:23:12
-                                  span: start=2.ms:23:12 end=2.ms:23:33
+                                  location: 2.ms:27:12
+                                  span: start=2.ms:27:12 end=2.ms:27:33
                                   attributes: []
                                 }
                                 ,
                                 AstNode {
-                                  id: 36,
+                                  id: 49,
                                   kind: Identifier {
                                     name: "return",
                                 },
-                                  location: 2.ms:24:9
-                                  span: start=2.ms:24:9 end=2.ms:24:15
+                                  location: 2.ms:28:9
+                                  span: start=2.ms:28:9 end=2.ms:28:15
                                   attributes: []
                                 }
                                 ,
@@ -397,118 +529,178 @@ AstNode {
                         }
                         ,
                     },
-                      location: 2.ms:22:5
-                      span: start=2.ms:22:5 end=2.ms:25:6
+                      location: 2.ms:26:5
+                      span: start=2.ms:26:5 end=2.ms:29:6
                       attributes: []
                     }
                     ,
                     AstNode {
-                      id: 46,
+                      id: 57,
                       kind: Assignment {
                         target: AstNode {
-                          id: 39,
+                          id: 52,
                           kind: Identifier {
-                            name: "in",
+                            name: "var",
                         },
-                          location: 2.ms:26:5
-                          span: start=2.ms:26:5 end=2.ms:26:7
+                          location: 2.ms:30:5
+                          span: start=2.ms:30:5 end=2.ms:30:8
                           attributes: []
                         }
                         ,
                         value: AstNode {
-                          id: 45,
-                          kind: Call {
-                            callee: AstNode {
-                              id: 40,
-                              kind: Identifier {
-                                name: "load_stage",
-                            },
-                              location: 2.ms:26:10
-                              span: start=2.ms:26:10 end=2.ms:26:20
-                              attributes: []
-                            }
-                            ,
-                            args: [
-                                AstNode {
-                                  id: 44,
-                                  kind: Index {
-                                    object: AstNode {
-                                      id: 42,
-                                      kind: Member {
-                                        object: AstNode {
-                                          id: 41,
-                                          kind: Identifier {
-                                            name: "prj",
-                                        },
-                                          location: 2.ms:26:21
-                                          span: start=2.ms:26:21 end=2.ms:26:24
-                                          attributes: []
-                                        }
-                                        ,
-                                        property: "sources",
-                                    },
-                                      location: 2.ms:26:24
-                                      span: start=2.ms:26:24 end=2.ms:26:32
-                                      attributes: []
-                                    }
-                                    ,
-                                    index: AstNode {
-                                      id: 43,
-                                      kind: Integer {
-                                        value: 0,
-                                    },
-                                      location: 2.ms:26:33
-                                      span: start=2.ms:26:33 end=2.ms:26:34
-                                      attributes: []
-                                    }
-                                    ,
+                          id: 56,
+                          kind: Index {
+                            object: AstNode {
+                              id: 54,
+                              kind: Member {
+                                object: AstNode {
+                                  id: 53,
+                                  kind: Identifier {
+                                    name: "prj",
                                 },
-                                  location: 2.ms:26:32
-                                  span: start=2.ms:26:32 end=2.ms:26:35
+                                  location: 2.ms:30:11
+                                  span: start=2.ms:30:11 end=2.ms:30:14
                                   attributes: []
                                 }
                                 ,
-                            ],
+                                property: "sources",
+                            },
+                              location: 2.ms:30:14
+                              span: start=2.ms:30:14 end=2.ms:30:22
+                              attributes: []
+                            }
+                            ,
+                            index: AstNode {
+                              id: 55,
+                              kind: Integer {
+                                value: 0,
+                            },
+                              location: 2.ms:30:23
+                              span: start=2.ms:30:23 end=2.ms:30:24
+                              attributes: []
+                            }
+                            ,
                         },
-                          location: 2.ms:26:20
-                          span: start=2.ms:26:20 end=2.ms:26:36
+                          location: 2.ms:30:22
+                          span: start=2.ms:30:22 end=2.ms:30:25
                           attributes: []
                         }
                         ,
                     },
-                      location: 2.ms:26:5
-                      span: start=2.ms:26:5 end=2.ms:26:37
+                      location: 2.ms:30:5
+                      span: start=2.ms:30:5 end=2.ms:30:26
                       attributes: []
                     }
                     ,
                     AstNode {
-                      id: 49,
+                      id: 60,
                       kind: Call {
                         callee: AstNode {
-                          id: 47,
+                          id: 58,
                           kind: Identifier {
                             name: "say",
                         },
-                          location: 2.ms:27:5
-                          span: start=2.ms:27:5 end=2.ms:27:8
+                          location: 2.ms:31:5
+                          span: start=2.ms:31:5 end=2.ms:31:8
                           attributes: []
                         }
                         ,
                         args: [
                             AstNode {
-                              id: 48,
+                              id: 59,
                               kind: Identifier {
-                                name: "in",
+                                name: "var",
                             },
-                              location: 2.ms:27:9
-                              span: start=2.ms:27:9 end=2.ms:27:11
+                              location: 2.ms:31:9
+                              span: start=2.ms:31:9 end=2.ms:31:12
                               attributes: []
                             }
                             ,
                         ],
                     },
-                      location: 2.ms:27:8
-                      span: start=2.ms:27:8 end=2.ms:27:12
+                      location: 2.ms:31:8
+                      span: start=2.ms:31:8 end=2.ms:31:13
+                      attributes: []
+                    }
+                    ,
+                    AstNode {
+                      id: 65,
+                      kind: Assignment {
+                        target: AstNode {
+                          id: 61,
+                          kind: Identifier {
+                            name: "in",
+                        },
+                          location: 2.ms:32:5
+                          span: start=2.ms:32:5 end=2.ms:32:7
+                          attributes: []
+                        }
+                        ,
+                        value: AstNode {
+                          id: 64,
+                          kind: Call {
+                            callee: AstNode {
+                              id: 62,
+                              kind: Identifier {
+                                name: "load_stage",
+                            },
+                              location: 2.ms:32:10
+                              span: start=2.ms:32:10 end=2.ms:32:20
+                              attributes: []
+                            }
+                            ,
+                            args: [
+                                AstNode {
+                                  id: 63,
+                                  kind: Identifier {
+                                    name: "var",
+                                },
+                                  location: 2.ms:32:21
+                                  span: start=2.ms:32:21 end=2.ms:32:24
+                                  attributes: []
+                                }
+                                ,
+                            ],
+                        },
+                          location: 2.ms:32:20
+                          span: start=2.ms:32:20 end=2.ms:32:25
+                          attributes: []
+                        }
+                        ,
+                    },
+                      location: 2.ms:32:5
+                      span: start=2.ms:32:5 end=2.ms:32:26
+                      attributes: []
+                    }
+                    ,
+                    AstNode {
+                      id: 68,
+                      kind: Call {
+                        callee: AstNode {
+                          id: 66,
+                          kind: Identifier {
+                            name: "say",
+                        },
+                          location: 2.ms:33:5
+                          span: start=2.ms:33:5 end=2.ms:33:8
+                          attributes: []
+                        }
+                        ,
+                        args: [
+                            AstNode {
+                              id: 67,
+                              kind: Identifier {
+                                name: "in",
+                            },
+                              location: 2.ms:33:9
+                              span: start=2.ms:33:9 end=2.ms:33:11
+                              attributes: []
+                            }
+                            ,
+                        ],
+                    },
+                      location: 2.ms:33:8
+                      span: start=2.ms:33:8 end=2.ms:33:12
                       attributes: []
                     }
                     ,
@@ -520,13 +712,13 @@ AstNode {
             }
             ,
         },
-          location: 2.ms:20:1
-          span: start=2.ms:20:1 end=2.ms:28:2
+          location: 2.ms:24:1
+          span: start=2.ms:24:1 end=2.ms:34:2
           attributes: []
         }
         ,
         AstNode {
-          id: 52,
+          id: 71,
           kind: Null,
           location: None
           span: None
@@ -536,6 +728,6 @@ AstNode {
     ],
 },
   location: 2.ms:1:1
-  span: start=2.ms:1:1 end=2.ms:28:2
+  span: start=2.ms:1:1 end=2.ms:34:2
   attributes: []
 }

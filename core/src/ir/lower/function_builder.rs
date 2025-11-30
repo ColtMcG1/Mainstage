@@ -129,6 +129,7 @@ impl FunctionBuilder {
                 IROp::CLoad { dest, closure, field: _ } => { let od=*dest; if od < local_reg_count { *dest += reg_base; } let oc=*closure; if oc < local_reg_count { *closure += reg_base; } }
 
                 IROp::ArrayNew { dest, elems } => { let od=*dest; if od < local_reg_count { *dest += reg_base; } for e in elems.iter_mut() { let oe=*e; if oe < local_reg_count { *e += reg_base; } } }
+                IROp::LoadGlobal { dest, src: _ } => { let od=*dest; if od < local_reg_count { *dest += reg_base; } /* src is module-global and must not be remapped */ }
                 IROp::ArrayGet { dest, array, index } => { let od=*dest; if od < local_reg_count { *dest += reg_base; } let oa=*array; if oa < local_reg_count { *array += reg_base; } let oi=*index; if oi < local_reg_count { *index += reg_base; } }
                 IROp::ArraySet { array, index, src } => { let oa=*array; if oa < local_reg_count { *array += reg_base; } let oi=*index; if oi < local_reg_count { *index += reg_base; } let os=*src; if os < local_reg_count { *src += reg_base; } }
 
@@ -140,13 +141,6 @@ impl FunctionBuilder {
                 IROp::Ret { src } => { let os=*src; if os < local_reg_count { *src += reg_base; } }
 
                 _ => {}
-            }
-            // If this op is a Label, log where it will be emitted so we can
-            // correlate declared function ids / label ordinals with actual
-            // label positions in the final module.
-            if let IROp::Label { name } = &op {
-                let emit_idx = module.len();
-                eprintln!("[ir-debug] emitting Label '{}' at idx={} (base_op_index={})", name, emit_idx, base_op_index);
             }
             module.emit_op(op);
         }
