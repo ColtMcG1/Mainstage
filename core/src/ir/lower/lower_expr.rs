@@ -124,6 +124,32 @@ pub fn lower_expr_to_reg_with_builder(
                     }
                 }
             }
+            // Member-style callee could be a plugin call: <alias>.<func>(...)
+            if let crate::ast::AstNodeKind::Member { object, property } = callee.get_kind() {
+                if let crate::ast::AstNodeKind::Identifier { name: alias } = object.get_kind() {
+                    // Check lowering context symbols for a dotted function symbol inserted by the analyzer
+                    let full_name = format!("{}.{}", alias, property);
+                    if _ctx.symbols.get(&full_name).is_some() {
+                        // lower args
+                        let mut regs: Vec<usize> = Vec::new();
+                        for a in args.iter() {
+                            let builder_arg = builder.as_mut().map(|b| &mut **b);
+                            let r = lower_expr_to_reg_with_builder(a, ir_mod, _ctx, builder_arg);
+                            regs.push(r);
+                        }
+                        if let Some(b) = builder.as_mut() {
+                            let dest = b.alloc_reg();
+                            b.emit_op(IROp::PluginCall { dest: Some(dest), plugin_name: alias.clone(), func_name: property.clone(), args: regs });
+                            return dest;
+                        } else {
+                            let dest = ir_mod.alloc_reg();
+                            ir_mod.emit_op(IROp::PluginCall { dest: Some(dest), plugin_name: alias.clone(), func_name: property.clone(), args: regs });
+                            return dest;
+                        }
+                    }
+                }
+            }
+
             // fallback: evaluate args for side-effects and return Null
             for a in args.iter() { let builder_arg = builder.as_mut().map(|b| &mut **b); let _ = lower_expr_to_reg_with_builder(a, ir_mod, _ctx, builder_arg); }
             if let Some(b) = builder.as_mut() { let r = (*b).alloc_reg(); (*b).emit_op(IROp::LConst { dest: r, value: crate::ir::value::Value::Null }); return r; } else { let r = ir_mod.alloc_reg(); ir_mod.emit_op(IROp::LConst { dest: r, value: crate::ir::value::Value::Null }); return r; }

@@ -52,6 +52,7 @@ pub enum IROp {
 
     Call { dest: Register, func: Register, args: Vec<Register> },
     CallLabel { dest: Register, label_index: usize, args: Vec<Register> },
+    PluginCall { dest: Option<Register>, plugin_name: String, func_name: String, args: Vec<Register> },
     Ret { src: Register },
 }
 
@@ -101,6 +102,18 @@ impl std::fmt::Display for IROp {
                     if i > 0 {
                         write!(f, ", ")?;
                     }
+                    write!(f, "r{}", arg)?;
+                }
+                write!(f, ")")
+            }
+            IROp::PluginCall { dest, plugin_name, func_name, args } => {
+                if let Some(d) = dest {
+                    write!(f, "PluginCall r{} <- {}.{}(", d, plugin_name, func_name)?;
+                } else {
+                    write!(f, "PluginCall <- {}.{}(", plugin_name, func_name)?;
+                }
+                for (i, arg) in args.iter().enumerate() {
+                    if i > 0 { write!(f, ", ")?; }
                     write!(f, "r{}", arg)?;
                 }
                 write!(f, ")")

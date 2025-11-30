@@ -202,6 +202,19 @@ pub fn emit_bytecode(module: &crate::ir::module::IrModule) -> Vec<u8> {
                     write_u32(&mut out, *a as u32);
                 }
             }
+            IROp::PluginCall { dest, plugin_name, func_name, args } => {
+                out.push(0x72);
+                write_string(&mut out, plugin_name);
+                write_string(&mut out, func_name);
+                write_u32(&mut out, args.len() as u32);
+                for a in args.iter() {
+                    write_u32(&mut out, *a as u32);
+                }
+                match dest {
+                    Some(d) => { write_u32(&mut out, 1); write_u32(&mut out, *d as u32); }
+                    None => { write_u32(&mut out, 0); }
+                }
+            }
             IROp::Ret { src } => {
                 out.push(0x80);
                 write_u32(&mut out, *src as u32);

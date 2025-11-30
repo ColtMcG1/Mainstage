@@ -1,0 +1,76 @@
+use crate::vm::value::Value;
+use async_trait::async_trait;
+
+#[async_trait]
+pub trait Plugin: Send + Sync {
+    /// Name of the plugin (e.g. "cpp_compiler").
+    fn name(&self) -> &str;
+
+    /// Called by the runtime to invoke a function.
+    /// `func` is the function name (e.g. "compile"), `args` are VM values.
+    /// Return a VM `Value` for the runtime to use.
+    async fn call(&self, func: &str, args: Vec<Value>) -> Result<Value, String>;
+
+    /// Optional metadata for capabilities, versioning, etc.
+    fn metadata(&self) -> PluginMetadata { PluginMetadata::default() }
+}
+
+#[derive(Default)]
+pub struct PluginMetadata {
+    pub description: String,
+    pub version: String,
+    pub arguments: Vec<String>,
+    pub returns: Vec<String>,
+}
+
+use std::sync::Arc;
+use std::collections::HashMap;
+use std::path::PathBuf;
+use crate::vm::manifest::PluginManifest;
+
+#[derive(Clone, Debug)]
+pub struct PluginDescriptor {
+    pub manifest: PluginManifest,
+    pub path: Option<PathBuf>,
+}
+
+pub struct PluginRegistry {
+    plugins: HashMap<String, Arc<dyn Plugin>>,
+    descriptors: HashMap<String, PluginDescriptor>,
+}
+
+impl PluginRegistry {
+    pub fn new() -> Self { Self { plugins: HashMap::new(), descriptors: HashMap::new() } }
+
+    /// Register a runtime plugin instance (in-process adapter).
+    pub fn register(&mut self, plugin: Arc<dyn Plugin>) {
+        self.plugins.insert(plugin.name().to_string(), plugin);
+    }
+
+    /// Register a manifest/descriptor without an instance (discovered on disk).
+    pub fn register_descriptor(&mut self, manifest: PluginManifest, path: Option<PathBuf>) {
+        let name = manifest.name.clone();
+        self.descriptors.insert(name.clone(), PluginDescriptor { manifest, path });
+    }
+
+    pub fn get(&self, name: &str) -> Option<Arc<dyn Plugin>> {
+        self.plugins.get(name).cloned()
+    }
+
+    pub fn get_descriptor(&self, name: &str) -> Option<&PluginDescriptor> {
+        self.descriptors.get(name)
+    }
+
+    /// Return a cloned map of all registered descriptors for read-only consumers.
+    pub fn descriptors_map(&self) -> std::collections::HashMap<String, PluginDescriptor> {
+        self.descriptors.clone()
+    }
+
+    pub fn list_functions(&self, plugin_name: &str) -> Option<Vec<String>> {
+        self.descriptors.get(plugin_name).map(|d| d.manifest.functions.iter().map(|f| f.name.clone()).collect())
+    }
+
+    pub fn unregister(&mut self, name: &str) {
+        self.plugins.remove(name);
+    }
+}

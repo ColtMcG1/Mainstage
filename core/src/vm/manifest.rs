@@ -1,0 +1,109 @@
+use serde::{Deserialize, Serialize};
+use std::path::Path;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FunctionArg {
+    pub name: String,
+    #[serde(default)]
+    pub kind: Option<String>,
+    #[serde(default)]
+    pub optional: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FunctionSpec {
+    pub name: String,
+    #[serde(default)]
+    pub args: Vec<FunctionArg>,
+    #[serde(default)]
+    pub returns: Option<FunctionArg>,
+    #[serde(default)]
+    pub description: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PluginManifest {
+    pub name: String,
+    #[serde(default)]
+    pub version: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default = "default_abi")]
+    pub abi: String,
+    #[serde(default)]
+    pub entry: Option<String>,
+    #[serde(default)]
+    pub functions: Vec<FunctionSpec>,
+    #[serde(default)]
+    pub capabilities: Vec<String>,
+}
+
+fn default_abi() -> String { "inprocess".to_string() }
+
+impl PluginManifest {
+    /// Load a manifest from a JSON file path.
+    pub fn load_from_file<P: AsRef<Path>>(path: P) -> Result<PluginManifest, String> {
+        let raw = std::fs::read_to_string(&path).map_err(|e| format!("read manifest: {}", e))?;
+        serde_json::from_str(&raw).map_err(|e| format!("parse manifest: {}", e))
+    }
+
+    /// Optionally validate the manifest (basic checks).
+    pub fn validate(&self) -> Result<(), String> {
+        if self.name.trim().is_empty() {
+            return Err("manifest name is empty".to_string());
+        }
+        // function names must be unique
+        let mut seen = std::collections::HashSet::new();
+        for f in &self.functions {
+            if !seen.insert(f.name.clone()) {
+                return Err(format!("duplicate function name '{}'", f.name));
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Discover manifests in a directory. Expects each plugin in its own subdirectory
+/// with a `manifest.json` file. Returns (manifest, manifest_path) tuples.
+pub fn discover_manifests_in_dir<P: AsRef<Path>>(dir: P) -> Result<Vec<(PluginManifest, std::path::PathBuf)>, String> {
+    let mut out = Vec::new();
+    let dir = dir.as_ref();
+    if !dir.exists() {
+        return Ok(out);
+    }
+    for entry in std::fs::read_dir(dir).map_err(|e| format!("read dir: {}", e))? {
+        let entry = entry.map_err(|e| format!("read dir entry: {}", e))?;
+        if !entry.file_type().map_err(|e| format!("file type: {}", e))?.is_dir() {
+            continue;
+        }
+        let manifest_path = entry.path().join("manifest.json");
+        if manifest_path.exists() {
+            let manifest = PluginManifest::load_from_file(&manifest_path)?;
+            manifest.validate()?;
+            out.push((manifest, manifest_path));
+        }
+    }
+    Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_example_manifest() {
+        let json = r#"
+        {
+            "name": "cpp_compiler",
+            "version": "0.1.0",
+            "description": "Compile C++",
+            "functions": [
+                { "name": "compile", "args": [ { "name": "files", "kind": "Array" } ], "returns": { "kind": "Object" } }
+            ]
+        }
+        "#;
+        let m: PluginManifest = serde_json::from_str(json).expect("parse");
+        assert_eq!(m.name, "cpp_compiler");
+        assert_eq!(m.functions.len(), 1);
+    }
+}

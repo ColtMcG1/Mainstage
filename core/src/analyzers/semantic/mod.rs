@@ -1,5 +1,7 @@
 use crate::ast::AstNode;
-use crate::error::{MainstageErrorExt};
+use crate::error::MainstageErrorExt;
+use crate::vm::plugin::PluginDescriptor;
+use std::collections::HashMap;
 use crate::analyzers::output::{AnalyzerOutput, NodeId};
 
 mod err;
@@ -13,8 +15,11 @@ mod analyzer;
 
 pub use kind::InferredKind;
 
-pub fn analyze_semantic_rules(ast: &mut AstNode) -> Result<(String, AnalyzerOutput), Vec<Box<dyn MainstageErrorExt>>> {
-    let mut analyzer = analyzer::Analyzer::new();
+pub fn analyze_semantic_rules(ast: &mut AstNode, manifests: Option<&HashMap<String, PluginDescriptor>>) -> Result<(String, AnalyzerOutput), Vec<Box<dyn MainstageErrorExt>>> {
+    // Clone manifests into the analyzer so it owns the data for the duration
+    // of analysis. We clone to avoid tying lifetimes across callers.
+    let cloned = manifests.map(|m| m.clone());
+    let mut analyzer = analyzer::Analyzer::new_with_manifests(cloned);
 
     // Run the analyzer and propagate any fatal analysis error immediately.
     if let Err(e) = analyzer.analyze(ast) {

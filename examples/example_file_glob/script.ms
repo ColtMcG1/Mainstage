@@ -25,6 +25,10 @@ stage process_project_stage(prj)
         return;
     }
     sources = load_sources_stage(prj.sources[0]);
+    if sources == null {
+        say("No sources loaded.");
+        return;
+    }
     for src in sources {
         say(src);
         say("----");

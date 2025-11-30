@@ -11,6 +11,7 @@ pub enum Kind {
     Object,
     Array,
     Dynamic,
+    Plugin
 }
 
 impl fmt::Display for Kind {
@@ -25,6 +26,7 @@ impl fmt::Display for Kind {
             Kind::Object => "Object",
             Kind::Array => "Array",
             Kind::Dynamic => "Dynamic",
+            Kind::Plugin => "Plugin",
         };
         write!(f, "{}", s)
     }
@@ -97,6 +99,9 @@ impl InferredKind {
     pub fn dynamic() -> Self {
         Self::default()
     }
+    pub fn plugin() -> Self {
+        Self::new(Kind::Plugin, Origin::Expression, None, None)
+    }
 
     /// Attach an element kind for container types like Array.
     pub fn with_element(mut self, elem: InferredKind) -> Self {
@@ -127,6 +132,9 @@ impl InferredKind {
     }
     pub fn is_null(&self) -> bool {
         matches!(self.kind, Kind::Null)
+    }
+    pub fn is_plugin(&self) -> bool {
+        matches!(self.kind, Kind::Plugin)
     }
 
     pub fn element_kind(&self) -> Option<&InferredKind> {

@@ -4,6 +4,7 @@ use std::fs;
 use std::io::Cursor;
 
 use crate::vm::{ op::Op, value::Value };
+use futures::executor::block_on;
 
 /// Simple runtime VM for MSBC bytecode.
 /// Currently implements a minimal interpreter for a subset of ops used by samples:
@@ -71,7 +72,7 @@ struct Frame {
     return_reg: Option<usize>,
 }
 
-pub fn run_bytecode(bytes: &[u8], trace: bool) -> Result<(), String> {
+pub(crate) fn run_bytecode(bytes: &[u8], trace: bool, plugins: &crate::vm::plugin::PluginRegistry) -> Result<(), String> {
     use std::io::Read;
     let mut cur = Cursor::new(bytes);
 
@@ -253,6 +254,19 @@ pub fn run_bytecode(bytes: &[u8], trace: bool) -> Result<(), String> {
                     label_index: lbl,
                     args,
                 });
+            }
+            0x72 => {
+                // PluginCall: plugin_name, func_name, argc, args..., has_result (u32 0/1), [result_reg]
+                let plugin_name = read_string(&mut cur)?;
+                let func_name = read_string(&mut cur)?;
+                let argc = read_u32(&mut cur)? as usize;
+                let mut args = Vec::new();
+                for _ in 0..argc {
+                    args.push(read_u32(&mut cur)? as usize);
+                }
+                let has_result = read_u32(&mut cur)?;
+                let result = if has_result != 0 { Some(read_u32(&mut cur)? as usize) } else { None };
+                ops.push(Op::PluginCall { plugin_name, func_name, args, result_target: result });
             }
             0x93 => {
                 let dest = read_u32(&mut cur)? as usize;
@@ -590,6 +604,32 @@ pub fn run_bytecode(bytes: &[u8], trace: bool) -> Result<(), String> {
                     pc = idx + 1;
                 } else {
                     return Err(format!("CallLabel: unknown label '{}'", label_name));
+                }
+            }
+            Op::PluginCall { plugin_name, func_name, args, result_target } => {
+                // Collect argument values from registers
+                let mut arg_vals: Vec<Value> = Vec::new();
+                for &r in args.iter() {
+                    ensure_reg(&mut regs, r);
+                    arg_vals.push(regs[r].clone());
+                }
+
+                // Lookup plugin instance in registry
+                if let Some(plugin) = plugins.get(plugin_name) {
+                    // Call the plugin's async `call` method, blocking to keep the VM runner synchronous
+                    let call_res = block_on(plugin.call(func_name, arg_vals));
+                    match call_res {
+                        Ok(val) => {
+                            if let Some(dest) = result_target {
+                                ensure_reg(&mut regs, *dest);
+                                regs[*dest] = val;
+                            }
+                            pc += 1;
+                        }
+                        Err(e) => return Err(format!("Plugin '{}' call '{}' error: {}", plugin_name, func_name, e)),
+                    }
+                } else {
+                    return Err(format!("unknown plugin '{}'", plugin_name));
                 }
             }
             Op::ArrayNew { dest, elems } => {

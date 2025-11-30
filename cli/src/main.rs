@@ -1,8 +1,9 @@
 use clap::{Arg, ArgMatches, Command};
 use mainstage_core::{
-    analyze_acyclic_rules, analyze_semantic_rules, ast::generate_ast_from_source,
+    analyze_acyclic_rules, analyze_semantic_rules, ast::generate_ast_from_source, VM,
 };
 use std::fs;
+use std::path::PathBuf;
 
 mod disassembler;
 
@@ -12,9 +13,30 @@ fn main() {
         .author("Colton McGraw <https://github.com/ColtMcG1>")
         .about("A CLI for MainStage");
 
-    let cli = setup_cli(cli);
+    let cli = setup_cli(cli).arg(
+        Arg::new("plugin-dir")
+            .help("Directory to load plugins from")
+            .short('P')
+            .long("plugin-dir")
+            .value_parser(clap::value_parser!(String))
+            .value_name("DIR")
+            .global(true),
+    );
+
     let matches = cli.get_matches();
-    dispatch_commands(&matches);
+
+    // VM plugin discovery (CLI may override the directory)
+    let mut vm = VM::new(vec![]);
+    let plugin_dir: Option<PathBuf> = matches.get_one::<String>("plugin-dir").map(|s| PathBuf::from(s));
+    match vm.discover_plugins(plugin_dir.as_ref()) {
+        Ok(n) => eprintln!("Discovered {} plugin manifest(s)", n),
+        Err(e) => eprintln!("Plugin discovery failed: {}", e),
+    }
+
+    // Clone descriptors map for analyzer usage during CLI commands.
+    let manifests_map = vm.plugin_descriptors();
+
+    dispatch_commands(&matches, &manifests_map);
 }
 
 /// Sets up the CLI with subcommands and arguments.
@@ -100,7 +122,7 @@ fn setup_cli(cli: Command) -> Command {
 
 /// Dispatches the command based on the parsed arguments.
 /// This function matches the subcommand used and calls the appropriate handler.
-fn dispatch_commands(matches: &ArgMatches) {
+fn dispatch_commands(matches: &ArgMatches, manifests: &std::collections::HashMap<String, mainstage_core::vm::plugin::PluginDescriptor>) {
     match matches.subcommand() {
         Some(("build", sub_m)) => {
             let file = sub_m.get_one::<String>("file").expect("required argument");
@@ -120,7 +142,7 @@ fn dispatch_commands(matches: &ArgMatches) {
                 }
             };
 
-            let (entry, analysis) = match analyze_semantic_rules(&mut ast) {
+            let (entry, analysis) = match analyze_semantic_rules(&mut ast, Some(manifests)) {
                 Ok((name, analysis)) => (name, analysis),
                 Err(diags) => {
                     diags
@@ -179,7 +201,7 @@ fn dispatch_commands(matches: &ArgMatches) {
                 }
             };
 
-            let (entry, _analysis) = match analyze_semantic_rules(&mut ast) {
+            let (entry, analysis) = match analyze_semantic_rules(&mut ast, Some(manifests)) {
                 Ok((name, analysis)) => (name, analysis),
                 Err(diags) => {
                     diags
@@ -195,11 +217,11 @@ fn dispatch_commands(matches: &ArgMatches) {
             }
 
             let ir_module =
-                mainstage_core::ir::lower_ast_to_ir(&ast, &entry, optimize, Some(&_analysis));
+                mainstage_core::ir::lower_ast_to_ir(&ast, &entry, optimize, Some(&analysis));
 
             let bytecode = mainstage_core::ir::emit_bytecode(&ir_module);
             // Run the bytecode in the VM
-            match mainstage_core::run_bytecode(&bytecode, trace) {
+            match mainstage_core::VM::new(bytecode).run(trace) {
                 Ok(()) => {}
                 Err(e) => println!("Runtime error: {}", e),
             }

@@ -12,7 +12,7 @@ pub use location::{Location, Span};
 pub use script::Script;
 pub use analyzers::{analyze_semantic_rules, analyze_acyclic_rules};
 pub use ir::{lower_ast_to_ir, emit_bytecode};
-pub use vm::run_bytecode;
+pub use vm::VM;
 
 pub fn generate_error_report<E: MainstageErrorExt>(error: &E) -> String {
     let level = error.level();
@@ -43,7 +43,7 @@ pub fn run_ir_in_vm(_ir: &str) -> Result<String, Box<dyn MainstageErrorExt>> {
 
 pub fn compile_source_to_ir(source: &Script) -> Result<String, Box<dyn MainstageErrorExt>> {
     let mut ast = ast::generate_ast_from_source(source)?;
-    let (_entry, _analysis) = match analyze_semantic_rules(&mut ast) {
+    let (_entry, _analysis) = match analyze_semantic_rules(&mut ast, None) {
         Ok((name, analysis)) => (name, analysis),
         Err(diags) => return Err(diags.into_iter().next().unwrap()),
     };

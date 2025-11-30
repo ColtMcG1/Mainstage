@@ -1,7 +1,7 @@
 use crate::ir::value::Value as IrValue;
 
 #[derive(Debug, Clone)]
-pub(crate) enum Value {
+pub enum Value {
     Int(i64),
     Float(f64),
     Bool(bool),

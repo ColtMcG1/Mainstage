@@ -29,7 +29,7 @@ pub enum UnaryOperator {
 #[derive(Debug, Clone, PartialEq)]
 pub enum AstNodeKind {
     Script { body: Vec<AstNode> },
-    Import { module: String },
+    Import { module: String, alias: String },
     Include { file: String },
 
     Statement,

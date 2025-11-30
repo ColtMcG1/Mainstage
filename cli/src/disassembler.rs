@@ -241,6 +241,18 @@ pub fn disassemble(bytes: &[u8]) -> Result<String, String> {
                 }
                 out.push_str(")\n");
             }
+            IROp::PluginCall { dest, plugin_name, func_name, args } => {
+                if let Some(d) = dest {
+                    out.push_str(&format!("{:04}  PluginCall r{} <- {}.{}(", i, d, plugin_name, func_name));
+                } else {
+                    out.push_str(&format!("{:04}  PluginCall <- {}.{}(", i, plugin_name, func_name));
+                }
+                for (j, a) in args.iter().enumerate() {
+                    if j > 0 { out.push_str(", "); }
+                    out.push_str(&format!("r{}", a));
+                }
+                out.push_str(" )\n");
+            }
             IROp::Ret { src } => out.push_str(&format!("{:04}  Ret r{}\n", i, src)),
         }
     }

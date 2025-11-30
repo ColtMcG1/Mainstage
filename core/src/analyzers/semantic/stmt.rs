@@ -9,6 +9,7 @@ use crate::error::{Level, MainstageErrorExt};
 pub(crate) fn analyze_script_statements(
     node: &mut AstNode,
     tbl: &mut SymbolTable,
+    manifests: Option<&std::collections::HashMap<String, crate::vm::plugin::PluginDescriptor>>,
 ) -> Result<(), Box<dyn MainstageErrorExt>> {
     let script_body = match &mut node.kind {
         crate::ast::AstNodeKind::Script { body } => body,
@@ -50,7 +51,7 @@ pub(crate) fn analyze_script_statements(
     }
 
     for statement in script_body.iter_mut() {
-        analyze_statement(statement, tbl)?;
+        analyze_statement(statement, tbl, manifests)?;
     }
 
     Ok(())
@@ -60,6 +61,7 @@ pub(crate) fn analyze_script_statements(
 fn analyze_statement(
     node: &mut AstNode,
     tbl: &mut SymbolTable,
+    manifests: Option<&std::collections::HashMap<String, crate::vm::plugin::PluginDescriptor>>,
 ) -> Result<(), Box<dyn MainstageErrorExt>> {
     match &mut node.kind {
         AstNodeKind::Workspace { name, body } => {
@@ -142,6 +144,79 @@ fn analyze_statement(
             }
 
             tbl.exit_scope();
+        }
+        AstNodeKind::Import { module, alias } => {
+            // Attempt to parse module string and alias. The parser stores the raw
+            // matched text; try to extract a quoted module name and an alias if present.
+            let text = module.clone();
+            // Look for pattern: "<module>" as <alias>
+            let mut mod_name = text.trim().trim_matches('"').to_string();
+            let mut alias = alias.clone();
+
+            // If we have manifests available, register the imported module as
+            // an external object in the symbol table with function symbols.
+            if let Some(map) = manifests {
+                if let Some(desc) = map.get(&mod_name) {
+                    // Insert module/object symbol under the alias name
+                    tbl.insert_symbol(crate::analyzers::semantic::symbol::Symbol::new_object(
+                        alias.clone(),
+                        None,
+                        node.location.clone(),
+                        node.span.clone(),
+                    ));
+
+                    // For each function in the manifest, insert a function symbol
+                    // into the symbol table that is a member of the imported module.
+                    for f in &desc.manifest.functions {
+                        // Use a dotted name for module qualification in the table
+                        let full_name = format!("{}.{}", alias, f.name);
+                        let mut sym = crate::analyzers::semantic::symbol::Symbol::new(
+                            full_name.clone(),
+                            SymbolKind::Function,
+                            None,
+                            None,
+                            node.location.clone(),
+                            node.span.clone(),
+                        );
+                        // Set return type if provided by manifest (map simple kinds)
+                        let return_kind = if let Some(ret) = &f.returns {
+                            match ret.kind.as_deref() {
+                                Some("Integer") => crate::analyzers::semantic::kind::InferredKind::integer(),
+                                Some("Float") => crate::analyzers::semantic::kind::InferredKind::float(),
+                                Some("String") => crate::analyzers::semantic::kind::InferredKind::string(),
+                                Some("Boolean") => crate::analyzers::semantic::kind::InferredKind::boolean(),
+                                Some("Object") => crate::analyzers::semantic::kind::InferredKind::new(
+                                    crate::analyzers::semantic::kind::Kind::Object,
+                                    crate::analyzers::semantic::kind::Origin::Unknown,
+                                    node.location.clone(),
+                                    node.span.clone(),
+                                ),
+                                _ => crate::analyzers::semantic::kind::InferredKind::dynamic(),
+                            }
+                        } else {
+                            crate::analyzers::semantic::kind::InferredKind::dynamic()
+                        };
+                        sym.set_returns(return_kind);
+                        tbl.insert_symbol(sym);
+                    }
+                } else {
+                    // Manifest not found: emit a diagnostic but still create a placeholder
+                    tbl.insert_symbol(crate::analyzers::semantic::symbol::Symbol::new_object(
+                        alias.clone(),
+                        None,
+                        node.location.clone(),
+                        node.span.clone(),
+                    ));
+                }
+            } else {
+                // No manifests available: register placeholder object symbol for the alias
+                tbl.insert_symbol(crate::analyzers::semantic::symbol::Symbol::new_object(
+                    alias.clone(),
+                    None,
+                    node.location.clone(),
+                    node.span.clone(),
+                ));
+            }
         }
         AstNodeKind::Null => {
             // EOI emits a Null node, do nothing
