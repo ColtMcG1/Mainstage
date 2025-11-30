@@ -45,6 +45,7 @@ pub fn analyze_semantic_rules(ast: &mut AstNode) -> Result<(String, AnalyzerOutp
         // Build initial function/object entries from the symbol table (visible symbols)
         use std::collections::HashMap;
         let mut func_name_to_node: HashMap<String, NodeId> = HashMap::new();
+        
         // First pass: create function/object entries and build a name->node map
         for scope in &analyzer.get_symbol_table().symbols {
             for (name, syms) in scope.iter() {
@@ -120,6 +121,17 @@ pub fn analyze_semantic_rules(ast: &mut AstNode) -> Result<(String, AnalyzerOutp
             use crate::ast::AstNodeKind;
 
             match node.get_kind() {
+                AstNodeKind::Workspace { name, body } => {
+                    if let Some(fi) = analysis.objects.iter_mut().find(|o| o.name == *name) {
+                        // Update node id and span to the AST node
+                        let nid = node.get_id();
+                        fi.node_id = nid;
+                        fi.span = node.get_span().cloned();
+
+                        // traverse body with current function = None
+                        collect_from_node(body, Some(nid), analysis, func_name_to_node);
+                    }
+                }
                 AstNodeKind::Stage { name, args, body } => {
                     // Prefer to locate the function info by name and update its
                     // node id/span if we discover the AST node for it.

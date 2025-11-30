@@ -4,8 +4,6 @@ workspace demo_ws {
 
     for p in projects
     {
-        say("Processing project:");
-        say(p.sources);
         process_project_stage(p);
     }
 }

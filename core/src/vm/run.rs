@@ -71,7 +71,7 @@ struct Frame {
     return_reg: Option<usize>,
 }
 
-pub fn run_bytecode(bytes: &[u8]) -> Result<(), String> {
+pub fn run_bytecode(bytes: &[u8], trace: bool) -> Result<(), String> {
     use std::io::Read;
     let mut cur = Cursor::new(bytes);
 
@@ -328,6 +328,14 @@ pub fn run_bytecode(bytes: &[u8]) -> Result<(), String> {
             return Err("VM step limit exceeded".to_string());
         }
         let op = &ops[pc];
+        if trace {
+            if let Some(lbl) = label_pos.get(&pc) {
+                println!("== Label: {} ==", lbl);
+            }
+            else {
+                println!("PC {}: {:?}", pc, op);
+            }
+        }
         match op {
             Op::LConst { dest, val } => {
                 ensure_reg(&mut regs, *dest);

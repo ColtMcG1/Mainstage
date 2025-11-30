@@ -1,0 +1,4 @@
+0000: LConst r0 <- Str("Smoke test workspace start")
+0001: LConst r1 <- Symbol("say")
+0002: Call r2 <- r1(r0)
+0009: Halt

@@ -10,6 +10,7 @@ use crate::ir::module::IrModule;
 /// and create prototypes. For now this file uses provisional numeric IDs for
 /// functions/objects; replace the provisional registration with calls into
 /// `IrModule` when wiring to real IR creation APIs.
+#[derive(Debug, Clone)]
 pub struct LoweringContext {
     pub functions: HashMap<NodeId, u32>,
     pub objects: HashMap<NodeId, u32>,

@@ -69,10 +69,17 @@ fn setup_cli(cli: Command) -> Command {
                     .short('O')
                     .long("optimize")
                     .action(clap::ArgAction::SetTrue),
-            ),
+            )
+            .arg(
+                Arg::new("trace")
+                    .help("Enable tracing of script execution")
+                    .short('t')
+                    .long("trace")
+                    .action(clap::ArgAction::SetTrue),
+            )
     )
     .subcommand(
-        Command::new("disasm")
+        Command::new("inspect")
             .about("Disassemble a .msx file")
             .arg(
                 Arg::new("file")
@@ -157,6 +164,7 @@ fn dispatch_commands(matches: &ArgMatches) {
         Some(("run", sub_m)) => {
             let file = sub_m.get_one::<String>("file").expect("required argument");
             let optimize = sub_m.get_flag("optimize");
+            let trace = sub_m.get_flag("trace");
 
             let script = mainstage_core::script::Script::new(std::path::PathBuf::from(file))
                 .expect("Failed to load script file");
@@ -191,7 +199,7 @@ fn dispatch_commands(matches: &ArgMatches) {
 
             let bytecode = mainstage_core::ir::emit_bytecode(&ir_module);
             // Run the bytecode in the VM
-            match mainstage_core::run_bytecode(&bytecode) {
+            match mainstage_core::run_bytecode(&bytecode, trace) {
                 Ok(()) => {}
                 Err(e) => println!("Runtime error: {}", e),
             }

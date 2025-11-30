@@ -81,11 +81,12 @@ impl FunctionBuilder {
             first
         };
 
+        // Remap and emit all ops into the module
         for mut op in self.ops.into_iter() {
             // Remap register indices in the op from local->global by adding
             // `reg_base`. Also adjust intra-function numeric branch targets
             // to module-global op indices by adding `base_op_index`.
-            match &mut op {
+                match &mut op {
                 IROp::LConst { dest, .. } => {
                     let orig = *dest;
                     if orig < local_reg_count { *dest += reg_base; }

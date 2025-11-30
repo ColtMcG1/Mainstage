@@ -6,8 +6,8 @@ pub struct IrModule {
     pub ops: Vec<IROp>,
     next_reg: usize,
     next_id: u32,
-    functions: Vec<String>,
-    objects: Vec<String>,
+    functions: HashMap<String, u32>,
+    objects: HashMap<String, u32>,
     labels: HashMap<String, usize>,
     unresolved_branches: Vec<(usize, String)>,
 }
@@ -18,8 +18,8 @@ impl IrModule {
             ops: Vec::new(),
             next_reg: 0,
             next_id: 1,
-            functions: Vec::new(),
-            objects: Vec::new(),
+            functions: HashMap::new(),
+            objects: HashMap::new(),
             labels: HashMap::new(),
             unresolved_branches: Vec::new(),
         }
@@ -161,7 +161,7 @@ impl IrModule {
     pub fn declare_function(&mut self, name: &str) -> u32 {
         let id = self.next_id;
         self.next_id = self.next_id.wrapping_add(1);
-            self.functions.push(name.to_string());
+            self.functions.insert(name.to_string(), id);
         id
     }
 
@@ -169,19 +169,27 @@ impl IrModule {
     pub fn declare_object(&mut self, name: &str) -> u32 {
         let id = self.next_id;
         self.next_id = self.next_id.wrapping_add(1);
-        self.objects.push(name.to_string());
+        self.objects.insert(name.to_string(), id);
         id
     }
 
     /// Optional helpers to inspect declared names (useful for tests/debugging).
     pub fn get_function_name(&self, id: u32) -> Option<&str> {
-        let idx = (id - 1) as usize;
-        self.functions.get(idx).map(|s| s.as_str())
+        // find the function name by its id (reverse lookup)
+        self.functions.iter().find(|(_, v)| **v == id).map(|(k, _)| k.as_str())
     }
 
     pub fn get_object_name(&self, id: u32) -> Option<&str> {
-        let idx = (id - 1) as usize;
-        self.objects.get(idx).map(|s| s.as_str())
+        // find the object name by its id (reverse lookup)
+        self.objects.iter().find(|(_, v)| **v == id).map(|(k, _)| k.as_str())
+    }
+
+    pub fn find_object_id_by_name(&self, name: &str) -> Option<u32> {
+        self.objects.get(name).copied()
+    }
+
+    pub fn find_function_id_by_name(&self, name: &str) -> Option<u32> {
+        self.functions.get(name).copied()
     }
 }
 
