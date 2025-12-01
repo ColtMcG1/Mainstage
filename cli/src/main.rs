@@ -220,10 +220,25 @@ fn dispatch_commands(matches: &ArgMatches, manifests: &std::collections::HashMap
                 mainstage_core::ir::lower_ast_to_ir(&ast, &entry, optimize, Some(&analysis));
 
             let bytecode = mainstage_core::ir::emit_bytecode(&ir_module);
-            // Run the bytecode in the VM
+            // Run the bytecode in the VM. Change the process working directory
+            // to the script's directory so host functions like `read` and
+            // glob-based paths resolve relative to the script file.
+            let orig_cwd = std::env::current_dir().ok();
+            if let Some(parent) = script.path.parent() {
+                if let Err(e) = std::env::set_current_dir(parent) {
+                    println!("Warning: failed to set working dir to {:?}: {}", parent, e);
+                }
+            }
+
+            // Run the VM
             match mainstage_core::VM::new(bytecode).run(trace) {
                 Ok(()) => {}
                 Err(e) => println!("Runtime error: {}", e),
+            }
+
+            // Restore original working directory if available
+            if let Some(orig) = orig_cwd {
+                let _ = std::env::set_current_dir(orig);
             }
         }
         Some(("disasm", sub_m)) => {

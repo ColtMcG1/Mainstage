@@ -38,7 +38,9 @@ To install Mainstage, follow these steps:
 To get started with Mainstage, create a new script file with the `.ms` extension. Here is a simple example of a Mainstage script:
 
 ```mainstage
-say("Hello, World!")
+workspace hello_world {
+    say("Hello, World!");
+}
 ```
 
 To run the script, use the following command in your terminal:
@@ -53,7 +55,7 @@ See the `examples/` directory for more sample scripts and use cases.
 
 ## Documentation
 
-For detailed documentation on Mainstage, including syntax, built-in functions, and examples, please visit the [official documentation site]().
+For detailed documentation on Mainstage, including syntax, built-in functions, and examples, please visit the [official documentation site](https://github.com/ColtMcG1/mainstage/wiki).
 
 See the `docs/` directory for local documentation files.
 

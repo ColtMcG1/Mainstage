@@ -383,7 +383,27 @@ pub(crate) fn run_bytecode(bytes: &[u8], trace: bool, plugins: &crate::vm::plugi
                 ensure_reg(&mut regs, *a);
                 ensure_reg(&mut regs, *b);
                 ensure_reg(&mut regs, *dest);
-                regs[*dest] = numeric_bin(&regs[*a], &regs[*b], |x, y| x + y, |x, y| x + y);
+                // If either operand is a string, perform string concatenation
+                // by converting the other operand to a string first.
+                let is_str = matches!(&regs[*a], Value::Str(_)) || matches!(&regs[*b], Value::Str(_));
+                if is_str {
+                    fn val_to_string(v: &Value) -> String {
+                        match v {
+                            Value::Str(s) => s.clone(),
+                            Value::Symbol(s) => s.clone(),
+                            Value::Int(i) => i.to_string(),
+                            Value::Float(f) => f.to_string(),
+                            Value::Bool(b) => b.to_string(),
+                            Value::Null => "null".to_string(),
+                            Value::Array(_) | Value::Object(_) => format!("{:?}", v.to_value()),
+                        }
+                    }
+                    let s1 = val_to_string(&regs[*a]);
+                    let s2 = val_to_string(&regs[*b]);
+                    regs[*dest] = Value::Str(format!("{}{}", s1, s2));
+                } else {
+                    regs[*dest] = numeric_bin(&regs[*a], &regs[*b], |x, y| x + y, |x, y| x + y);
+                }
                 pc += 1;
             }
             Op::Sub { dest, a, b } => {

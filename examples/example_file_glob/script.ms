@@ -9,7 +9,7 @@ workspace demo_ws {
 }
 
 project test_pj {
-    sources = ["./samples/e2e/*.ms"];
+    sources = ["./data/*.txt"];
 }
 
 stage load_sources_stage(var)
@@ -28,6 +28,8 @@ stage process_project_stage(prj)
     if sources == null {
         say("No sources loaded.");
         return;
+    } else {
+        say("Loaded sources: " + sources.length);
     }
     for src in sources {
         say(src);

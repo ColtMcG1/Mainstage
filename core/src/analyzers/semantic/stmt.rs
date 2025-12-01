@@ -149,9 +149,10 @@ fn analyze_statement(
             // Attempt to parse module string and alias. The parser stores the raw
             // matched text; try to extract a quoted module name and an alias if present.
             let text = module.clone();
-            // Look for pattern: "<module>" as <alias>
-            let mut mod_name = text.trim().trim_matches('"').to_string();
-            let mut alias = alias.clone();
+
+            // Trim quotes from module name and whitespace from alias
+            let mod_name = text.trim().trim_matches('"').to_string();
+            let alias = alias.trim().to_string();
 
             // If we have manifests available, register the imported module as
             // an external object in the symbol table with function symbols.

@@ -35,7 +35,7 @@ project_decl   = { attributes? ~ "project"   ~ identifier ~ block }
 stage_decl     = { attributes? ~ "stage"     ~ identifier ~ "(" ~ arguments? ~ ")" ~ block }
 
 // --- Conditionals (no trailing semicolon; body must be a block) ---
-conditional_stmt = { if_stmt | if_else_stmt | tenary_stmt }
+conditional_stmt = { if_else_stmt | if_stmt | tenary_stmt }
 if_stmt        = { "if" ~ expression ~ block }
 if_else_stmt    = { "if" ~ expression ~ block ~ "else" ~ block }
 tenary_stmt    = { expression ~ "?" ~ expression ~ ":" ~ expression ~ ";" }

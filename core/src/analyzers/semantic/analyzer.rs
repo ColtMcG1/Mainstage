@@ -12,10 +12,6 @@ pub struct Analyzer {
 }
 
 impl Analyzer {
-    pub fn new() -> Self {
-        Analyzer { tbl: SymbolTable::new(), manifests: None }
-    }
-
     pub fn new_with_manifests(manifests: Option<HashMap<String, PluginDescriptor>>) -> Self {
         Analyzer { tbl: SymbolTable::new(), manifests }
     }

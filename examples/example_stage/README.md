@@ -4,7 +4,7 @@ This directory contains an example stage. It demonstrates how to set up a basic 
 
 ## Script
 
-```ms
+```mainstage
 workspace mainstage_example
 {
     files = example_stage("data/*.txt");
@@ -37,7 +37,7 @@ stage process_file(file)
 
 ## Expected Output
 
-```
+```bash
 -------------------------
 Content of file1.txt
 -------------------------
