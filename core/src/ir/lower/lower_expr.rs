@@ -129,7 +129,9 @@ pub fn lower_expr_to_reg_with_builder(
                 if let crate::ast::AstNodeKind::Identifier { name: alias } = object.get_kind() {
                     // Check lowering context symbols for a dotted function symbol inserted by the analyzer
                     let full_name = format!("{}.{}", alias, property);
-                    if _ctx.symbols.get(&full_name).is_some() {
+                    // If the analyzer populated a dotted function symbol (e.g. "alias.func"),
+                    // or the alias itself is known (imported module), treat this as a plugin call.
+                    if _ctx.symbols.get(&full_name).is_some() || _ctx.symbols.get(alias).is_some() {
                         // lower args
                         let mut regs: Vec<usize> = Vec::new();
                         for a in args.iter() {

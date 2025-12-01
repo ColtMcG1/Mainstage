@@ -1,83 +1,9 @@
-0000: LConst r0 <- Object({})
-0001: LConst r1 <- Array([Str("./data/*.ms")])
-0002: LConst r2 <- Symbol("sources")
-0003: SetProp r0.r2 <- r1
-0004: ArrayNew r3 <- [r0]
-0005: Label main
-0006: CallLabel r4 <- L11()
-0007: Halt
-0008: Label L12
-0009: LLocal r5 <- local[0]
-0010: CallLabel r6 <- L1(r5)
-0011: Label L11
-0012: LoadGlobal r7 <- r3
-0013: LConst r8 <- Int(0)
-0014: LConst r9 <- Str("length")
-0015: GetProp r10 <- r7.r9
-0016: Lt r11 <- r8 < r10
-0017: BrFalse r11 -> 23
-0018: ArrayGet r12 <- r7[r8]
-0019: CallLabel r13 <- L12(r12)
-0020: LConst r14 <- Int(1)
-0021: Add r8 <- r8 + r14
-0022: Jump 16
-0023: Label __after_ws_12_6
-0024: LConst r15 <- Null
-0025: Ret r15
-0026: Label L0
-0027: LLocal r16 <- local[0]
-0028: LConst r17 <- Symbol("read")
-0029: Call r18 <- r17(r16)
-0030: SLocal local[1] <- r18
-0031: LLocal r19 <- local[1]
-0032: Ret r19
-0033: Label L1
-0034: LConst r20 <- Symbol("sources")
-0035: LLocal r21 <- local[0]
-0036: GetProp r22 <- r21.r20
-0037: LConst r23 <- Null
-0038: Eq r24 <- r22 == r23
-0039: BrFalse r24 -> 43
-0040: LConst r25 <- Str("No sources found.")
-0041: LConst r26 <- Symbol("say")
-0042: Call r27 <- r26(r25)
-0043: LConst r28 <- Int(0)
-0044: LConst r29 <- Symbol("sources")
-0045: LLocal r30 <- local[0]
-0046: GetProp r31 <- r30.r29
-0047: ArrayGet r32 <- r31[r28]
-0048: CallLabel r33 <- L0(r32)
-0049: SLocal local[1] <- r33
-0050: LLocal r34 <- local[1]
-0051: LConst r35 <- Null
-0052: Eq r36 <- r34 == r35
-0053: BrFalse r36 -> 58
-0054: LConst r37 <- Str("No sources loaded.")
-0055: LConst r38 <- Symbol("say")
-0056: Call r39 <- r38(r37)
-0057: Jump 65
-0058: LConst r40 <- Str("Loaded sources: ")
-0059: LConst r41 <- Symbol("length")
-0060: LLocal r42 <- local[1]
-0061: GetProp r43 <- r42.r41
-0062: Add r44 <- r40 + r43
-0063: LConst r45 <- Symbol("say")
-0064: Call r46 <- r45(r44)
-0065: LLocal r47 <- local[1]
-0066: LConst r48 <- Int(0)
-0067: LConst r49 <- Str("length")
-0068: GetProp r50 <- r47.r49
-0069: Lt r51 <- r48 < r50
-0070: BrFalse r51 -> 82
-0071: ArrayGet r52 <- r47[r48]
-0072: SLocal local[2] <- r52
-0073: LLocal r53 <- local[2]
-0074: LConst r54 <- Symbol("say")
-0075: Call r55 <- r54(r53)
-0076: LConst r56 <- Str("----")
-0077: LConst r57 <- Symbol("say")
-0078: Call r58 <- r57(r56)
-0079: LConst r59 <- Int(1)
-0080: Add r48 <- r48 + r59
-0081: Jump 69
-0082: Halt
+0000: Label main
+0001: CallLabel r0 <- L9()
+0002: Halt
+0003: Label L9
+0004: LConst r1 <- Str("Hello, Mainstage!")
+0005: PluginCall r1 <- echo_plugin.echo(r0)
+0006: LConst r3 <- Null
+0007: Ret r3
+0008: Halt

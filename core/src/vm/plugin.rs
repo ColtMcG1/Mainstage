@@ -27,6 +27,7 @@ use std::sync::Arc;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use crate::vm::manifest::PluginManifest;
+use crate::vm::external::ExternalPlugin;
 
 #[derive(Clone, Debug)]
 pub struct PluginDescriptor {
@@ -53,6 +54,28 @@ impl PluginRegistry {
         self.descriptors.insert(name.clone(), PluginDescriptor { manifest, path });
     }
 
+    /// If a descriptor points to an external executable, create and register an ExternalPlugin.
+    pub fn try_register_external(&mut self, desc: &PluginDescriptor) {
+        // Only register if descriptor has a path (directory of manifest)
+        if let Some(dir) = &desc.path {
+            let entry = desc.manifest.entry.clone().unwrap_or_else(|| desc.manifest.name.clone());
+            let mut exe = dir.clone();
+            exe.push(entry);
+            // On Windows, allow .exe suffix if not provided
+            if !exe.exists() {
+                let mut exe_exe = exe.clone();
+                exe_exe.set_extension("exe");
+                if exe_exe.exists() {
+                    exe = exe_exe;
+                }
+            }
+            if exe.exists() {
+                let ep = ExternalPlugin::new(desc.manifest.name.clone(), exe);
+                self.register(std::sync::Arc::new(ep));
+            }
+        }
+    }
+
     pub fn get(&self, name: &str) -> Option<Arc<dyn Plugin>> {
         self.plugins.get(name).cloned()
     }
@@ -64,6 +87,11 @@ impl PluginRegistry {
     /// Return a cloned map of all registered descriptors for read-only consumers.
     pub fn descriptors_map(&self) -> std::collections::HashMap<String, PluginDescriptor> {
         self.descriptors.clone()
+    }
+
+    /// Return the list of currently registered runtime plugin names.
+    pub fn registered_names(&self) -> Vec<String> {
+        self.plugins.keys().cloned().collect()
     }
 
     pub fn list_functions(&self, plugin_name: &str) -> Option<Vec<String>> {

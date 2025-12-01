@@ -143,6 +143,7 @@ pub fn emit_calls_in_node_with_builder(
             }
         }
         AstNodeKind::Call { callee, args } => {
+            // If callee is a simple identifier, handle as before.
             if let AstNodeKind::Identifier { name } = callee.get_kind() {
                 let maybe_id = ctx.symbols.get(name).copied();
                 if let Some(id) = maybe_id {
@@ -166,6 +167,12 @@ pub fn emit_calls_in_node_with_builder(
                         }
                     }
                 }
+            } else {
+                // Fallback: evaluate the full call expression (member-style calls,
+                // plugin calls, etc.) into a temporary register using the
+                // expression lowering helper; that helper will emit the proper
+                // IROp (including PluginCall) into this builder when applicable.
+                let _ = super::lower_expr::lower_expr_to_reg_with_builder(node, ir_mod, ctx, Some(fb));
             }
         }
         AstNodeKind::Return { value } => {

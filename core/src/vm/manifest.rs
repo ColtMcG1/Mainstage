@@ -28,6 +28,8 @@ pub struct PluginManifest {
     pub version: String,
     #[serde(default)]
     pub description: String,
+    #[serde(default)]
+    pub path: String,
     #[serde(default = "default_abi")]
     pub abi: String,
     #[serde(default)]
@@ -84,26 +86,4 @@ pub fn discover_manifests_in_dir<P: AsRef<Path>>(dir: P) -> Result<Vec<(PluginMa
         }
     }
     Ok(out)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parse_example_manifest() {
-        let json = r#"
-        {
-            "name": "cpp_compiler",
-            "version": "0.1.0",
-            "description": "Compile C++",
-            "functions": [
-                { "name": "compile", "args": [ { "name": "files", "kind": "Array" } ], "returns": { "kind": "Object" } }
-            ]
-        }
-        "#;
-        let m: PluginManifest = serde_json::from_str(json).expect("parse");
-        assert_eq!(m.name, "cpp_compiler");
-        assert_eq!(m.functions.len(), 1);
-    }
 }

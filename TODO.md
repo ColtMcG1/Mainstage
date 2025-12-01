@@ -6,3 +6,4 @@
 - [ ] Review and optimize existing code for better performance.
 - [ ] Fix any bugs reported in the issue tracker.
 - [ ] Add formatting support for `say` statements in the scripting language.
+- [ ] Add `use` statement support entering module namespace.

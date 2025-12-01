@@ -1,6 +1,7 @@
 mod op;
-mod value;
+pub mod value;
 pub mod manifest;
+pub mod external;
 pub mod plugin;
 mod run;
 
@@ -45,12 +46,22 @@ impl VM
             self.plugins.register_descriptor(manifest, dir_path);
             count += 1;
         }
+        // After registering descriptors, attempt to register external plugin instances
+        // for manifests that ship a companion executable in the same directory.
+        for desc in self.plugins.descriptors_map().values() {
+            self.plugins.try_register_external(desc);
+        }
         Ok(count)
     }
 
     /// Return a cloned map of plugin descriptors discovered/registered in the VM.
     pub fn plugin_descriptors(&self) -> std::collections::HashMap<String, crate::vm::plugin::PluginDescriptor> {
         self.plugins.descriptors_map()
+    }
+
+    /// Return the list of currently registered runtime plugin names.
+    pub fn registered_plugin_names(&self) -> Vec<String> {
+        self.plugins.registered_names()
     }
 
     pub fn run(&self, enable_tracing: bool) -> Result<(), String>

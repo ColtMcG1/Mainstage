@@ -41,7 +41,7 @@ impl Value {
         }
     }
 
-    pub(crate) fn to_value(&self) -> IrValue {
+    pub fn to_value(&self) -> IrValue {
         match self {
             Value::Int(i) => IrValue::Int(*i),
             Value::Float(f) => IrValue::Float(*f),
