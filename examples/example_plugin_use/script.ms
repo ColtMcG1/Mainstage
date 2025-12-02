@@ -12,6 +12,6 @@ workspace hello_ws {
 }
 
 project example_plugin_use {
-    srcs = [ "./hello.ms" ];
+    srcs = [ "./src/*.cpp" ];
     flags = ["-O2"];
 }

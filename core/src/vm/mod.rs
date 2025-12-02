@@ -4,6 +4,9 @@ pub mod manifest;
 pub mod external;
 pub mod plugin;
 mod run;
+mod bytecode;
+mod exec;
+mod host;
 
 pub struct VM
 {

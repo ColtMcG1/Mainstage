@@ -92,8 +92,8 @@ pub fn lower_expr_to_reg_with_builder(
                     }
                     // If this is a known builtin host function, emit a Call (host)
                     // where the function is represented as a Symbol value in a reg.
-                    match name.as_str() {
-                        "say" | "read" | "ask" | "write" => {
+                        match name.as_str() {
+                        "say" | "read" | "ask" | "write" | "fmt" => {
                             if let Some(b) = builder.as_mut() {
                                 let func_reg = b.alloc_reg();
                                 b.emit_op(IROp::LConst { dest: func_reg, value: crate::ir::value::Value::Symbol(name.clone()) });
