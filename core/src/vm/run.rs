@@ -1,6 +1,6 @@
-use glob::glob;
 use std::collections::HashMap;
 use std::fs;
+use glob::glob;
 use std::io::Cursor;
 
 use crate::vm::{ op::Op, value::Value };
@@ -73,6 +73,57 @@ struct Frame {
 }
 
 pub(crate) fn run_bytecode(bytes: &[u8], trace: bool, plugins: &crate::vm::plugin::PluginRegistry) -> Result<(), String> {
+    // parse bytecode into ops + label maps
+    let (ops, label_pos, label_by_name) = parse_ops(bytes)?;
+
+    // prepare execution state
+    let mut state = ExecState {
+        ops,
+        label_pos,
+        label_by_name,
+        regs: Vec::new(),
+        frames: vec![Frame { locals: Vec::new(), return_pc: None, return_reg: None }],
+        pc: 0,
+        steps: 0,
+        trace,
+        plugins,
+    };
+
+    // main dispatch loop
+    while state.pc < state.ops.len() {
+        state.steps += 1;
+        if state.steps > 200 {
+            return Err("VM step limit exceeded".to_string());
+        }
+        if state.trace {
+            if let Some(lbl) = state.label_pos.get(&state.pc) {
+                println!("== Label: {} ==", lbl);
+            } else {
+                println!("PC {}: {:?}", state.pc, state.ops[state.pc]);
+            }
+        }
+
+        dispatch_op(&mut state)?;
+    }
+
+    Ok(())
+}
+
+// Execution state holds runtime mutable data for the VM loop
+struct ExecState<'a> {
+    ops: Vec<Op>,
+    label_pos: HashMap<usize, String>,
+    label_by_name: HashMap<String, usize>,
+    regs: Vec<Value>,
+    frames: Vec<Frame>,
+    pc: usize,
+    steps: usize,
+    trace: bool,
+    plugins: &'a crate::vm::plugin::PluginRegistry,
+}
+
+// parse_ops isolates bytecode parsing from the execution loop
+fn parse_ops(bytes: &[u8]) -> Result<(Vec<Op>, HashMap<usize, String>, HashMap<String, usize>), String> {
     use std::io::Read;
     let mut cur = Cursor::new(bytes);
 
@@ -90,12 +141,10 @@ pub(crate) fn run_bytecode(bytes: &[u8], trace: bool, plugins: &crate::vm::plugi
 
     let op_count = read_u32(&mut cur)? as usize;
 
-    // parse ops and collect label positions
     let mut ops: Vec<Op> = Vec::with_capacity(op_count);
-    // map: op_index -> label_name (used for printing)
     let mut label_pos: HashMap<usize, String> = HashMap::new();
-    // map: label_name -> op_index (used for resolving CallLabel by name)
     let mut label_by_name: HashMap<String, usize> = HashMap::new();
+
     for i in 0..op_count {
         let code = read_u8(&mut cur)?;
         match code {
@@ -314,520 +363,415 @@ pub(crate) fn run_bytecode(bytes: &[u8], trace: bool, plugins: &crate::vm::plugi
         }
     }
 
-    // runtime state: registers and call frames
-    let mut regs: Vec<Value> = Vec::new();
-    let mut frames: Vec<Frame> = Vec::new();
+    Ok((ops, label_pos, label_by_name))
+}
 
-    // create a root frame so top-level `SLocal`/`LLocal` operations work
-    frames.push(Frame {
-        locals: Vec::new(),
-        return_pc: None,
-        return_reg: None,
-    });
+// Small helpers used by the execution loop
+fn ensure_reg(regs: &mut Vec<Value>, idx: usize) {
+    if idx >= regs.len() {
+        regs.resize_with(idx + 1, || Value::Null);
+    }
+}
 
-    // helper to ensure register exists
-    let ensure_reg = |regs: &mut Vec<Value>, idx: usize| {
-        if idx >= regs.len() {
-            regs.resize_with(idx + 1, || Value::Null);
-        }
-    };
-    // start execution at op 0
-    let mut pc: usize = 0;
-    let mut steps: usize = 0;
-
-    // call-site frame management when invoking CallLabel: we need to set return_pc and return_reg
-    while pc < ops.len() {
-        steps += 1;
-        if steps > 200 {
-            return Err("VM step limit exceeded".to_string());
-        }
-        let op = &ops[pc];
-        if trace {
-            if let Some(lbl) = label_pos.get(&pc) {
-                println!("== Label: {} ==", lbl);
-            }
-            else {
-                println!("PC {}: {:?}", pc, op);
-            }
-        }
-        match op {
-            Op::LConst { dest, val } => {
-                ensure_reg(&mut regs, *dest);
-                regs[*dest] = val.clone();
-                pc += 1;
-            }
-            Op::LLocal { dest, local } => {
-                ensure_reg(&mut regs, *dest);
-                if let Some(frame) = frames.last() {
-                    if *local < frame.locals.len() {
-                        regs[*dest] = frame.locals[*local].clone();
-                    } else {
-                        regs[*dest] = Value::Null;
-                    }
-                } else {
-                    regs[*dest] = Value::Null;
-                }
-                pc += 1;
-            }
-            Op::SLocal { src, local } => {
-                ensure_reg(&mut regs, *src);
-                if let Some(frame) = frames.last_mut() {
-                    if *local >= frame.locals.len() {
-                        frame.locals.resize(*local + 1, Value::Null);
-                    }
-                    frame.locals[*local] = regs[*src].clone();
-                }
-                pc += 1;
-            }
-            Op::Add { dest, a, b } => {
-                ensure_reg(&mut regs, *a);
-                ensure_reg(&mut regs, *b);
-                ensure_reg(&mut regs, *dest);
-                // If either operand is a string, perform string concatenation
-                // by converting the other operand to a string first.
-                let is_str = matches!(&regs[*a], Value::Str(_)) || matches!(&regs[*b], Value::Str(_));
-                if is_str {
-                    fn val_to_string(v: &Value) -> String {
-                        match v {
-                            Value::Str(s) => s.clone(),
-                            Value::Symbol(s) => s.clone(),
-                            Value::Int(i) => i.to_string(),
-                            Value::Float(f) => f.to_string(),
-                            Value::Bool(b) => b.to_string(),
-                            Value::Null => "null".to_string(),
-                            Value::Array(_) | Value::Object(_) => format!("{:?}", v.to_value()),
-                        }
-                    }
-                    let s1 = val_to_string(&regs[*a]);
-                    let s2 = val_to_string(&regs[*b]);
-                    regs[*dest] = Value::Str(format!("{}{}", s1, s2));
-                } else {
-                    regs[*dest] = numeric_bin(&regs[*a], &regs[*b], |x, y| x + y, |x, y| x + y);
-                }
-                pc += 1;
-            }
-            Op::Sub { dest, a, b } => {
-                ensure_reg(&mut regs, *a);
-                ensure_reg(&mut regs, *b);
-                ensure_reg(&mut regs, *dest);
-                regs[*dest] = numeric_bin(&regs[*a], &regs[*b], |x, y| x - y, |x, y| x - y);
-                pc += 1;
-            }
-            Op::Mul { dest, a, b } => {
-                ensure_reg(&mut regs, *a);
-                ensure_reg(&mut regs, *b);
-                ensure_reg(&mut regs, *dest);
-                regs[*dest] = numeric_bin(&regs[*a], &regs[*b], |x, y| x * y, |x, y| x * y);
-                pc += 1;
-            }
-            Op::Div { dest, a, b } => {
-                ensure_reg(&mut regs, *a);
-                ensure_reg(&mut regs, *b);
-                ensure_reg(&mut regs, *dest);
-                // division: prefer float if any operand is float or non-divisible
-                if let (Value::Int(x), Value::Int(y)) = (&regs[*a], &regs[*b]) {
-                    if *y != 0 && x % y == 0 {
-                        regs[*dest] = Value::Int(x / y);
-                    } else {
-                        regs[*dest] = numeric_bin(&regs[*a], &regs[*b], |x, y| x / y, |x, y| x / y);
-                    }
-                } else {
-                    regs[*dest] = numeric_bin(&regs[*a], &regs[*b], |x, y| x / y, |x, y| x / y);
-                }
-                pc += 1;
-            }
-            Op::Mod { dest, a, b } => {
-                ensure_reg(&mut regs, *a);
-                ensure_reg(&mut regs, *b);
-                ensure_reg(&mut regs, *dest);
-                if let (Value::Int(x), Value::Int(y)) = (&regs[*a], &regs[*b]) {
-                    if *y != 0 {
-                        regs[*dest] = Value::Int(x % y);
-                    } else {
-                        regs[*dest] = Value::Null;
-                    }
-                } else {
-                    regs[*dest] = Value::Null;
-                }
-                pc += 1;
-            }
-            Op::Eq { dest, a, b } => {
-                ensure_reg(&mut regs, *a);
-                ensure_reg(&mut regs, *b);
-                ensure_reg(&mut regs, *dest);
-                // numeric-aware equality
-                if let Some(ord) = numeric_cmp(&regs[*a], &regs[*b]) {
-                    regs[*dest] = Value::Bool(ord == std::cmp::Ordering::Equal);
-                } else {
-                    regs[*dest] = Value::Bool(regs[*a].to_value() == regs[*b].to_value());
-                }
-                pc += 1;
-            }
-            Op::Neq { dest, a, b } => {
-                ensure_reg(&mut regs, *a);
-                ensure_reg(&mut regs, *b);
-                ensure_reg(&mut regs, *dest);
-                if let Some(ord) = numeric_cmp(&regs[*a], &regs[*b]) {
-                    regs[*dest] = Value::Bool(ord != std::cmp::Ordering::Equal);
-                } else {
-                    regs[*dest] = Value::Bool(regs[*a].to_value() != regs[*b].to_value());
-                }
-                pc += 1;
-            }
-            Op::Lt { dest, a, b } => {
-                ensure_reg(&mut regs, *a);
-                ensure_reg(&mut regs, *b);
-                ensure_reg(&mut regs, *dest);
-                if let Some(ord) = numeric_cmp(&regs[*a], &regs[*b]) {
-                    regs[*dest] = Value::Bool(ord == std::cmp::Ordering::Less);
-                } else {
-                    regs[*dest] = Value::Bool(false);
-                }
-                pc += 1;
-            }
-            Op::Lte { dest, a, b } => {
-                ensure_reg(&mut regs, *dest);
-                if let Some(ord) = numeric_cmp(&regs[*a], &regs[*b]) {
-                    regs[*dest] = Value::Bool(ord != std::cmp::Ordering::Greater);
-                } else {
-                    regs[*dest] = Value::Bool(false);
-                }
-                pc += 1;
-            }
-            Op::Gt { dest, a, b } => {
-                ensure_reg(&mut regs, *dest);
-                if let Some(ord) = numeric_cmp(&regs[*a], &regs[*b]) {
-                    regs[*dest] = Value::Bool(ord == std::cmp::Ordering::Greater);
-                } else {
-                    regs[*dest] = Value::Bool(false);
-                }
-                pc += 1;
-            }
-            Op::Gte { dest, a, b } => {
-                ensure_reg(&mut regs, *dest);
-                if let Some(ord) = numeric_cmp(&regs[*a], &regs[*b]) {
-                    regs[*dest] = Value::Bool(ord != std::cmp::Ordering::Less);
-                } else {
-                    regs[*dest] = Value::Bool(false);
-                }
-                pc += 1;
-            }
-            Op::And { dest, a, b } => {
-                ensure_reg(&mut regs, *a);
-                ensure_reg(&mut regs, *b);
-                ensure_reg(&mut regs, *dest);
-                let v = regs[*a].as_bool() && regs[*b].as_bool();
-                regs[*dest] = Value::Bool(v);
-                pc += 1;
-            }
-            Op::Or { dest, a, b } => {
-                ensure_reg(&mut regs, *a);
-                ensure_reg(&mut regs, *b);
-                ensure_reg(&mut regs, *dest);
-                let v = regs[*a].as_bool() || regs[*b].as_bool();
-                regs[*dest] = Value::Bool(v);
-                pc += 1;
-            }
-            Op::Not { dest, src } => {
-                ensure_reg(&mut regs, *src);
-                ensure_reg(&mut regs, *dest);
-                regs[*dest] = Value::Bool(!regs[*src].as_bool());
-                pc += 1;
-            }
-            Op::Inc { dest } => {
-                ensure_reg(&mut regs, *dest);
-                if let Value::Int(i) = &mut regs[*dest] {
-                    *i += 1
-                };
-                pc += 1;
-            }
-            Op::Dec { dest } => {
-                ensure_reg(&mut regs, *dest);
-                if let Value::Int(i) = &mut regs[*dest] {
-                    *i -= 1
-                };
-                pc += 1;
-            }
-            Op::Label { .. } => {
-                pc += 1;
-            }
-            Op::Jump { target } => {
-                pc = *target;
-            }
-            Op::BrTrue { cond, target } => {
-                ensure_reg(&mut regs, *cond);
-                if regs[*cond].as_bool() {
-                    pc = *target
-                } else {
-                    pc += 1
-                }
-            }
-            Op::BrFalse { cond, target } => {
-                ensure_reg(&mut regs, *cond);
-                if !regs[*cond].as_bool() {
-                    pc = *target
-                } else {
-                    pc += 1
-                }
-            }
-            Op::Halt => {
-                break;
-            }
-            Op::Call { dest, func, args } => {
-                ensure_reg(&mut regs, *func);
-                let func_val = regs[*func].clone();
-                // evaluate args
-                let mut arg_vals: Vec<Value> = Vec::new();
-                for &r in args.iter() {
-                    ensure_reg(&mut regs, r);
-                    arg_vals.push(regs[r].clone());
-                }
-                // only support Symbol host functions for now
-                match func_val {
-                    Value::Symbol(name) => {
-                        let ret = run_host_fn(&name, &arg_vals)?;
-                        ensure_reg(&mut regs, *dest);
-                        regs[*dest] = ret;
-                        pc += 1;
-                    }
-                    _ => return Err("Call: unsupported non-symbol function value".to_string()),
-                }
-            }
-            Op::CallLabel {
-                dest,
-                label_index,
-                args,
-            } => {
-                // Save return information and push a new frame
-                let return_pc = pc + 1;
-                // seed frame locals with args from registers
-                let mut f = Frame {
-                    locals: Vec::new(),
-                    return_pc: Some(return_pc),
-                    return_reg: Some(*dest),
-                };
-                let mut arg_vals: Vec<Value> = Vec::new();
-                for (i, &areg) in args.iter().enumerate() {
-                    ensure_reg(&mut regs, areg);
-                    if i >= f.locals.len() {
-                        f.locals.resize(i + 1, Value::Null);
-                    }
-                    f.locals[i] = regs[areg].clone();
-                    arg_vals.push(regs[areg].clone());
-                }
-                // CallLabel encodes a label ordinal (L{n}). Resolve to op index.
-                let label_name = format!("L{}", label_index);
-                let resolved = label_by_name.get(&label_name).copied();
-                frames.push(f);
-                // jump to the label (the label op is at resolved op index, start after it)
-                if let Some(idx) = resolved {
-                    pc = idx + 1;
-                } else {
-                    return Err(format!("CallLabel: unknown label '{}'", label_name));
-                }
-            }
-            Op::PluginCall { plugin_name, func_name, args, result_target } => {
-                // Collect argument values from registers
-                let mut arg_vals: Vec<Value> = Vec::new();
-                for &r in args.iter() {
-                    ensure_reg(&mut regs, r);
-                    arg_vals.push(regs[r].clone());
-                }
-
-                // Lookup plugin instance in registry
-                if let Some(plugin) = plugins.get(plugin_name) {
-                    // Call the plugin's async `call` method, blocking to keep the VM runner synchronous
-                    let call_res = block_on(plugin.call(func_name, arg_vals));
-                    match call_res {
-                        Ok(val) => {
-                            if let Some(dest) = result_target {
-                                ensure_reg(&mut regs, *dest);
-                                regs[*dest] = val;
-                            }
-                            pc += 1;
-                        }
-                        Err(e) => return Err(format!("Plugin '{}' call '{}' error: {}", plugin_name, func_name, e)),
-                    }
-                } else {
-                    return Err(format!("unknown plugin '{}'", plugin_name));
-                }
-            }
-            Op::ArrayNew { dest, elems } => {
-                // build a new array from the values in the specified registers
-                let mut items: Vec<Value> = Vec::new();
-                for &r in elems.iter() {
-                    ensure_reg(&mut regs, r);
-                    items.push(regs[r].clone());
-                }
-                ensure_reg(&mut regs, *dest);
-                regs[*dest] = Value::Array(items);
-                pc += 1;
-            }
-            Op::LoadGlobal { dest, src } => {
-                // copy module-level register `src` into function-local dest
-                ensure_reg(&mut regs, *src);
-                ensure_reg(&mut regs, *dest);
-                regs[*dest] = regs[*src].clone();
-                pc += 1;
-            }
-            Op::ArrayGet { dest, array, index } => {
-                ensure_reg(&mut regs, *array);
-                ensure_reg(&mut regs, *index);
-                ensure_reg(&mut regs, *dest);
-                // Clone the array and index values so we don't hold multiple borrows
-                let arr_val = regs[*array].clone();
-                let idx_val = regs[*index].clone();
-                match arr_val {
-                    Value::Array(a) => {
-                        if let Value::Int(i) = idx_val {
-                            let idx = i as isize;
-                            if idx >= 0 && (idx as usize) < a.len() {
-                                regs[*dest] = a[idx as usize].clone();
-                            } else {
-                                regs[*dest] = Value::Null;
-                            }
-                        } else {
-                            regs[*dest] = Value::Null;
-                        }
-                    }
-                    _ => {
-                        regs[*dest] = Value::Null;
-                    }
-                }
-                pc += 1;
-            }
-            Op::ArraySet { array, index, src } => {
-                ensure_reg(&mut regs, *array);
-                ensure_reg(&mut regs, *index);
-                ensure_reg(&mut regs, *src);
-                // Clone index and src values ahead of the mutable borrow
-                let idx_val = regs[*index].clone();
-                let src_val = regs[*src].clone();
-                // ensure the array register contains an Array, creating one if necessary
-                match &mut regs[*array] {
-                    Value::Array(a) => {
-                        if let Value::Int(i) = idx_val {
-                            let idx = i as usize;
-                            if idx >= a.len() {
-                                a.resize(idx + 1, Value::Null);
-                            }
-                            a[idx] = src_val;
-                        }
-                    }
-                    other => {
-                        // replace with a new array big enough to hold the index
-                        if let Value::Int(i) = idx_val {
-                            let idx = i as usize;
-                            let mut a: Vec<Value> = Vec::new();
-                            a.resize(idx + 1, Value::Null);
-                            a[idx] = src_val;
-                            *other = Value::Array(a);
-                        }
-                    }
-                }
-                pc += 1;
-            }
-            Op::GetProp { dest, obj, key } => {
-                ensure_reg(&mut regs, *obj);
-                ensure_reg(&mut regs, *key);
-                ensure_reg(&mut regs, *dest);
-                match &regs[*obj] {
-                    Value::Object(map) => {
-                        // key can be Symbol or Str
-                        let k = match &regs[*key] {
-                            Value::Symbol(s) => s.clone(),
-                            Value::Str(s) => s.clone(),
-                            _ => String::new(),
-                        };
-                        if let Some(v) = map.get(&k) {
-                            regs[*dest] = v.clone();
-                        } else {
-                            regs[*dest] = Value::Null;
-                        }
-                    }
-                    Value::Array(a) => {
-                        // support array.length property
-                        match &regs[*key] {
-                            Value::Symbol(s) | Value::Str(s) => {
-                                if s == "length" {
-                                    regs[*dest] = Value::Int(a.len() as i64);
-                                } else {
-                                    regs[*dest] = Value::Null;
-                                }
-                            }
-                            _ => {
-                                regs[*dest] = Value::Null;
-                            }
-                        }
-                    }
-                    Value::Str(s) => {
-                        // support string.length property
-                        match &regs[*key] {
-                            Value::Symbol(k) | Value::Str(k) => {
-                                if k == "length" {
-                                    regs[*dest] = Value::Int(s.chars().count() as i64);
-                                } else {
-                                    regs[*dest] = Value::Null;
-                                }
-                            }
-                            _ => {
-                                regs[*dest] = Value::Null;
-                            }
-                        }
-                    }
-                    _ => {
-                        regs[*dest] = Value::Null;
-                    }
-                }
-                pc += 1;
-            }
-            Op::SetProp { obj, key, src } => {
-                ensure_reg(&mut regs, *obj);
-                ensure_reg(&mut regs, *key);
-                ensure_reg(&mut regs, *src);
-                // ensure obj is an Object; if not, replace it with a new object
-                let key_str = match &regs[*key] {
-                    Value::Symbol(s) => s.clone(),
-                    Value::Str(s) => s.clone(),
-                    _ => String::new(),
-                };
-                let src_val = regs[*src].clone();
-                match &mut regs[*obj] {
-                    Value::Object(map) => {
-                        map.insert(key_str, src_val);
-                    }
-                    other => {
-                        // replace non-object with an object that holds the property
-                        let mut m = std::collections::HashMap::new();
-                        m.insert(key_str, src_val);
-                        *other = Value::Object(m);
-                    }
-                }
-                pc += 1;
-            }
-            Op::Ret { src } => {
-                ensure_reg(&mut regs, *src);
-                // pop current frame
-                if let Some(f) = frames.pop() {
-                    // if there's a caller, write return value into its return_reg and set pc
-                    if let Some(ret_reg) = f.return_reg {
-                        ensure_reg(&mut regs, ret_reg);
-                        regs[ret_reg] = regs[*src].clone();
-                    }
-                    if let Some(ret_pc) = f.return_pc {
-                        pc = ret_pc;
-                    } else {
-                        // no return pc -> halt
-                        break;
-                    }
-                } else {
-                    // return with no frame -> halt
-                    break;
-                }
-            }
+fn take_args(regs: &Vec<Value>, args: &[usize]) -> Vec<Value> {
+    let mut out = Vec::with_capacity(args.len());
+    for &r in args.iter() {
+        if r < regs.len() {
+            out.push(regs[r].clone());
+        } else {
+            out.push(Value::Null);
         }
     }
+    out
+}
 
+// Dispatch a single op; keeps the match small at the top-level and uses helpers.
+fn dispatch_op(state: &mut ExecState) -> Result<(), String> {
+    use std::cmp::Ordering;
+    let op = &state.ops[state.pc];
+    match op {
+        Op::LConst { dest, val } => {
+            ensure_reg(&mut state.regs, *dest);
+            state.regs[*dest] = val.clone();
+            state.pc += 1;
+        }
+        Op::LLocal { dest, local } => {
+            ensure_reg(&mut state.regs, *dest);
+            if let Some(frame) = state.frames.last() {
+                if *local < frame.locals.len() {
+                    state.regs[*dest] = frame.locals[*local].clone();
+                } else {
+                    state.regs[*dest] = Value::Null;
+                }
+            } else {
+                state.regs[*dest] = Value::Null;
+            }
+            state.pc += 1;
+        }
+        Op::SLocal { src, local } => {
+            ensure_reg(&mut state.regs, *src);
+            if let Some(frame) = state.frames.last_mut() {
+                if *local >= frame.locals.len() {
+                    frame.locals.resize(*local + 1, Value::Null);
+                }
+                frame.locals[*local] = state.regs[*src].clone();
+            }
+            state.pc += 1;
+        }
+        Op::Add { dest, a, b } => {
+            ensure_reg(&mut state.regs, *a);
+            ensure_reg(&mut state.regs, *b);
+            ensure_reg(&mut state.regs, *dest);
+            let is_str = matches!(&state.regs[*a], Value::Str(_)) || matches!(&state.regs[*b], Value::Str(_));
+            if is_str {
+                fn val_to_string(v: &Value) -> String {
+                    match v {
+                        Value::Str(s) => s.clone(),
+                        Value::Symbol(s) => s.clone(),
+                        Value::Int(i) => i.to_string(),
+                        Value::Float(f) => f.to_string(),
+                        Value::Bool(b) => b.to_string(),
+                        Value::Null => "null".to_string(),
+                        Value::Array(_) | Value::Object(_) => format!("{:?}", v.to_value()),
+                    }
+                }
+                let s1 = val_to_string(&state.regs[*a]);
+                let s2 = val_to_string(&state.regs[*b]);
+                state.regs[*dest] = Value::Str(format!("{}{}", s1, s2));
+            } else {
+                state.regs[*dest] = numeric_bin(&state.regs[*a], &state.regs[*b], |x, y| x + y, |x, y| x + y);
+            }
+            state.pc += 1;
+        }
+        Op::Sub { dest, a, b } => {
+            ensure_reg(&mut state.regs, *a);
+            ensure_reg(&mut state.regs, *b);
+            ensure_reg(&mut state.regs, *dest);
+            state.regs[*dest] = numeric_bin(&state.regs[*a], &state.regs[*b], |x, y| x - y, |x, y| x - y);
+            state.pc += 1;
+        }
+        Op::Mul { dest, a, b } => {
+            ensure_reg(&mut state.regs, *a);
+            ensure_reg(&mut state.regs, *b);
+            ensure_reg(&mut state.regs, *dest);
+            state.regs[*dest] = numeric_bin(&state.regs[*a], &state.regs[*b], |x, y| x * y, |x, y| x * y);
+            state.pc += 1;
+        }
+        Op::Div { dest, a, b } => {
+            ensure_reg(&mut state.regs, *a);
+            ensure_reg(&mut state.regs, *b);
+            ensure_reg(&mut state.regs, *dest);
+            if let (Value::Int(x), Value::Int(y)) = (&state.regs[*a], &state.regs[*b]) {
+                if *y != 0 && x % y == 0 {
+                    state.regs[*dest] = Value::Int(x / y);
+                } else {
+                    state.regs[*dest] = numeric_bin(&state.regs[*a], &state.regs[*b], |x, y| x / y, |x, y| x / y);
+                }
+            } else {
+                state.regs[*dest] = numeric_bin(&state.regs[*a], &state.regs[*b], |x, y| x / y, |x, y| x / y);
+            }
+            state.pc += 1;
+        }
+        Op::Mod { dest, a, b } => {
+            ensure_reg(&mut state.regs, *a);
+            ensure_reg(&mut state.regs, *b);
+            ensure_reg(&mut state.regs, *dest);
+            if let (Value::Int(x), Value::Int(y)) = (&state.regs[*a], &state.regs[*b]) {
+                if *y != 0 {
+                    state.regs[*dest] = Value::Int(x % y);
+                } else {
+                    state.regs[*dest] = Value::Null;
+                }
+            } else {
+                state.regs[*dest] = Value::Null;
+            }
+            state.pc += 1;
+        }
+        Op::Eq { dest, a, b } => {
+            ensure_reg(&mut state.regs, *a);
+            ensure_reg(&mut state.regs, *b);
+            ensure_reg(&mut state.regs, *dest);
+            if let Some(ord) = numeric_cmp(&state.regs[*a], &state.regs[*b]) {
+                state.regs[*dest] = Value::Bool(ord == Ordering::Equal);
+            } else {
+                state.regs[*dest] = Value::Bool(state.regs[*a].to_value() == state.regs[*b].to_value());
+            }
+            state.pc += 1;
+        }
+        Op::Neq { dest, a, b } => {
+            ensure_reg(&mut state.regs, *a);
+            ensure_reg(&mut state.regs, *b);
+            ensure_reg(&mut state.regs, *dest);
+            if let Some(ord) = numeric_cmp(&state.regs[*a], &state.regs[*b]) {
+                state.regs[*dest] = Value::Bool(ord != Ordering::Equal);
+            } else {
+                state.regs[*dest] = Value::Bool(state.regs[*a].to_value() != state.regs[*b].to_value());
+            }
+            state.pc += 1;
+        }
+        Op::Lt { dest, a, b } => {
+            ensure_reg(&mut state.regs, *a);
+            ensure_reg(&mut state.regs, *b);
+            ensure_reg(&mut state.regs, *dest);
+            if let Some(ord) = numeric_cmp(&state.regs[*a], &state.regs[*b]) {
+                state.regs[*dest] = Value::Bool(ord == Ordering::Less);
+            } else {
+                state.regs[*dest] = Value::Bool(false);
+            }
+            state.pc += 1;
+        }
+        Op::Lte { dest, a, b } => {
+            ensure_reg(&mut state.regs, *dest);
+            if let Some(ord) = numeric_cmp(&state.regs[*a], &state.regs[*b]) {
+                state.regs[*dest] = Value::Bool(ord != Ordering::Greater);
+            } else {
+                state.regs[*dest] = Value::Bool(false);
+            }
+            state.pc += 1;
+        }
+        Op::Gt { dest, a, b } => {
+            ensure_reg(&mut state.regs, *dest);
+            if let Some(ord) = numeric_cmp(&state.regs[*a], &state.regs[*b]) {
+                state.regs[*dest] = Value::Bool(ord == Ordering::Greater);
+            } else {
+                state.regs[*dest] = Value::Bool(false);
+            }
+            state.pc += 1;
+        }
+        Op::Gte { dest, a, b } => {
+            ensure_reg(&mut state.regs, *dest);
+            if let Some(ord) = numeric_cmp(&state.regs[*a], &state.regs[*b]) {
+                state.regs[*dest] = Value::Bool(ord != Ordering::Less);
+            } else {
+                state.regs[*dest] = Value::Bool(false);
+            }
+            state.pc += 1;
+        }
+        Op::And { dest, a, b } => {
+            ensure_reg(&mut state.regs, *a);
+            ensure_reg(&mut state.regs, *b);
+            ensure_reg(&mut state.regs, *dest);
+            let v = state.regs[*a].as_bool() && state.regs[*b].as_bool();
+            state.regs[*dest] = Value::Bool(v);
+            state.pc += 1;
+        }
+        Op::Or { dest, a, b } => {
+            ensure_reg(&mut state.regs, *a);
+            ensure_reg(&mut state.regs, *b);
+            ensure_reg(&mut state.regs, *dest);
+            let v = state.regs[*a].as_bool() || state.regs[*b].as_bool();
+            state.regs[*dest] = Value::Bool(v);
+            state.pc += 1;
+        }
+        Op::Not { dest, src } => {
+            ensure_reg(&mut state.regs, *src);
+            ensure_reg(&mut state.regs, *dest);
+            state.regs[*dest] = Value::Bool(!state.regs[*src].as_bool());
+            state.pc += 1;
+        }
+        Op::Inc { dest } => {
+            ensure_reg(&mut state.regs, *dest);
+            if let Value::Int(i) = &mut state.regs[*dest] {
+                *i += 1
+            };
+            state.pc += 1;
+        }
+        Op::Dec { dest } => {
+            ensure_reg(&mut state.regs, *dest);
+            if let Value::Int(i) = &mut state.regs[*dest] {
+                *i -= 1
+            };
+            state.pc += 1;
+        }
+        Op::Label { .. } => {
+            state.pc += 1;
+        }
+        Op::Jump { target } => {
+            state.pc = *target;
+        }
+        Op::BrTrue { cond, target } => {
+            ensure_reg(&mut state.regs, *cond);
+            if state.regs[*cond].as_bool() {
+                state.pc = *target
+            } else {
+                state.pc += 1
+            }
+        }
+        Op::BrFalse { cond, target } => {
+            ensure_reg(&mut state.regs, *cond);
+            if !state.regs[*cond].as_bool() {
+                state.pc = *target
+            } else {
+                state.pc += 1
+            }
+        }
+        Op::Halt => {
+            state.pc = state.ops.len();
+        }
+        Op::Call { dest, func, args } => {
+            ensure_reg(&mut state.regs, *func);
+            let func_val = state.regs[*func].clone();
+            let arg_vals = take_args(&state.regs, args);
+            match func_val {
+                Value::Symbol(name) => {
+                    let ret = run_host_fn(&name, &arg_vals)?;
+                    ensure_reg(&mut state.regs, *dest);
+                    state.regs[*dest] = ret;
+                    state.pc += 1;
+                }
+                _ => return Err("Call: unsupported non-symbol function value".to_string()),
+            }
+        }
+        Op::CallLabel { dest, label_index, args } => {
+            let return_pc = state.pc + 1;
+            let mut f = Frame { locals: Vec::new(), return_pc: Some(return_pc), return_reg: Some(*dest) };
+            for (i, &areg) in args.iter().enumerate() {
+                ensure_reg(&mut state.regs, areg);
+                if i >= f.locals.len() { f.locals.resize(i + 1, Value::Null); }
+                f.locals[i] = state.regs[areg].clone();
+            }
+            let label_name = format!("L{}", label_index);
+            let resolved = state.label_by_name.get(&label_name).copied();
+            state.frames.push(f);
+            if let Some(idx) = resolved { state.pc = idx + 1; } else { return Err(format!("CallLabel: unknown label '{}'", label_name)); }
+        }
+        Op::PluginCall { plugin_name, func_name, args, result_target } => {
+            let arg_vals = take_args(&state.regs, args);
+            if let Some(plugin) = state.plugins.get(plugin_name) {
+                let call_res = block_on(plugin.call(func_name, arg_vals));
+                match call_res {
+                    Ok(val) => {
+                        if let Some(dest) = result_target {
+                            ensure_reg(&mut state.regs, *dest);
+                            state.regs[*dest] = val;
+                        }
+                        state.pc += 1;
+                    }
+                    Err(e) => return Err(format!("Plugin - '{}'\nCall - '{}'\nError: {}", plugin_name, func_name, e)),
+                }
+            } else {
+                return Err(format!("unknown plugin '{}'", plugin_name));
+            }
+        }
+        Op::ArrayNew { dest, elems } => {
+            let mut items: Vec<Value> = Vec::new();
+            for &r in elems.iter() { ensure_reg(&mut state.regs, r); items.push(state.regs[r].clone()); }
+            ensure_reg(&mut state.regs, *dest);
+            state.regs[*dest] = Value::Array(items);
+            state.pc += 1;
+        }
+        Op::LoadGlobal { dest, src } => {
+            ensure_reg(&mut state.regs, *src);
+            ensure_reg(&mut state.regs, *dest);
+            state.regs[*dest] = state.regs[*src].clone();
+            state.pc += 1;
+        }
+        Op::ArrayGet { dest, array, index } => {
+            ensure_reg(&mut state.regs, *array);
+            ensure_reg(&mut state.regs, *index);
+            ensure_reg(&mut state.regs, *dest);
+            let arr_val = state.regs[*array].clone();
+            let idx_val = state.regs[*index].clone();
+            match arr_val {
+                Value::Array(a) => {
+                    if let Value::Int(i) = idx_val {
+                        let idx = i as isize;
+                        if idx >= 0 && (idx as usize) < a.len() { state.regs[*dest] = a[idx as usize].clone(); } else { state.regs[*dest] = Value::Null; }
+                    } else { state.regs[*dest] = Value::Null; }
+                }
+                _ => { state.regs[*dest] = Value::Null; }
+            }
+            state.pc += 1;
+        }
+        Op::ArraySet { array, index, src } => {
+            ensure_reg(&mut state.regs, *array);
+            ensure_reg(&mut state.regs, *index);
+            ensure_reg(&mut state.regs, *src);
+            let idx_val = state.regs[*index].clone();
+            let src_val = state.regs[*src].clone();
+            match &mut state.regs[*array] {
+                Value::Array(a) => {
+                    if let Value::Int(i) = idx_val { let idx = i as usize; if idx >= a.len() { a.resize(idx + 1, Value::Null); } a[idx] = src_val; }
+                }
+                other => {
+                    if let Value::Int(i) = idx_val { let idx = i as usize; let mut a: Vec<Value> = Vec::new(); a.resize(idx + 1, Value::Null); a[idx] = src_val; *other = Value::Array(a); }
+                }
+            }
+            state.pc += 1;
+        }
+        Op::GetProp { dest, obj, key } => {
+            ensure_reg(&mut state.regs, *obj);
+            ensure_reg(&mut state.regs, *key);
+            ensure_reg(&mut state.regs, *dest);
+
+            match &state.regs[*obj] {
+                Value::Object(map) => {
+                    let k = match &state.regs[*key] {
+                        Value::Symbol(s) => s.clone(),
+                        Value::Str(s) => s.clone(),
+                        _ => String::new(),
+                    };
+                    if let Some(v) = map.get(&k) {
+                        state.regs[*dest] = v.clone();
+                    } else {
+                        state.regs[*dest] = Value::Null;
+                    }
+                }
+                Value::Array(a) => {
+                    match &state.regs[*key] {
+                        Value::Symbol(s) | Value::Str(s) => {
+                            if s == "length" {
+                                state.regs[*dest] = Value::Int(a.len() as i64);
+                            } else {
+                                state.regs[*dest] = Value::Null;
+                            }
+                        }
+                        _ => {
+                            state.regs[*dest] = Value::Null;
+                        }
+                    }
+                }
+                Value::Str(s) => {
+                    match &state.regs[*key] {
+                        Value::Symbol(k) | Value::Str(k) => {
+                            if k == "length" {
+                                state.regs[*dest] = Value::Int(s.chars().count() as i64);
+                            } else {
+                                state.regs[*dest] = Value::Null;
+                            }
+                        }
+                        _ => {
+                            state.regs[*dest] = Value::Null;
+                        }
+                    }
+                }
+                _ => {
+                    state.regs[*dest] = Value::Null;
+                }
+            }
+
+            state.pc += 1;
+        }
+        Op::SetProp { obj, key, src } => {
+            ensure_reg(&mut state.regs, *obj);
+            ensure_reg(&mut state.regs, *key);
+            ensure_reg(&mut state.regs, *src);
+            let key_str = match &state.regs[*key] { Value::Symbol(s) => s.clone(), Value::Str(s) => s.clone(), _ => String::new() };
+            let src_val = state.regs[*src].clone();
+            match &mut state.regs[*obj] {
+                Value::Object(map) => { map.insert(key_str, src_val); }
+                other => { let mut m = std::collections::HashMap::new(); m.insert(key_str, src_val); *other = Value::Object(m); }
+            }
+            state.pc += 1;
+        }
+        Op::Ret { src } => {
+            ensure_reg(&mut state.regs, *src);
+            if let Some(f) = state.frames.pop() {
+                if let Some(ret_reg) = f.return_reg { ensure_reg(&mut state.regs, ret_reg); state.regs[ret_reg] = state.regs[*src].clone(); }
+                if let Some(ret_pc) = f.return_pc { state.pc = ret_pc; } else { state.pc = state.ops.len(); }
+            } else { state.pc = state.ops.len(); }
+        }
+    }
     Ok(())
 }
 

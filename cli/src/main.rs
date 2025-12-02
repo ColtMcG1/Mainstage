@@ -1,14 +1,31 @@
 use clap::{Arg, ArgMatches, Command};
+use console::style;
+use log::{Level, error, info, warn};
 use mainstage_core::{
     VM, analyze_acyclic_rules, analyze_semantic_rules, ast::generate_ast_from_source,
 };
 use std::fs;
+use std::io::Write;
 use std::path::PathBuf;
 
 mod disassembler;
 
 fn main() {
-    let cli = Command::new("MainStage CLI")
+    // Initialize logger with a clean, human-friendly format and colored level tags.
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
+        .format(|buf, record| {
+            let lvl = match record.level() {
+                Level::Error => style("error").red().bold(),
+                Level::Warn => style("warn").yellow().bold(),
+                Level::Info => style("info").green().bold(),
+                Level::Debug => style("debug").cyan(),
+                Level::Trace => style("trace").magenta(),
+            };
+            writeln!(buf, "{}: {}", lvl, record.args())
+        })
+        .init();
+
+    let cli = Command::new("MainStage")
         .version("0.1.0")
         .author("Colton McGraw <https://github.com/ColtMcG1>")
         .about("A CLI for MainStage");
@@ -31,8 +48,8 @@ fn main() {
         .get_one::<String>("plugin-dir")
         .map(|s| PathBuf::from(s));
     match vm.discover_plugins(plugin_dir.as_ref()) {
-        Ok(n) => eprintln!("Discovered {} plugin manifest(s)", n),
-        Err(e) => eprintln!("Plugin discovery failed: {}", e),
+        Ok(n) => info!("Discovered {} plugin manifest(s)", n),
+        Err(e) => error!("Plugin discovery failed: {}", e),
     }
 
     // Clone descriptors map for analyzer usage during CLI commands.
@@ -142,7 +159,7 @@ fn dispatch_commands(
                 Ok(ast) => ast,
                 Err(e) => {
                     // Print a helpful message and stop processing this command.
-                    println!("Error generating AST: {}", e);
+                    error!("Error generating AST: {}", e);
                     return;
                 }
             };
@@ -152,13 +169,13 @@ fn dispatch_commands(
                 Err(diags) => {
                     diags
                         .iter()
-                        .for_each(|d| println!("Semantic analysis error: {d}"));
+                        .for_each(|d| error!("Semantic analysis error: {d}"));
                     return;
                 }
             };
 
             if let Err(e) = analyze_acyclic_rules(&ast) {
-                println!("Acyclic analysis error: {}", e);
+                error!("Acyclic analysis error: {}", e);
                 return;
             }
 
@@ -183,7 +200,7 @@ fn dispatch_commands(
                             .expect("Failed to write dumped IR");
                     }
                     _ => {
-                        println!("Unknown dump stage: {}", dump_stage);
+                        error!("Unknown dump stage: {}", dump_stage);
                     }
                 }
             }
@@ -202,7 +219,7 @@ fn dispatch_commands(
                 Ok(ast) => ast,
                 Err(e) => {
                     // Print a helpful message and stop processing this command.
-                    println!("Error generating AST: {}", e);
+                    error!("Error generating AST: {}", e);
                     return;
                 }
             };
@@ -212,13 +229,13 @@ fn dispatch_commands(
                 Err(diags) => {
                     diags
                         .iter()
-                        .for_each(|d| println!("Semantic analysis error: {d}"));
+                        .for_each(|d| error!("Semantic analysis error: {d}"));
                     return;
                 }
             };
 
             if let Err(e) = analyze_acyclic_rules(&ast) {
-                println!("Acyclic analysis error: {}", e);
+                error!("Acyclic analysis error: {}", e);
                 return;
             }
 
@@ -293,14 +310,23 @@ fn dispatch_commands(
                         exe_candidates.push(next_to_manifest.clone());
 
                         // Also try with .exe suffix and typical cargo target locations
-                        let mut with_exe = next_to_manifest.clone(); with_exe.set_extension("exe"); exe_candidates.push(with_exe.clone());
-                        let crate_root = manifest_dir.parent().map(|p| p.to_path_buf()).unwrap_or(manifest_dir.clone());
+                        let mut with_exe = next_to_manifest.clone();
+                        with_exe.set_extension("exe");
+                        exe_candidates.push(with_exe.clone());
+                        let crate_root = manifest_dir
+                            .parent()
+                            .map(|p| p.to_path_buf())
+                            .unwrap_or(manifest_dir.clone());
                         let cand_debug = crate_root.join("target").join("debug").join(&entry);
                         exe_candidates.push(cand_debug.clone());
-                        let mut cand_debug_exe = cand_debug.clone(); cand_debug_exe.set_extension("exe"); exe_candidates.push(cand_debug_exe.clone());
+                        let mut cand_debug_exe = cand_debug.clone();
+                        cand_debug_exe.set_extension("exe");
+                        exe_candidates.push(cand_debug_exe.clone());
                         let cand_rel = crate_root.join("target").join("release").join(&entry);
                         exe_candidates.push(cand_rel.clone());
-                        let mut cand_rel_exe = cand_rel.clone(); cand_rel_exe.set_extension("exe"); exe_candidates.push(cand_rel_exe.clone());
+                        let mut cand_rel_exe = cand_rel.clone();
+                        cand_rel_exe.set_extension("exe");
+                        exe_candidates.push(cand_rel_exe.clone());
 
                         // Pick the first candidate that exists
                         let mut found: Option<std::path::PathBuf> = None;
@@ -321,20 +347,20 @@ fn dispatch_commands(
                             );
                             run_vm.register_plugin(std::sync::Arc::new(ep));
                         } else {
-                            eprintln!(
-                                "Warning: could not locate executable for plugin module '{}' at expected path(s)",
+                            warn!(
+                                "could not locate executable for plugin module '{}' at expected path(s)",
                                 mod_name
                             );
                         }
                     } else {
-                        eprintln!(
-                            "Warning: no path specified in manifest for imported module '{}'",
+                        warn!(
+                            "no path specified in manifest for imported module '{}'",
                             mod_name
                         );
                     }
                 } else {
-                    eprintln!(
-                        "Warning: no plugin descriptor found for imported module '{}'",
+                    warn!(
+                        "no plugin descriptor found for imported module '{}'",
                         mod_name
                     );
                 }
@@ -344,13 +370,15 @@ fn dispatch_commands(
             // `read` and glob-based resolution work relative to the script.
             if let Some(parent) = script.path.parent() {
                 if let Err(e) = std::env::set_current_dir(parent) {
-                    println!("Warning: failed to set working dir to {:?}: {}", parent, e);
+                    warn!("failed to set working dir to {:?}: {}", parent, e);
                 }
             }
 
             match run_vm.run(trace) {
                 Ok(()) => {}
-                Err(e) => println!("Runtime error: {}", e),
+                Err(e) => {
+                    error!("{}", e.lines().collect::<Vec<&str>>().join("\n\t"));
+                }
             }
 
             // Restore original working directory if available
@@ -368,19 +396,19 @@ fn dispatch_commands(
                 Ok(f) => {
                     if let Some(output_file) = output_file {
                         if let Err(e) = fs::write(output_file, f) {
-                            println!("Failed to write disassembly output file: {}", e);
+                            error!("Failed to write disassembly output file: {}", e);
                         }
                     } else {
                         println!("{}", f);
                     }
                 }
                 Err(e) => {
-                    println!("Failed to disassemble bytecode: {}", e);
+                    error!("Failed to disassemble bytecode: {}", e);
                 }
             }
         }
         _ => {
-            println!("No valid subcommand was used. Use --help for more information.");
+            error!("No valid subcommand was used. Use --help for more information.");
         }
     }
 }

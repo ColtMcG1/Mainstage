@@ -394,33 +394,44 @@ fn parse_postfix_expression_rule(
                 }
             }
         } else {
-            // No inner pairs; maybe op_pair.as_str() is ++ or --
+            // No inner pairs. This can happen for empty-call parentheses `()`
+            // (e.g. `obj.fn()` with zero args). Treat `()` as a zero-argument
+            // call; otherwise fall back to handling raw tokens like ++/--.
             let s = op_pair.as_str();
-            match s {
-                "++" => {
-                    node = AstNode::new(
-                        AstNodeKind::UnaryOp { op: UnaryOperator::Inc, expr: Box::new(node) },
-                        rules::get_location_from_pair(&op_pair, script),
-                        rules::get_span_from_pair(&op_pair, script),
-                    );
-                }
-                "--" => {
-                    node = AstNode::new(
-                        AstNodeKind::UnaryOp { op: UnaryOperator::Dec, expr: Box::new(node) },
-                        rules::get_location_from_pair(&op_pair, script),
-                        rules::get_span_from_pair(&op_pair, script),
-                    );
-                }
-                _ => {
-                    return Err(Box::<dyn MainstageErrorExt>::from(Box::new(
-                        crate::ast::err::SyntaxError::with(
-                            crate::Level::Error,
-                            "Unsupported postfix operator with no inner rule.".into(),
-                            "mainstage.expr.parse_postfix_expression_rule".into(),
-                            location.clone(),
-                            span.clone(),
-                        ),
-                    )));
+            if s.starts_with('(') {
+                // Empty call: create Call node with no args
+                node = AstNode::new(
+                    AstNodeKind::Call { callee: Box::new(node), args: Vec::new() },
+                    rules::get_location_from_pair(&op_pair, script),
+                    rules::get_span_from_pair(&op_pair, script),
+                );
+            } else {
+                match s {
+                    "++" => {
+                        node = AstNode::new(
+                            AstNodeKind::UnaryOp { op: UnaryOperator::Inc, expr: Box::new(node) },
+                            rules::get_location_from_pair(&op_pair, script),
+                            rules::get_span_from_pair(&op_pair, script),
+                        );
+                    }
+                    "--" => {
+                        node = AstNode::new(
+                            AstNodeKind::UnaryOp { op: UnaryOperator::Dec, expr: Box::new(node) },
+                            rules::get_location_from_pair(&op_pair, script),
+                            rules::get_span_from_pair(&op_pair, script),
+                        );
+                    }
+                    _ => {
+                        return Err(Box::<dyn MainstageErrorExt>::from(Box::new(
+                            crate::ast::err::SyntaxError::with(
+                                crate::Level::Error,
+                                "Unsupported postfix operator with no inner rule.".into(),
+                                "mainstage.expr.parse_postfix_expression_rule".into(),
+                                location.clone(),
+                                span.clone(),
+                            ),
+                        )));
+                    }
                 }
             }
         }
