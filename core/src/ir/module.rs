@@ -191,6 +191,107 @@ impl IrModule {
     pub fn find_function_id_by_name(&self, name: &str) -> Option<u32> {
         self.functions.get(name).copied()
     }
+
+    /// Return a mapping op_index -> human-readable local name for any
+    /// `SLocal` ops present in the module. Since the lowering phase
+    /// does not keep original identifier names in the module, this
+    /// function returns a best-effort synthesized name of the form
+    /// `local[<idx>]` keyed by the op index where the `SLocal` appears.
+    pub fn get_op_slocal_name(&self) -> std::collections::HashMap<usize, String> {
+        let mut map: std::collections::HashMap<usize, String> = std::collections::HashMap::new();
+        for (i, op) in self.ops.iter().enumerate() {
+            if let IROp::SLocal { src: _, local_index } = op {
+                map.insert(i, format!("local[{}]", local_index));
+            }
+        }
+        map
+    }
+
+    /// Return a mapping of declared stage/function names -> module op
+    /// index of the corresponding entry `Label` op. This uses the
+    /// function id recorded when the function was declared: `L{fid-1}`
+    /// is the label name emitted for that function. Only entries for
+    /// which a label op exists are returned.
+    pub fn get_stage_labels(&self) -> std::collections::HashMap<String, usize> {
+        let mut out = std::collections::HashMap::new();
+        for (name, &id) in self.functions.iter() {
+            let label_name = format!("L{}", (id as usize).saturating_sub(1));
+            if let Some(&idx) = self.labels.get(&label_name) {
+                out.insert(name.clone(), idx);
+            }
+        }
+        out
+    }
+
+    /// Attempt to infer stage parameter *names* for the given `stage`.
+    /// The lowering stage does not persist original parameter names in
+    /// the `IrModule`, so this routine synthesizes placeholder names
+    /// `arg0..argN` when it can determine a local count by scanning the
+    /// function body for `LLocal`/`SLocal` usages. Returns `None` when
+    /// the stage is unknown or no locals are found.
+    pub fn get_stage_param_names(&self, stage: &str) -> Option<Vec<String>> {
+        let func_id = self.functions.get(stage)?;
+        let label_name = format!("L{}", ( *func_id as usize ).saturating_sub(1));
+        let label_pos = *self.labels.get(&label_name)?;
+
+        // Determine function body end (next Label or end-of-ops)
+        let end = (label_pos + 1..self.ops.len()).find(|&i| matches!(&self.ops[i], IROp::Label { .. })).unwrap_or(self.ops.len());
+
+        // Find max local_index used in this function body
+        let mut max_local: Option<usize> = None;
+        for op in &self.ops[label_pos + 1..end] {
+            match op {
+                IROp::LLocal { dest: _, local_index } | IROp::SLocal { src: _, local_index } => {
+                    max_local = Some(match max_local { Some(m) => (*local_index).max(m), None => *local_index });
+                }
+                _ => {}
+            }
+        }
+        let count = max_local.map(|m| m + 1)?;
+        let names = (0..count).map(|i| format!("arg{}", i)).collect();
+        Some(names)
+    }
+
+    /// Attempt to determine module-level register indices that correspond
+    /// to function-local parameter slots for `stage`. For each inferred
+    /// parameter index `0..N`, this finds the first `LLocal` op inside
+    /// the function body that targets that local and returns its
+    /// `dest` (the module register holding the local). Returns `None`
+    /// if the stage is unknown or if no local usage is found.
+    pub fn get_stage_param_local_indices(&self, stage: &str) -> Option<Vec<usize>> {
+        let func_id = self.functions.get(stage)?;
+        let label_name = format!("L{}", ( *func_id as usize ).saturating_sub(1));
+        let label_pos = *self.labels.get(&label_name)?;
+
+        let end = (label_pos + 1..self.ops.len()).find(|&i| matches!(&self.ops[i], IROp::Label { .. })).unwrap_or(self.ops.len());
+
+        // Collect mapping local_index -> first dest register seen for LLocal
+        let mut first_dest_for_local: std::collections::HashMap<usize, usize> = std::collections::HashMap::new();
+        let mut max_local: Option<usize> = None;
+        for op in &self.ops[label_pos + 1..end] {
+            match op {
+                IROp::LLocal { dest, local_index } => {
+                    first_dest_for_local.entry(*local_index).or_insert(*dest);
+                    max_local = Some(match max_local { Some(m) => (*local_index).max(m), None => *local_index });
+                }
+                IROp::SLocal { src: _, local_index } => {
+                    max_local = Some(match max_local { Some(m) => (*local_index).max(m), None => *local_index });
+                }
+                _ => {}
+            }
+        }
+        let count = max_local.map(|m| m + 1)?;
+        let mut out: Vec<usize> = Vec::with_capacity(count);
+        for i in 0..count {
+            if let Some(&r) = first_dest_for_local.get(&i) {
+                out.push(r);
+            } else {
+                // missing mapping for this param -> push a sentinel (usize::MAX)
+                out.push(usize::MAX);
+            }
+        }
+        Some(out)
+    }
 }
 
 impl std::fmt::Display for IrModule {

@@ -84,7 +84,7 @@ parameter  = { expression }
 arguments  = { parameter ~ ("," ~ parameter)* ~ ","? }   // trailing comma ok
 
 attribute  = { identifier }
-attributes = { "[" ~ attribute ~ ("," ~ attribute)* ~ "]" }
+attributes = { "[" ~ attribute ~ ("," ~ attribute)* ~ ","? ~ "]" } // trailing comma ok
 
 // --- Values ---
 value        = { array | shell_string | string | boolean | number | null }

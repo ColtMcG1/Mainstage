@@ -1,4 +1,4 @@
-# MSBC Bytecode Specification
+# Mainstage Bytecode Specification
 
 This document describes the MSBC (Mainstage ByteCode) binary format used by the `mainstage` project. The VM implementation that reads this format is in `core/src/vm.rs`.
 

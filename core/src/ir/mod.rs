@@ -1,5 +1,5 @@
 pub mod lower;
-//pub mod opt;
+pub mod opt;
 pub mod bytecode;
 pub mod op;
 pub mod value;
@@ -18,7 +18,9 @@ pub fn lower_ast_to_ir(
     let mut ir_mod = IrModule::new();
     lower_script_objects(ast, &mut ir_mod, analysis);
     if optimize {
-        //opt::optimize(&mut ir_mod);
+        println!("Ops before optimization: {}", ir_mod.len());
+        opt::optimize(&mut ir_mod);
+        println!("Ops after optimization: {}", ir_mod.len());
     }
     ir_mod
 }

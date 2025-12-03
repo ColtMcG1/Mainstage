@@ -59,6 +59,9 @@ For detailed documentation on Mainstage, including syntax, built-in functions, a
 
 See the `docs/` directory for local documentation files.
 
+- GRAMMAR: `docs/GRAMMAR.md`
+- MSBC SPEC: `docs/MSBC_SPEC.md`
+
 ## Contributing
 
 Contributions to Mainstage are welcome! If you would like to contribute, please follow these steps:
@@ -69,7 +72,7 @@ Contributions to Mainstage are welcome! If you would like to contribute, please 
 4. Push your changes to your forked repository.
 5. Submit a pull request to the main repository.
 
-Please ensure that your code adheres to the project's coding standards and includes appropriate tests.
+Please ensure that your code adheres to the project's coding standards and includes appropriate tests, documentation, and comments.
 
 ## License
 

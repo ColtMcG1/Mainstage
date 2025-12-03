@@ -1,9 +1,49 @@
-0000: Label main
-0001: CallLabel r0 <- L9()
-0002: Halt
-0003: Label L9
-0004: LConst r1 <- Str("Hello, Mainstage!")
-0005: PluginCall r1 <- echo_plugin.echo(r0)
-0006: LConst r3 <- Null
-0007: Ret r3
-0008: Halt
+0000: LConst r0 <- Object({})
+0001: LConst r1 <- Array([Str("./src/*.cpp")])
+0002: LConst r2 <- Symbol("srcs")
+0003: SetProp r0.r2 <- r1
+0004: LConst r3 <- Array([Str("-O2")])
+0005: LConst r4 <- Symbol("flags")
+0006: SetProp r0.r4 <- r3
+0007: Label main
+0008: CallLabel r5 <- L13()
+0009: Halt
+0010: Label L13
+0011: PluginCall r6 <- cpp_plugin.list_compilers()
+0012: SLocal local[0] <- r6
+0013: LConst r7 <- Str("Detected compilers:")
+0014: LConst r8 <- Symbol("say")
+0015: Call r9 <- r8(r7)
+0016: LLocal r10 <- local[0]
+0017: LConst r11 <- Int(0)
+0018: LConst r12 <- Str("length")
+0019: GetProp r13 <- r10.r12
+0020: Lt r14 <- r11 < r13
+0021: BrFalse r14 -> 40
+0022: ArrayGet r15 <- r10[r11]
+0023: SLocal local[1] <- r15
+0024: LConst r16 <- Str(" - ")
+0025: LConst r17 <- Symbol("name")
+0026: LLocal r18 <- local[1]
+0027: GetProp r19 <- r18.r17
+0028: Add r20 <- r16 + r19
+0029: LConst r21 <- Str(" at ")
+0030: Add r22 <- r20 + r21
+0031: LConst r23 <- Symbol("path")
+0032: LLocal r24 <- local[1]
+0033: GetProp r25 <- r24.r23
+0034: Add r26 <- r22 + r25
+0035: LConst r27 <- Symbol("say")
+0036: Call r28 <- r27(r26)
+0037: LConst r11 <- Int(1)
+0038: Jump 20
+0039: LConst r30 <- Symbol("srcs")
+0040: GetProp r31 <- r6.r30
+0041: PluginCall r32 <- cpp_plugin.compile(r31)
+0042: SLocal local[2] <- r32
+0043: LLocal r33 <- local[2]
+0044: LConst r34 <- Symbol("say")
+0045: Call r35 <- r34(r33)
+0046: LConst r36 <- Null
+0047: Ret r36
+0048: Halt
