@@ -70,6 +70,7 @@ fn emit_bytecode_calllabel_should_have_args() {
             0x04 | 0x05 => { let _ = read_string(buf, off); }
             0x06 => { let len = read_u32(buf, off) as usize; for _ in 0..len { skip_value(buf, off); } }
             0x07 => {}
+            0x08 => { let len = read_u32(buf, off) as usize; for _ in 0..len { let _k = read_string(buf, off); skip_value(buf, off); } }
             _ => {}
         }
     }
@@ -99,6 +100,19 @@ fn emit_bytecode_calllabel_should_have_args() {
                 if argc == 1 { found_calllabel_with_arg = true; }
                 off += argc * 4;
             }
+            0x72 => {
+                // PluginCall: plugin_name, func_name, argc, args..., has_result (0/1), [result_reg]
+                let _pname = read_string(&bytes, &mut off);
+                let _fname = read_string(&bytes, &mut off);
+                let argc = read_u32(&bytes, &mut off) as usize;
+                off += argc * 4;
+                let has_result = read_u32(&bytes, &mut off);
+                if has_result == 1 { off += 4; }
+            }
+            0x90 => { off += 4; let len = read_u32(&bytes, &mut off) as usize; off += len * 4; }
+            0x91 => { off += 4+4+4; }
+            0x92 => { off += 4+4+4; }
+            0x95 => { off += 4+4; }
             0x93 => { off += 4+4+4; }
             0x94 => { off += 4+4+4; }
             0x80 => { off += 4; }

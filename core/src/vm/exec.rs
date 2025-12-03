@@ -331,6 +331,7 @@ pub(crate) fn dispatch_op(state: &mut ExecState) -> Result<(), String> {
             ensure_reg(&mut state.regs, *dest);
             let arr_val = state.regs[*array].clone();
             let idx_val = state.regs[*index].clone();
+            
             match arr_val {
                 Value::Array(a) => {
                     if let Value::Int(i) = idx_val {
@@ -459,10 +460,12 @@ pub(crate) fn dispatch_op(state: &mut ExecState) -> Result<(), String> {
         }
         Op::PluginCall { plugin_name, func_name, args, result_target } => {
             let arg_vals = take_args(&state.regs, args);
+            
             if let Some(plugin) = state.plugins.get(plugin_name) {
                 let call_res = block_on(plugin.call(func_name, arg_vals));
                 match call_res {
                     Ok(val) => {
+                        
                         if let Some(dest) = result_target {
                             ensure_reg(&mut state.regs, *dest);
                             state.regs[*dest] = val;

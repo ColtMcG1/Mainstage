@@ -262,6 +262,8 @@ pub fn emit_bytecode(module: &crate::ir::module::IrModule) -> Vec<u8> {
     out
 }
 
+ 
+
 fn write_u32(out: &mut Vec<u8>, v: u32) {
     out.extend_from_slice(&v.to_le_bytes());
 }

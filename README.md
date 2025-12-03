@@ -62,6 +62,22 @@ See the `docs/` directory for local documentation files.
 - GRAMMAR: `docs/GRAMMAR.md`
 - MSBC SPEC: `docs/MSBC_SPEC.md`
 
+### Testing
+
+To run the test suite for Mainstage, navigate to the `core/` directory and execute the following command:
+
+```bash
+cargo test
+```
+
+Or to run tests by category, use the provided script:
+
+```powershell
+.\scripts\run_core_tests_by_category.ps1 -Category [CategoryName]
+```
+
+- Replace `[CategoryName]` with the desired test category (e.g., `lowering`, `opt`, `ir`, etc.).
+
 ## Contributing
 
 Contributions to Mainstage are welcome! If you would like to contribute, please follow these steps:

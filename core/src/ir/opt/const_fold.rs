@@ -49,6 +49,15 @@ pub(crate) fn constant_fold(ir: &mut IrModule) {
             | IROp::Gte { dest, src1, src2 }
             | IROp::And { dest, src1, src2 }
             | IROp::Or { dest, src1, src2 } => {
+                // Avoid folding self-referential updates like `r = r + c` which
+                // are loop-carried -- folding these in a single linear pass can
+                // remove the runtime increment semantics. If either source is
+                // the same as the destination, skip folding here.
+                if *src1 == *dest || *src2 == *dest {
+                    const_map.remove(dest);
+                    new_ops.push(op);
+                    continue;
+                }
                 let maybe_v1 = const_map.get(src1).cloned();
                 let maybe_v2 = const_map.get(src2).cloned();
                 if let (Some(v1), Some(v2)) = (maybe_v1, maybe_v2) {

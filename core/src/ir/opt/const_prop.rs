@@ -8,12 +8,20 @@ pub(crate) fn const_prop(ir: &mut IrModule) {
 
     // Map register -> constant value when known
     let mut consts: HashMap<usize, Value> = HashMap::new();
+    // Map local_index -> constant value for locals within the current
+    // function. Cleared on encountering a Label (function boundary).
+    let mut local_consts: HashMap<usize, Value> = HashMap::new();
     let mut new_ops: Vec<IROp> = Vec::with_capacity(ir.ops.len());
 
     for op in ir.ops.drain(..) {
         match &op {
             IROp::LConst { dest, value } => {
                 consts.insert(*dest, value.clone());
+                new_ops.push(op);
+            }
+            IROp::Label { .. } => {
+                // Entering a new function/label: clear any tracked local constants
+                local_consts.clear();
                 new_ops.push(op);
             }
             // binary ops: try folding if both srcs are constant
@@ -30,6 +38,15 @@ pub(crate) fn const_prop(ir: &mut IrModule) {
             | IROp::Gte { dest, src1, src2 }
             | IROp::And { dest, src1, src2 }
             | IROp::Or { dest, src1, src2 } => {
+                // Avoid folding self-referential updates like `r = r + c` which
+                // are loop-carried and should not be turned into a constant by a
+                // single-pass forward propagation. If either source is the same
+                // as the destination, skip folding here.
+                if *src1 == *dest || *src2 == *dest {
+                    consts.remove(dest);
+                    new_ops.push(op);
+                    continue;
+                }
                 let v1 = consts.get(src1).cloned();
                 let v2 = consts.get(src2).cloned();
                 if let (Some(a), Some(b)) = (v1, v2) {
@@ -101,9 +118,32 @@ pub(crate) fn const_prop(ir: &mut IrModule) {
                 consts.remove(dest);
                 new_ops.push(op);
             }
-            // writes to locals do not change module registers map
-            IROp::SLocal { .. } | IROp::Ret { .. } | IROp::BrTrue { .. } | IROp::BrFalse { .. } | IROp::Jump { .. } | IROp::Label { .. } | IROp::Halt => {
-                // conservative: these ops may reference registers; keep as-is
+            // Handle SLocal specially to track local slot constants. Also
+            // treat control ops conservatively.
+            IROp::SLocal { src, local_index } => {
+                // If the source register is a known constant, record it for the
+                // local slot so subsequent LLocal can be replaced.
+                if let Some(v) = consts.get(src).cloned() {
+                    local_consts.insert(*local_index, v);
+                } else {
+                    local_consts.remove(local_index);
+                }
+                new_ops.push(op);
+            }
+            // Replace LLocal loads with LConst when the local slot holds a
+            // tracked constant value.
+            IROp::LLocal { dest, local_index } => {
+                if let Some(v) = local_consts.get(local_index).cloned() {
+                    // fold into LConst
+                    consts.insert(*dest, v.clone());
+                    new_ops.push(IROp::LConst { dest: *dest, value: v });
+                    continue;
+                }
+                // otherwise the load is not a constant
+                consts.remove(dest);
+                new_ops.push(op);
+            }
+            IROp::Ret { .. } | IROp::BrTrue { .. } | IROp::BrFalse { .. } | IROp::Jump { .. } | IROp::Halt => {
                 new_ops.push(op);
             }
             // general case: conservatively drop any const mapping for
@@ -151,8 +191,12 @@ pub(crate) fn const_prop(ir: &mut IrModule) {
             IROp::BrTrue { cond, .. } | IROp::BrFalse { cond, .. } => { used.insert(*cond); }
             IROp::Call { dest: _, func, args } => { used.insert(*func); for a in args.iter() { used.insert(*a); } }
             IROp::CallLabel { dest: _, label_index: _, args } => { for a in args.iter() { used.insert(*a); } }
-            IROp::PluginCall { dest: _, plugin_name: _, func_name: _, args } => { for a in args.iter() { used.insert(*a); } }
+            IROp::PluginCall { dest, plugin_name: _, func_name: _, args } => {
+                if let Some(d) = dest { used.insert(*d); }
+                for a in args.iter() { used.insert(*a); }
+            }
             IROp::GetProp { dest: _, obj, key } => { used.insert(*obj); used.insert(*key); }
+            IROp::ArrayNew { dest: _, elems } => { for e in elems.iter() { used.insert(*e); } }
             IROp::SetProp { obj, key, src } => { used.insert(*obj); used.insert(*key); used.insert(*src); }
             IROp::ArrayGet { dest: _, array, index } => { used.insert(*array); used.insert(*index); }
             IROp::ArraySet { array, index, src } => { used.insert(*array); used.insert(*index); used.insert(*src); }

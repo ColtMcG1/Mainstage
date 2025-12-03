@@ -1,5 +1,5 @@
 use crate::ir::{ op::IROp };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Clone)]
 pub struct IrModule {
@@ -10,6 +10,11 @@ pub struct IrModule {
     objects: HashMap<String, u32>,
     labels: HashMap<String, usize>,
     unresolved_branches: Vec<(usize, String)>,
+    /// Registers that are intended to be externally-observable (e.g. plugin
+    /// call arguments or plugin call results). Optimizations should treat
+    /// these registers as live so we don't remove values expected by hosts
+    /// or plugins.
+    externally_visible_regs: HashSet<usize>,
 }
 
 impl IrModule {
@@ -22,6 +27,7 @@ impl IrModule {
             objects: HashMap::new(),
             labels: HashMap::new(),
             unresolved_branches: Vec::new(),
+            externally_visible_regs: HashSet::new(),
         }
     }
 
@@ -41,6 +47,28 @@ impl IrModule {
         if let IROp::Label { name } = &op {
             self.labels.insert(name.clone(), idx);
         }
+        // Record any registers that are externally visible via plugin calls
+        if let IROp::PluginCall { dest, plugin_name: _, func_name: _, args } = &op {
+            for a in args.iter() { self.externally_visible_regs.insert(*a); }
+            if let Some(d) = dest { self.externally_visible_regs.insert(*d); }
+        }
+    }
+
+    /// Mark a register as externally visible (for use by lowering/tests).
+    pub fn mark_externally_visible(&mut self, reg: usize) {
+        self.externally_visible_regs.insert(reg);
+    }
+
+    /// Replace the externally-visible register set with `new_set`.
+    /// This is useful after remapping/canonicalization so the metadata
+    /// exactly reflects the canonical registers present in `ops`.
+    pub fn set_externally_visible(&mut self, new_set: std::collections::HashSet<usize>) {
+        self.externally_visible_regs = new_set;
+    }
+
+    /// Accessor for externally-visible registers.
+    pub fn get_externally_visible(&self) -> &HashSet<usize> {
+        &self.externally_visible_regs
     }
 
     pub fn peek_op(&self) -> Option<&IROp> {

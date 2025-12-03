@@ -6,13 +6,32 @@ use std::collections::HashMap;
 
 mod const_fold;
 mod const_prop;
+mod const_canon;
+mod dce;
 
 /// Run optimization passes on the lowered IR in-place.
 pub fn optimize(ir: &mut IrModule) {
-    const_prop::const_prop(ir);
-    const_fold::constant_fold(ir);
-    interproc_substitute(ir);
-    remove_noop_jumps_and_reindex(ir);
+    // Run passes to a fixed point (or until max iterations) so chained
+    // transformations can expose further opportunities. Use exact IR
+    // equality to detect convergence rather than just op count.
+    let mut last_ops = ir.ops.clone();
+    let mut iter = 0usize;
+    const MAX_ITERS: usize = 8;
+    loop {
+        iter += 1;
+        const_canon::canonicalize_constants(ir);
+        const_prop::const_prop(ir);
+        const_fold::constant_fold(ir);
+        // Run DCE after folding to remove newly-dead ops
+        dce::dce(ir);
+
+        // conservative interproc placeholder
+        interproc_substitute(ir);
+        remove_noop_jumps_and_reindex(ir);
+
+        if ir.ops == last_ops || iter >= MAX_ITERS { break; }
+        last_ops = ir.ops.clone();
+    }
 }
 
 
