@@ -1,0 +1,10 @@
+[package]
+name = "common"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+which = "8.0.0"
+
+[package.metadata]
+# Shared helpers for plugin crates (MSVC env capture, compiler helpers)

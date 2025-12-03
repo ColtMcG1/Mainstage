@@ -1,8 +1,8 @@
 {
-  "name": "c",
+  "name": "asm",
   "version": "0.1.0",
-  "description": "C plugin. Provide compilation and linking services for C code snippets.",
-  "path": "target/debug/c_plugin.exe",
+  "description": "ASM plugin. Provide compilation and linking services for ASM code snippets.",
+  "path": "target/debug/asm_plugin.exe",
   "abi": "inprocess",
   "entry": null,
   "functions": [

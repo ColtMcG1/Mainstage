@@ -1,7 +1,6 @@
 use std::io::{self, Read};
 use std::path::PathBuf;
 use std::process::Command;
-use std::collections::HashMap;
 
 fn main() {
     let mut args = std::env::args().skip(1);
@@ -70,7 +69,7 @@ fn main() {
             _ => {}
         }
 
-        let result = compile_cpp_sources_with(sources, flags, compiler);
+        let result = assemble_sources_with(sources, flags, compiler);
         let output = match result {
             Ok(path) => serde_json::json!({"ok": true, "path": path}),
             Err(err) => serde_json::json!({"ok": false, "error": err}),
@@ -84,13 +83,13 @@ fn main() {
     std::process::exit(1);
 }
 
-/// Compiles the given C++ source files and returns the path to the compiled binary or an error message.
+/// Assembles the given assembly source files and returns the path to the compiled binary or an error message.
 /// # Arguments
-/// * `sources` - A vector of strings representing the paths to C++ source files.
+/// * `sources` - A vector of strings representing the paths to assembly source files.
 /// # Returns
-/// * `Ok(String)` - The path to the compiled binary if compilation is successful.
-/// * `Err(String)` - An error message if compilation fails.
-fn compile_cpp_sources_with(sources: Vec<String>, flags: Vec<String>, compiler_hint: Option<String>) -> Result<String, String> {
+/// * `Ok(String)` - The path to the compiled binary if assembly is successful.
+/// * `Err(String)` - An error message if assembly fails.
+fn assemble_sources_with(sources: Vec<String>, flags: Vec<String>, compiler_hint: Option<String>) -> Result<String, String> {
     // basic validation
     if sources.is_empty() {
         return Err("No source files provided".to_string());
@@ -105,13 +104,16 @@ fn compile_cpp_sources_with(sources: Vec<String>, flags: Vec<String>, compiler_h
     // Choose output name
     let out_name = if cfg!(target_os = "windows") { "output_binary.exe" } else { "output_binary" };
 
-    // Build command
+    // Build command (delegate to shared helper which supports MSVC and non-MSVC)
     let mut cmd = build_compile_command(&compiler_name, &compiler_path, &sources, &flags, out_name);
 
-    // If MSVC, try to populate env via vcvars before running
-    if cfg!(target_os = "windows") && (compiler_name == "cl" || compiler_name.to_lowercase().contains("cl")) {
-        if let Some(envs) = common::ensure_msvc_env(compiler_path.as_path()) {
-            cmd.envs(envs.into_iter());
+    // If MSVC or MASM-style assembler, try to populate env via vcvars before running
+    if cfg!(target_os = "windows") {
+        let lname = compiler_name.to_lowercase();
+        if lname == "cl" || lname.contains("cl") || lname.starts_with("ml") {
+            if let Some(envs) = common::ensure_msvc_env(compiler_path.as_path()) {
+                cmd.envs(envs.into_iter());
+            }
         }
     }
 
@@ -130,9 +132,9 @@ fn compile_cpp_sources_with(sources: Vec<String>, flags: Vec<String>, compiler_h
 
 fn candidate_compilers() -> Vec<&'static str> {
     #[cfg(target_os = "windows")]
-    return vec!["cl", "g++", "clang++"];
+    return vec!["ml64", "ml", "nasm", "yasm", "cl", "gcc", "clang"];
     #[cfg(not(target_os = "windows"))]
-    return vec!["g++", "clang++", "clang", "gcc"];
+    return vec!["nasm", "yasm", "gcc", "clang"];
 }
 
 fn find_available_compilers() -> Vec<(String, PathBuf)> {
@@ -156,7 +158,4 @@ fn build_compile_command(name: &str, path: &PathBuf, sources: &[String], flags: 
     common::build_compile_command(name, path.as_path(), sources, flags, out_name)
 }
 
-// Delegate MSVC env capture to shared crate
-fn ensure_msvc_env(cl_path: &PathBuf) -> Option<HashMap<String, String>> {
-    common::ensure_msvc_env(cl_path.as_path())
-}
+// MSVC env captured when needed via `common::ensure_msvc_env` during compile invocation.
