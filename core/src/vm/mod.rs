@@ -1,3 +1,10 @@
+//! file: core/src/vm/mod.rs
+//! description: virtual machine top-level API and plugin discovery helpers.
+//!
+//! This module exposes the `VM` type which holds plugin descriptors/instances
+//! and a bytecode image. It provides helpers to discover plugin manifests and
+//! run a bytecode image via the executor.
+
 mod op;
 pub mod value;
 pub mod manifest;

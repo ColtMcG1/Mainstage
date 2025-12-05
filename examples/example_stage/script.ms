@@ -1,7 +1,7 @@
 workspace mainstage_example
 {
     files = example_stage("data/*.txt");
-    for (file in files)
+    for file in files
     {
         process_file(file);
     }
@@ -13,7 +13,7 @@ stage example_stage(path)
     return files;
 }
 
-stage process_file(file)
+stage process_file(content)
 {
     say("-------------------------");
     say(content);

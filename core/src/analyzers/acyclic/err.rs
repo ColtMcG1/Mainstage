@@ -1,3 +1,9 @@
+//! Error type for the acyclic analyzer.
+//!
+//! `AcyclicError` is returned by the acyclic pass when cycles are detected in
+//! the stage call graph. It implements `MainstageErrorExt` for unified
+//! diagnostic reporting.
+
 use crate::location::{Location, Span};
 use crate::error::{Level, MainstageErrorExt};
 

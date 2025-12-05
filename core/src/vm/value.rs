@@ -1,3 +1,10 @@
+//! file: core/src/vm/value.rs
+//! description: runtime `Value` representation used by the VM.
+//!
+//! This module defines the `Value` enum used inside the VM executor and
+//! runtime-facing APIs. Conversions to/from the IR `Value` live here as
+//! well to centralize marshalling logic.
+
 use crate::ir::value::Value as IrValue;
 
 #[derive(Debug, Clone)]

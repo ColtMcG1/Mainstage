@@ -1,3 +1,10 @@
+//! file: core/src/ir/lower/lower_objects.rs
+//! description: top-level lowering for script/workspace/project objects.
+//!
+//! This module orchestrates the multi-pass lowering of a script AST into
+//! module-level IR ops. It registers prototypes, handles static list
+//! initialization, and emits per-workspace or per-stage wrappers as needed.
+//!
 use crate::ir::{op::IROp};
 // intentionally reference lower_stmt via the module path where needed
 

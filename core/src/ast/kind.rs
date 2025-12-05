@@ -1,3 +1,9 @@
+//! file: core/src/ast/kind.rs
+//! description: AST node kind definitions and operator enums.
+//!
+//! Defines `AstNodeKind` along with `BinaryOperator` and `UnaryOperator`.
+//! These enums are used throughout parsing, analysis and lowering stages.
+//!
 use super::node::AstNode;
 
 /// Represents binary operators in the AST.

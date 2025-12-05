@@ -1,8 +1,41 @@
+//! file: core/src/ast/stmt.rs
+//! description: parsing helpers for top-level items and statements.
+//!
+//! This module contains functions that parse `item` and `statement` rules
+//! from the `pest`-generated `RulesParser` into `AstNode` structures.
+//! Parsing helpers attach `Location`/`Span` metadata using the `rules`
+//! helpers to aid diagnostics.
+//!
 use crate::{
     ast::{AstNode, AstNodeKind, BinaryOperator, MainstageErrorExt, Rule, rules},
     script,
 };
 
+/// Parse a single top-level `item` rule into an `AstNode`.
+///
+/// This function consumes a `pest::iterators::Pair<Rule>` whose rule is
+/// `item` and returns the corresponding AST node. An `item` in the grammar can
+/// be either a `statement` or a `declaration`. The returned `AstNode` carries
+/// the `location` and `span` information produced by the `rules` helpers so
+/// error reporting can point back to precise positions in the source file.
+///
+/// # Arguments
+///
+/// - `pair`: The `pest::iterators::Pair<Rule>` representing the `item` rule.
+/// - `script`: The script context used for source text, file name, and error
+///   reporting.
+///
+/// # Returns
+///
+/// - `Ok(AstNode)` when parsing succeeds.
+/// - `Err(Box<dyn MainstageErrorExt>)` when a parse or semantic error occurs.
+///
+/// # Errors
+///
+/// Returns a `SyntaxError` (wrapped in `MainstageErrorExt`) when the inner
+/// rule is not one of the expected alternatives (`statement`, `declaration`,
+/// or `EOI`). The error includes `Location` and `Span` where available.
+///
 pub(crate) fn parse_item_rule(
     pair: pest::iterators::Pair<Rule>,
     script: &script::Script,

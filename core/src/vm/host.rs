@@ -1,3 +1,10 @@
+//! file: core/src/vm/host.rs
+//! description: built-in host function implementations used by the VM.
+//!
+//! Simple host-call implementations (e.g. `fmt`, `say`, `read`, `write`)
+//! are provided here. These are invoked by the runtime when bytecode issues
+//! host-level calls represented as `Value::Symbol` names.
+//!
 use crate::vm::value::Value;
 use glob::glob;
 use std::fs;

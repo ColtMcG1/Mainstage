@@ -1,3 +1,9 @@
+//! file: core/src/ir/opt/dce.rs
+//! description: dead-code-elimination optimizer pass.
+//!
+//! Performs a conservative backward liveness analysis to remove dead/pure
+//! instructions while preserving side-effects and plugin/host-visible
+//! registers.
 use crate::ir::module::IrModule;
 use crate::ir::op::IROp;
 

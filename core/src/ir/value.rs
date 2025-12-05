@@ -1,3 +1,10 @@
+//! file: core/src/ir/value.rs
+//! description: IR-level `Value` type used in the intermediate representation.
+//!
+//! This module defines the `Value` enum used by the IR phase. It includes
+//! hashing and equality implementations that make IR values usable as map
+//! keys in optimization passes.
+//!
 use std::hash::{Hash, Hasher};
 
 #[derive(Debug, Clone, PartialEq)]

@@ -1,3 +1,10 @@
+//! file: core/src/ir/opt/const_fold.rs
+//! description: constant folding optimizer pass.
+//!
+//! Performs local constant folding on IR ops where both operands are
+//! compile-time constants. This pass is intentionally conservative and
+//! works together with propagation and DCE passes.
+//!
 use crate::ir::module::IrModule;
 use crate::ir::op::IROp;
 use crate::ir::value::Value;

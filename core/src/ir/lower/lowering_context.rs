@@ -1,3 +1,11 @@
+//! file: core/src/ir/lower/lowering_context.rs
+//! description: shared lowering context used during AST->IR lowering.
+//!
+//! `LoweringContext` contains the temporary maps and helper state that
+//! lowering passes consume while transforming `AstNode` trees into an
+//! `IrModule`. It is intentionally lightweight and in-memory; callers
+//! should populate it from `AnalyzerOutput` before lowering.
+
 use std::collections::HashMap;
 
 use crate::analyzers::output::{AnalyzerOutput, NodeId};

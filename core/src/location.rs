@@ -1,3 +1,9 @@
+//! file: core/src/location.rs
+//! description: source location and span primitives used for diagnostics.
+//!
+//! `Location` and `Span` are small, copyable types representing file/line
+//!/column positions and ranges used across the compiler for error messages
+//! and source mapping.
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Hash)]
 pub struct Location {

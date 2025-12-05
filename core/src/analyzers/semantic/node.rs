@@ -1,3 +1,8 @@
+//! Node-level dispatcher for semantic analysis.
+//!
+//! Provides `analyze_node` which routes AST nodes to the appropriate
+//! expression/statement analyzers and returns inferred kinds where relevant.
+
 use super::kind::InferredKind;
 use crate::ast::{AstNodeKind};
 

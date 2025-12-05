@@ -1,3 +1,11 @@
+//! file: core/src/ir/lower/lower_expr.rs
+//! description: expression lowering helpers.
+//!
+//! Helpers to lower expression AST nodes into IR registers. The functions
+//! here are used by higher-level lowering passes (statement and module
+//! lowering) and support both module-level emission and `FunctionBuilder`
+//! usage.
+//!
 use crate::ir::op::IROp;
 
 /// Lower an assignment statement node at top-level. Currently this evaluates

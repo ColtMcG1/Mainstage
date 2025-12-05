@@ -1,3 +1,11 @@
+//! file: core/src/lib.rs
+//! description: public facade for the `core` crate.
+//!
+//! This crate root re-exports the primary compiler components (AST,
+//! analyzers, IR and VM) and provides a small set of helper functions used
+//! by callers and the CLI. Keep this module lightweight; most logic lives in
+//! the submodules.
+
 pub mod ast;
 pub mod error;
 pub mod location;

@@ -1,3 +1,10 @@
+//! file: core/src/ast/err.rs
+//! description: AST parsing error types and adapters.
+//!
+//! Lightweight error structs used by the AST parser which implement the
+//! `MainstageErrorExt` trait to provide location/span metadata for
+//! diagnostics emitted during parsing.
+//!
 use crate::error::{Level, MainstageErrorExt};
 use crate::location::{Location, Span};
 

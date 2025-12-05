@@ -1,3 +1,10 @@
+//! file: cli/src/main.rs
+//! description: command-line interface for MainStage.
+//!
+//! This binary provides user-facing commands to build, analyze and run
+//! MainStage scripts. It wires together the `mainstage_core` APIs, performs
+//! plugin discovery, and exposes subcommands for common developer workflows.
+//!
 use clap::{Arg, ArgMatches, Command};
 use console::style;
 use log::{Level, error, info, warn};

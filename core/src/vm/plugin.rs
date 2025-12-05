@@ -1,3 +1,10 @@
+//! file: core/src/vm/plugin.rs
+//! description: plugin trait & runtime plugin registry.
+//!
+//! Defines the `Plugin` trait used by external and in-process plugin
+//! adapters, as well as `PluginRegistry` and descriptor types used to
+//! discover and register plugins at runtime.
+
 use crate::vm::value::Value;
 use async_trait::async_trait;
 

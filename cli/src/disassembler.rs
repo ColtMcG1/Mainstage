@@ -1,3 +1,10 @@
+//! file: cli/src/disassembler.rs
+//! description: simple bytecode disassembler used by the CLI.
+//!
+//! Converts the compact IR/bytecode format into a human-readable text form
+//! for debugging and inspection. This is intentionally lightweight and not
+//! intended as a full-fidelity decompiler.
+//!
 use std::collections::HashMap;
 use std::io::Cursor;
 

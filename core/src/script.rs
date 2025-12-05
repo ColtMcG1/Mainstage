@@ -1,3 +1,12 @@
+//! file: core/src/script.rs
+//! description: helpers for loading and representing source script files.
+//!
+//! This module provides the `Script` type which contains the script
+//! content, path and name. It also defines an error adapter used when
+//! scripts cannot be read from disk.
+//!
+//! See also: `crate::ast` and `crate::lib::generate_ir_from_ast`.
+
 use std::path::PathBuf;
 
 use crate::MainstageErrorExt;

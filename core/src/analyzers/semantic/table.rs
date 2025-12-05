@@ -1,10 +1,12 @@
+//! Symbol table used by semantic analyzer.
+//!
+//! This module provides `SymbolTable`, a lightweight hierarchical scope map
+//! that stores `Symbol` entries, tracks object-contexts, and accumulates
+//! diagnostics produced during analysis.
+
 use super::symbol::{Symbol, SymbolKind};
 use std::collections::HashMap;
 use crate::error::MainstageErrorExt;
-
-/// Diagnostics collected during analysis are stored on the SymbolTable so
-/// analyzer passes (which receive only `&mut SymbolTable`) can push warnings
-/// and infos without changing many function signatures.
 
 // A single scope: name -> overload set
 type Scope = HashMap<String, Vec<Symbol>>;

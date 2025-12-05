@@ -1,3 +1,10 @@
+//! file: core/src/ir/opt/const_prop.rs
+//! description: constant propagation pass for the IR optimizer.
+//!
+//! Performs forward constant propagation and removes dead `LConst` ops
+//! when possible. This is a conservative, single-pass propagation used
+//! as part of the optimizer pipeline.
+//!
 use crate::ir::module::IrModule;
 use crate::ir::op::IROp;
 use crate::ir::value::Value;

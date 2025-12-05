@@ -1,3 +1,11 @@
+//! file: core/src/ir/lower/mod.rs
+//! description: lowering pipeline modules.
+//!
+//! Re-exports lowering submodules used to transform `AstNode` trees into
+//! an `IrModule`. This package contains helpers for statement/expression
+//! lowering, per-function builders, and context wiring that consumes
+//! analyzer output.
+//!
 mod lower_objects;
 mod declare_builtins;
 pub mod lower_expr;

@@ -1,3 +1,10 @@
+//! file: core/src/ir/lower/function_builder.rs
+//! description: per-function lowering helper.
+//!
+//! `FunctionBuilder` provides a small, function-scoped lowering arena with
+//! a local register allocator and op buffer. After lowering a function body
+//! the builder can finalize its ops into the parent `IrModule`.
+//!
 use crate::ir::op::IROp;
 use crate::ir::module::IrModule;
 use std::collections::HashMap;

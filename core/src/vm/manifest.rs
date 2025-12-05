@@ -1,3 +1,10 @@
+//! file: core/src/vm/manifest.rs
+//! description: plugin manifest types and discovery helpers.
+//!
+//! Defines `PluginManifest` and helper functions used to discover and
+//! validate plugin manifests on disk. Manifests are expected to be JSON
+//! files describing exported functions and metadata.
+
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 

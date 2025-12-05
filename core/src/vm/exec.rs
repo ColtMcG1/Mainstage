@@ -1,3 +1,10 @@
+//! file: core/src/vm/exec.rs
+//! description: bytecode executor implementation.
+//!
+//! This module implements the core interpreter loop for the VM. It decodes
+//! `Op` values and executes them against an `ExecState` containing registers,
+//! frames and plugin registry references.
+//!
 use std::collections::HashMap;
 use crate::vm::{op::Op, value::Value};
 use futures::executor::block_on;

@@ -1,3 +1,8 @@
+//! Semantic analysis error type and adapters.
+//!
+//! Provides `SemanticError` implementing `MainstageErrorExt` used to report
+//! errors/warnings produced by semantic analysis passes.
+
 use crate::location::{Location, Span};
 use crate::error::{Level, MainstageErrorExt};
 

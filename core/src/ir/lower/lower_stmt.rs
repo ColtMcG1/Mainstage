@@ -1,3 +1,11 @@
+//! Lowering helpers for statement nodes.
+//!
+//! This module contains routines that lower AST statement nodes into
+//! the IR representation (`IrModule`). The functions here are called
+//! by the lowering pipeline and should not perform IO or runtime work.
+//!
+//! See also: `ir::lower::lower_expr` for expression lowering helpers.
+
 pub fn lower_statment(
     stmt_node: &crate::ast::AstNode,
     ir_mod: &mut crate::ir::module::IrModule,

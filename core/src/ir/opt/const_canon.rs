@@ -1,3 +1,10 @@
+//! file: core/src/ir/opt/const_canon.rs
+//! description: canonicalize equivalent constant `LConst` ops.
+//!
+//! Merges duplicate `LConst` values into canonical registers when it is
+//! safe to do so to reduce IR size and improve downstream optimization
+//! effects.
+//!
 use crate::ir::module::IrModule;
 use crate::ir::op::IROp;
 use crate::ir::value::Value;
