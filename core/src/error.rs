@@ -1,3 +1,11 @@
+//! file: core/src/error.rs
+//! description: error level enum and `MainstageErrorExt` extension trait.
+//!
+//! This module defines common error reporting primitives used throughout
+//! the compiler: the `Level` enum and the `MainstageErrorExt` trait which
+//! adapters implement to provide diagnostic metadata (location, span,
+//! issuer and machine-friendly message).
+//!
 use std::fmt;
 
 

@@ -1,3 +1,9 @@
+//! Analyzer output types and serializable summaries.
+//!
+//! This module defines `AnalyzerOutput` and related structs used to convey
+//! discovered objects, functions, scope information and diagnostics from the
+//! analyzer passes to later lowering stages or tooling.
+
 use crate::location::Span;
 
 /// Analyzer-local node identifier. Use `usize` so it can directly hold

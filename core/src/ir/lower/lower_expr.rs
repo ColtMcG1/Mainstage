@@ -1,3 +1,11 @@
+//! file: core/src/ir/lower/lower_expr.rs
+//! description: expression lowering helpers.
+//!
+//! Helpers to lower expression AST nodes into IR registers. The functions
+//! here are used by higher-level lowering passes (statement and module
+//! lowering) and support both module-level emission and `FunctionBuilder`
+//! usage.
+//!
 use crate::ir::op::IROp;
 
 /// Lower an assignment statement node at top-level. Currently this evaluates
@@ -243,24 +251,20 @@ pub fn lower_expr_to_reg_with_builder(
             // If this identifier corresponds to a local in the function builder,
             // load it from the local slot. Otherwise represent as a Symbol const.
             if let Some(b) = builder.as_mut() {
-                if let Some(local_idx) = b.lookup_local(name) {
-                    let r = b.alloc_reg();
-                    b.emit_op(IROp::LLocal { dest: r, local_index: local_idx });
-                    return r;
-                }
-                // If this identifier names a declared module-level object,
-                // load its module register into a function-local via
-                // `LoadGlobal` so we reference the real object at runtime.
-                if let Some(obj_id) = _ctx.symbols.get(name).copied() {
-                    if let Some(mod_reg) = _ctx.get_object_reg_by_objid(obj_id) {
+                    if let Some(local_idx) = b.lookup_local(name) {
                         let r = b.alloc_reg();
-                        b.emit_op(IROp::LoadGlobal { dest: r, src: mod_reg });
+                        b.emit_op(IROp::LLocal { dest: r, local_index: local_idx });
                         return r;
+                    } else if let Some(obj_id) = _ctx.symbols.get(name).copied() {
+                        if let Some(mod_reg) = _ctx.get_object_reg_by_objid(obj_id) {
+                            let r = b.alloc_reg();
+                            b.emit_op(IROp::LoadGlobal { dest: r, src: mod_reg });
+                            return r;
+                        }
                     }
-                }
-                let r = b.alloc_reg();
-                b.emit_op(IROp::LConst { dest: r, value: crate::ir::value::Value::Symbol(name.clone()) });
-                r
+                    let r = b.alloc_reg();
+                    b.emit_op(IROp::LConst { dest: r, value: crate::ir::value::Value::Symbol(name.clone()) });
+                    r
             } else {
                 let r = ir_mod.alloc_reg();
                 ir_mod.emit_op(IROp::LConst { dest: r, value: crate::ir::value::Value::Symbol(name.clone()) });
@@ -297,14 +301,29 @@ pub fn lower_expr_to_reg_with_builder(
             // const.
             let obj_reg = match object.get_kind() {
                 AstNodeKind::Identifier { name } => {
-                    // Try lookup by the identifier's own AST node id first
+                    // Try lookup by the identifier's own AST node id first. If
+                    // found and we're lowering into a FunctionBuilder, load
+                    // the module-level register into a function-local via
+                    // `LoadGlobal` so subsequent ops reference a local reg.
                     if let Some(reg) = _ctx.get_object_reg(object.get_id()) {
-                        reg
+                        if let Some(b) = builder.as_mut() {
+                            let r = b.alloc_reg();
+                            b.emit_op(IROp::LoadGlobal { dest: r, src: reg });
+                            r
+                        } else {
+                            reg
+                        }
                     } else {
                         // If that fails, try resolving by symbol -> object id -> reg
                         if let Some(obj_id) = _ctx.symbols.get(name).copied() {
                             if let Some(reg2) = _ctx.get_object_reg_by_objid(obj_id) {
-                                reg2
+                                if let Some(b) = builder.as_mut() {
+                                    let r = b.alloc_reg();
+                                    b.emit_op(IROp::LoadGlobal { dest: r, src: reg2 });
+                                    r
+                                } else {
+                                    reg2
+                                }
                             } else if let Some(b) = builder.as_mut() {
                                 if let Some(local_idx) = b.lookup_local(name) {
                                     let r = b.alloc_reg();

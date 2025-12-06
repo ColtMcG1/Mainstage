@@ -1,7 +1,17 @@
+//! file: core/src/vm/host.rs
+//! description: built-in host function implementations used by the VM.
+//!
+//! Simple host-call implementations (e.g. `fmt`, `say`, `read`, `write`)
+//! are provided here. These are invoked by the runtime when bytecode issues
+//! host-level calls represented as `Value::Symbol` names.
+//!
 use crate::vm::value::Value;
 use glob::glob;
 use std::fs;
 
+fn is_glob_pattern(s: &str) -> bool {
+    s.contains('*') || s.contains('?') || s.contains('[')
+}
 pub(crate) fn run_host_fn(name: &str, args: &Vec<Value>) -> Result<Value, String> {
     match name {
         "fmt" => {
@@ -263,6 +273,92 @@ pub(crate) fn run_host_fn(name: &str, args: &Vec<Value>) -> Result<Value, String
                 if let Ok(f) = s_trim.parse::<f64>() {
                     return Ok(Value::Float(f));
                 }
+                // Try symbol
+                if s_trim.starts_with(':') && s_trim.len() > 1 {
+                    return Ok(Value::Symbol(s_trim[1..].to_string()));
+                }
+                // Try array (surrounded by square brackets, comma-separated)
+                if s_trim.starts_with('[') && s_trim.ends_with(']') {
+                    let inner = &s_trim[1..s_trim.len() - 1];
+                    let parts: Vec<&str> = inner.split(',').map(|p| p.trim()).collect();
+                    let mut arr: Vec<Value> = Vec::new();
+                    for part in parts {
+                        if part.is_empty() {
+                            continue;
+                        }
+                        // Try integer
+                        if let Ok(i) = part.parse::<i64>() {
+                            arr.push(Value::Int(i));
+                            continue;
+                        }
+                        // Try float
+                        if let Ok(f) = part.parse::<f64>() {
+                            arr.push(Value::Float(f));
+                            continue;
+                        }
+                        // Try boolean
+                        let low = part.to_ascii_lowercase();
+                        if low == "true" {
+                            arr.push(Value::Bool(true));
+                            continue;
+                        } else if low == "false" {
+                            arr.push(Value::Bool(false));
+                            continue;
+                        }
+                        // Try symbol
+                        if part.starts_with(':') && part.len() > 1 {
+                            arr.push(Value::Symbol(part[1..].to_string()));
+                            continue;
+                        }
+                        // Fallback to string
+                        arr.push(Value::Str(part.to_string()));
+                    }
+                    return Ok(Value::Array(arr));
+                }
+                // Object (surrounded by curly braces, comma-separated key:value pairs)
+                if s_trim.starts_with('{') && s_trim.ends_with('}') {
+                    let inner = &s_trim[1..s_trim.len() - 1];
+                    let parts: Vec<&str> = inner.split(',').map(|p| p.trim()).collect();
+                    let mut map: std::collections::HashMap<String, Value> = std::collections::HashMap::new();
+                    for part in parts {
+                        if part.is_empty() {
+                            continue;
+                        }
+                        let kv: Vec<&str> = part.splitn(2, ':').map(|p| p.trim()).collect();
+                        if kv.len() != 2 {
+                            continue;
+                        }
+                        let key = kv[0].to_string();
+                        let val_str = kv[1];
+                        // Try integer
+                        if let Ok(i) = val_str.parse::<i64>() {
+                            map.insert(key, Value::Int(i));
+                            continue;
+                        }
+                        // Try float
+                        if let Ok(f) = val_str.parse::<f64>() {
+                            map.insert(key, Value::Float(f));
+                            continue;
+                        }
+                        // Try boolean
+                        let low = val_str.to_ascii_lowercase();
+                        if low == "true" {
+                            map.insert(key, Value::Bool(true));
+                            continue;
+                        } else if low == "false" {
+                            map.insert(key, Value::Bool(false));
+                            continue;
+                        }
+                        // Try symbol
+                        if val_str.starts_with(':') && val_str.len() > 1 {
+                            map.insert(key, Value::Symbol(val_str[1..].to_string()));
+                            continue;
+                        }
+                        // Fallback to string
+                        map.insert(key, Value::Str(val_str.to_string()));
+                    }
+                    return Ok(Value::Object(map));
+                }
                 // Fallback to string
                 Ok(Value::Str(s))
             } else {
@@ -290,23 +386,59 @@ pub(crate) fn run_host_fn(name: &str, args: &Vec<Value>) -> Result<Value, String
             Ok(Value::Null)
         }
         "read" => {
-            if let Some(Value::Str(glob_pat)) = args.get(0) {
-                match glob(glob_pat) {
-                    Ok(paths) => {
-                        let mut out: Vec<Value> = Vec::new();
-                        for p in paths.flatten() {
-                            if let Ok(s) = fs::read_to_string(&p) {
-                                out.push(Value::Str(s));
+            // Support: `read("file")`, `read("*.ms")`, `read(["a.ms", "b.ms"])`,
+            // and `read(["*.ms", "other.txt"])`. Always return an array of file
+            // contents (possibly empty) for unified consumption by callers.
+            if let Some(arg) = args.get(0) {
+                let mut out: Vec<Value> = Vec::new();
+                match arg {
+                    Value::Array(arr) => {
+                        for item in arr {
+                            if let Value::Str(s) = item {
+                                if is_glob_pattern(s) {
+                                    match glob(s) {
+                                        Ok(paths) => {
+                                            for p in paths.flatten() {
+                                                if let Ok(c) = fs::read_to_string(&p) {
+                                                    out.push(Value::Str(c));
+                                                }
+                                            }
+                                        }
+                                        Err(e) => return Err(format!("glob error: {}", e)),
+                                    }
+                                } else {
+                                    match fs::read_to_string(s) {
+                                        Ok(c) => out.push(Value::Str(c)),
+                                        Err(e) => return Err(format!("read error for {}: {}", s, e)),
+                                    }
+                                }
                             }
                         }
-                        // Return an array (possibly empty) of file contents
-                        Ok(Value::Array(out))
                     }
-                    Err(e) => Err(format!("glob error: {}", e)),
+                    Value::Str(s) => {
+                        if is_glob_pattern(s) {
+                            match glob(s) {
+                                Ok(paths) => {
+                                    for p in paths.flatten() {
+                                        if let Ok(c) = fs::read_to_string(&p) {
+                                            out.push(Value::Str(c));
+                                        }
+                                    }
+                                }
+                                Err(e) => return Err(format!("glob error: {}", e)),
+                            }
+                        } else {
+                            match fs::read_to_string(s) {
+                                Ok(c) => out.push(Value::Str(c)),
+                                Err(e) => return Err(format!("read error for {}: {}", s, e)),
+                            }
+                        }
+                    }
+                    _ => {}
                 }
-            } else {
-                Ok(Value::Array(Vec::new()))
+                return Ok(Value::Array(out));
             }
+            Ok(Value::Array(vec![Value::Str("No valid read argument provided".to_string())]))
         }
         "write" => {
             if let (Some(Value::Str(path)), Some(Value::Str(content))) = (args.get(0), args.get(1))

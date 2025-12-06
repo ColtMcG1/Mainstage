@@ -1,10 +1,11 @@
+//! Expression-level semantic analysis and type inference.
+//!
+//! This module analyzes expressions, assignments, calls and other expression
+//! forms to infer kinds (`InferredKind`), perform basic type checks, and
+//! update the `SymbolTable` with inferred types and usage information.
+
 use super::symbol::{Symbol};
 use super::kind::{InferredKind, Kind, Origin};
-
-/// Analyze an assignment and infer the assigned value's kind.
-/// If the target variable does not exist in the current scope it will be created
-/// with the inferred kind. If it exists with a concrete incompatible kind an
-/// error will be returned.
 pub(crate) fn analyze_assignment(
     node: &mut crate::ast::AstNode,
     tbl: &mut crate::analyzers::semantic::table::SymbolTable,

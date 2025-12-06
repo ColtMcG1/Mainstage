@@ -1,3 +1,8 @@
+//! Types and utilities for inferred kinds used by semantic analysis.
+//!
+//! Defines `Kind`, `InferredKind` and helpers for unification/compatibility
+//! checks used throughout analysis passes.
+
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, Eq)]

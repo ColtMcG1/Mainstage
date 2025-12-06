@@ -1,3 +1,10 @@
+//! file: cli/src/main.rs
+//! description: command-line interface for MainStage.
+//!
+//! This binary provides user-facing commands to build, analyze and run
+//! MainStage scripts. It wires together the `mainstage_core` APIs, performs
+//! plugin discovery, and exposes subcommands for common developer workflows.
+//!
 use clap::{Arg, ArgMatches, Command};
 use console::style;
 use log::{Level, error, info, warn};
@@ -298,54 +305,116 @@ fn dispatch_commands(
                                 // resolve relative manifest.path against the manifest directory
                                 manifest_dir.join(mp)
                             };
-                            exe_candidates.push(mp_resolved.clone());
-                            // if it looks like a directory, append the entry name
+                            // If `manifest.path` points at a directory (common when
+                            // plugins are built into `target/release/`), prefer the
+                            // actual plugin file inside that directory (i.e.
+                            // `target/release/<entry>`) before considering the
+                            // directory itself. This prevents trying to `spawn`
+                            // a directory (which leads to "Access is denied").
                             if mp_resolved.is_dir() {
-                                exe_candidates.push(mp_resolved.join(&entry));
+                                // If `manifest.path` is a directory, prefer the
+                                // platform-specific artifact names inside it
+                                // (e.g. `<entry>.exe`, `<entry>.dll`, etc.) and
+                                // avoid adding the directory itself as a
+                                // candidate.
+                                let base = mp_resolved.join(&entry);
+                                #[cfg(target_os = "windows")]
+                                {
+                                    let mut p_exe = base.clone(); p_exe.set_extension("exe"); exe_candidates.push(p_exe);
+                                    let mut p_dll = base.clone(); p_dll.set_extension("dll"); exe_candidates.push(p_dll);
+                                    exe_candidates.push(base);
+                                }
+                                #[cfg(target_os = "macos")]
+                                {
+                                    let mut p_dylib = base.clone(); p_dylib.set_extension("dylib"); exe_candidates.push(p_dylib);
+                                    let mut p_so = base.clone(); p_so.set_extension("so"); exe_candidates.push(p_so);
+                                    exe_candidates.push(base);
+                                }
+                                #[cfg(all(unix, not(target_os = "macos")))]
+                                {
+                                    let mut p_so = base.clone(); p_so.set_extension("so"); exe_candidates.push(p_so);
+                                    let mut p_dylib = base.clone(); p_dylib.set_extension("dylib"); exe_candidates.push(p_dylib);
+                                    exe_candidates.push(base);
+                                }
+                            } else {
+                                exe_candidates.push(mp_resolved.clone());
                             }
                         }
 
-                        // Fallback: prefer executable sitting next to manifest
+                        // Fallback: prefer executable/library sitting next to manifest
+                        // and try platform-specific filename extensions first so
+                        // we don't accidentally pick a directory or the wrong
+                        // artifact shape on cross-platform hosts.
                         let next_to_manifest = manifest_dir.join(&entry);
-                        exe_candidates.push(next_to_manifest.clone());
 
-                        // Also try with .exe suffix and typical cargo target locations
-                        let mut with_exe = next_to_manifest.clone();
-                        with_exe.set_extension("exe");
-                        exe_candidates.push(with_exe.clone());
+                        // Build a platform-prioritized list for the base path.
+                        let push_platform_candidates = |base: &std::path::PathBuf, dst: &mut Vec<std::path::PathBuf>| {
+                            #[cfg(target_os = "windows")]
+                            {
+                                let mut p_exe = base.clone(); p_exe.set_extension("exe"); dst.push(p_exe);
+                                let mut p_dll = base.clone(); p_dll.set_extension("dll"); dst.push(p_dll);
+                                dst.push(base.clone());
+                            }
+                            #[cfg(target_os = "macos")]
+                            {
+                                let mut p_dylib = base.clone(); p_dylib.set_extension("dylib"); dst.push(p_dylib);
+                                let mut p_so = base.clone(); p_so.set_extension("so"); dst.push(p_so);
+                                dst.push(base.clone());
+                            }
+                            #[cfg(all(unix, not(target_os = "macos")))]
+                            {
+                                let mut p_so = base.clone(); p_so.set_extension("so"); dst.push(p_so);
+                                let mut p_dylib = base.clone(); p_dylib.set_extension("dylib"); dst.push(p_dylib);
+                                dst.push(base.clone());
+                            }
+                        };
+
+                        push_platform_candidates(&next_to_manifest, &mut exe_candidates);
+
+                        // Also try typical cargo target locations with the same ordering
                         let crate_root = manifest_dir
                             .parent()
                             .map(|p| p.to_path_buf())
                             .unwrap_or(manifest_dir.clone());
                         let cand_debug = crate_root.join("target").join("debug").join(&entry);
-                        exe_candidates.push(cand_debug.clone());
-                        let mut cand_debug_exe = cand_debug.clone();
-                        cand_debug_exe.set_extension("exe");
-                        exe_candidates.push(cand_debug_exe.clone());
+                        push_platform_candidates(&cand_debug, &mut exe_candidates);
                         let cand_rel = crate_root.join("target").join("release").join(&entry);
-                        exe_candidates.push(cand_rel.clone());
-                        let mut cand_rel_exe = cand_rel.clone();
-                        cand_rel_exe.set_extension("exe");
-                        exe_candidates.push(cand_rel_exe.clone());
+                        push_platform_candidates(&cand_rel, &mut exe_candidates);
 
-                        // Pick the first candidate that exists
+                        // Pick the first candidate that exists and is a file
                         let mut found: Option<std::path::PathBuf> = None;
                         for c in exe_candidates.into_iter() {
-                            if c.exists() {
-                                found = Some(c);
-                                break;
+                            match std::fs::metadata(&c) {
+                                Ok(meta) if meta.is_file() => {
+                                    found = Some(c);
+                                    break;
+                                }
+                                _ => continue,
                             }
                         }
 
                         if let Some(exe) = found {
                             // Try to canonicalize to an absolute path so later
-                            // spawns are not affected by CWD changes.
+                            // spawns/loads are not affected by CWD changes.
                             let exe_abs = std::fs::canonicalize(&exe).unwrap_or(exe.clone());
-                            let ep = mainstage_core::vm::external::ExternalPlugin::new(
-                                alias.clone(),
-                                exe_abs,
-                            );
-                            run_vm.register_plugin(std::sync::Arc::new(ep));
+                            // If the manifest prefers in-process loading, try
+                            // to load the shared library rather than spawn it.
+                            if desc.manifest.prefers_inprocess() {
+                                match mainstage_core::vm::inprocess::InProcessPlugin::new(exe_abs.as_path()) {
+                                    Ok(plugin) => {
+                                        run_vm.register_plugin(std::sync::Arc::new(plugin));
+                                    }
+                                    Err(e) => {
+                                        warn!("failed to load in-process plugin '{}': {}", mod_name, e);
+                                        // fallback to ExternalPlugin
+                                        let ep = mainstage_core::vm::external::ExternalPlugin::new(alias.clone(), exe_abs);
+                                        run_vm.register_plugin(std::sync::Arc::new(ep));
+                                    }
+                                }
+                            } else {
+                                let ep = mainstage_core::vm::external::ExternalPlugin::new(alias.clone(), exe_abs);
+                                run_vm.register_plugin(std::sync::Arc::new(ep));
+                            }
                         } else {
                             warn!(
                                 "could not locate executable for plugin module '{}' at expected path(s)",

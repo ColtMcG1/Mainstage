@@ -1,3 +1,10 @@
+//! file: core/src/vm/manifest.rs
+//! description: plugin manifest types and discovery helpers.
+//!
+//! Defines `PluginManifest` and helper functions used to discover and
+//! validate plugin manifests on disk. Manifests are expected to be JSON
+//! files describing exported functions and metadata.
+
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -33,6 +40,10 @@ pub struct PluginManifest {
     #[serde(default = "default_abi")]
     pub abi: String,
     #[serde(default)]
+    /// Optional hint for loader: "inprocess" (shared library) or "external" (separate process).
+    /// Defaults to "inprocess".
+    pub kind: Option<String>,
+    #[serde(default)]
     pub entry: Option<String>,
     #[serde(default)]
     pub functions: Vec<FunctionSpec>,
@@ -62,6 +73,15 @@ impl PluginManifest {
             }
         }
         Ok(())
+    }
+
+    /// Return true when manifest explicitly requests in-process loading.
+    pub fn prefers_inprocess(&self) -> bool {
+        match self.kind.as_deref() {
+            Some("inprocess") => true,
+            Some("external") => false,
+            _ => self.abi == "inprocess",
+        }
     }
 }
 

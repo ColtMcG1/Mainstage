@@ -1,0 +1,11 @@
+{
+  "name": "rust_inproc",
+  "version": "0.1.0",
+  "description": "Example in-process Rust plugin",
+  "entry": "rust_inproc",
+  "abi": "inprocess",
+  "kind": "inprocess",
+  "functions": [
+    { "name": "echo", "args": [], "returns": { "name": "r", "kind": "any" } }
+  ]
+}

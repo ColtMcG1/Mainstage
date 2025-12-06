@@ -1,3 +1,8 @@
+//! Symbol representation used by the semantic analyzer.
+//!
+//! Defines `Symbol` and `SymbolKind` and helpers to manage inferred types,
+//! properties and recorded usages for diagnostics.
+
 use super::kind::{self, InferredKind};
 use std::collections::HashMap;
 

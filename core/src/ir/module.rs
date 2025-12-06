@@ -1,3 +1,11 @@
+//! file: core/src/ir/module.rs
+//! description: IR module container and helpers.
+//!
+//! `IrModule` is the main container for lowered instructions (IROp). It
+//! manages register allocation, label positions, declared functions/objects
+//! and provides helper APIs used by optimizations and the final bytecode
+//! emitter.
+//!
 use crate::ir::{ op::IROp };
 use std::collections::{HashMap, HashSet};
 

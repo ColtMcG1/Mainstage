@@ -1,3 +1,10 @@
+//! file: core/src/ir/op.rs
+//! description: IR operation definitions.
+//!
+//! Defines the `IROp` enum used by the lowering pipeline and optimizers.
+//! Each variant represents a low-level IR instruction with virtual register
+//! operands.
+
 use super::value::Value;
 
 type Register = usize;

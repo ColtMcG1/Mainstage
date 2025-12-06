@@ -1,3 +1,8 @@
+//! file: core/src/analyzers/acyclic/mod.rs
+//! description: detect cycles in the stage call graph.
+//!
+//! This pass walks the AST to build a call-graph of stage references and
+//! reports cycles as diagnostics. It returns an error when a cycle is found.
 use crate::ast::{AstNode, AstNodeKind};
 use crate::error::MainstageErrorExt;
 use crate::error::Level;

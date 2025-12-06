@@ -1,3 +1,9 @@
+//! Semantic analyzer pass.
+//!
+//! This module implements the top-level semantic analysis pass which builds a
+//! `SymbolTable`, infers types, and constructs an `AnalyzerOutput` summary
+//! consumed by lowering and tooling.
+
 use crate::ast::AstNode;
 use crate::error::MainstageErrorExt;
 use crate::vm::plugin::PluginDescriptor;

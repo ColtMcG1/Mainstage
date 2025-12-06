@@ -3,6 +3,9 @@ name = "c_plugin"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+crate-type = ["cdylib"]
+
 [dependencies]
 mainstage_core = { path = "../../core" }
 async-trait = "0.1"

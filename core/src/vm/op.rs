@@ -1,3 +1,10 @@
+//! file: core/src/vm/op.rs
+//! description: runtime operation representation for the bytecode interpreter.
+//!
+//! The `Op` enum mirrors the wire-format bytecode and is the decoded form
+//! the executor matches over during runtime. Registers are indexes into the
+//! VM register file.
+
 type Register = usize;
 
 // Parsed runtime op to execute

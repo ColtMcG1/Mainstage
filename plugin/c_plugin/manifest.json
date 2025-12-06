@@ -2,9 +2,10 @@
   "name": "c",
   "version": "0.1.0",
   "description": "C plugin. Provide compilation and linking services for C code snippets.",
-  "path": "target/debug/c_plugin.exe",
+  "path": "target/release/c_plugin.exe",
   "abi": "inprocess",
-  "entry": null,
+  "entry": "c_plugin",
+  "kind": "inprocess",
   "functions": [
     {
       "name": "compile",

@@ -1,3 +1,10 @@
+//! file: core/src/vm/external.rs
+//! description: external (out-of-process) plugin adapter.
+//!
+//! `ExternalPlugin` implements the `Plugin` trait by invoking an external
+//! executable and exchanging JSON on stdin/stdout. This adapter is used when
+//! a manifest indicates an external plugin entrypoint.
+//!
 use crate::vm::plugin::Plugin;
 use crate::vm::value::Value;
 use async_trait::async_trait;

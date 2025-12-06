@@ -1,3 +1,9 @@
+//! Statement-level semantic analysis helpers.
+//!
+//! Functions in this module analyze top-level script statements (workspaces,
+//! projects, stages, imports) and populate the `SymbolTable`. The analysis may
+//! consult optional plugin manifests to register imported module symbols.
+
 use super::{
     symbol::{SymbolKind},
     table::SymbolTable,

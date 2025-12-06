@@ -1,3 +1,10 @@
+//! file: core/src/ir/lower/lower_objects.rs
+//! description: top-level lowering for script/workspace/project objects.
+//!
+//! This module orchestrates the multi-pass lowering of a script AST into
+//! module-level IR ops. It registers prototypes, handles static list
+//! initialization, and emits per-workspace or per-stage wrappers as needed.
+//!
 use crate::ir::{op::IROp};
 // intentionally reference lower_stmt via the module path where needed
 
@@ -503,25 +510,30 @@ fn lower_project_object(
         }
 
         // Create a module-level object runtime slot (a register holding the object)
-        let obj_reg = ir_mod.alloc_reg();
-        // initialize to an empty object so SetProp writes into a real object
-        let empty_map: std::collections::HashMap<String, crate::ir::value::Value> =
-            std::collections::HashMap::new();
-        ir_mod.emit_op(IROp::LConst {
-            dest: obj_reg,
-            value: crate::ir::value::Value::Object(empty_map),
-        });
-        // record runtime register in lowering context for other passes
-        ctx.bind_object_reg(project_node.get_id(), obj_reg);
-        // Also bind by declared object id so lookups via symbol->object id
-        // mapping can find the runtime register during Member lowering.
-        if let Some(obj_id) = ctx.get_object_id(project_node.get_id()) {
-            ctx.bind_object_reg_by_objid(obj_id, obj_reg);
+        // only if one hasn't already been pre-created from analyzer output.
+        if ctx.get_object_reg(project_node.get_id()).is_none() {
+            let obj_reg = ir_mod.alloc_reg();
+            // initialize to an empty object so SetProp writes into a real object
+            let empty_map: std::collections::HashMap<String, crate::ir::value::Value> =
+                std::collections::HashMap::new();
+            ir_mod.emit_op(IROp::LConst {
+                dest: obj_reg,
+                value: crate::ir::value::Value::Object(empty_map),
+            });
+            // record runtime register in lowering context for other passes
+            ctx.bind_object_reg(project_node.get_id(), obj_reg);
+            // Also bind by declared object id so lookups via symbol->object id
+            // mapping can find the runtime register during Member lowering.
+            if let Some(obj_id) = ctx.get_object_id(project_node.get_id()) {
+                ctx.bind_object_reg_by_objid(obj_id, obj_reg);
+            }
         }
 
         // Lower each statement in the project body; treat assignments to
         // identifiers as setting properties on this object.
         if let crate::ast::AstNodeKind::Block { statements } = body.get_kind() {
+            // Ensure obj_reg is available in this scope
+            let obj_reg = ctx.get_object_reg(project_node.get_id()).expect("Object register should be initialized");
             for stmt in statements.iter() {
                 if let crate::ast::AstNodeKind::Assignment { target, value } = stmt.get_kind() {
                     if let crate::ast::AstNodeKind::Identifier { name: prop_name } =

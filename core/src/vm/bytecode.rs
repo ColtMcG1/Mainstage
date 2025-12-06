@@ -1,3 +1,10 @@
+//! file: core/src/vm/bytecode.rs
+//! description: VM bytecode parser for the run-time executor.
+//!
+//! Parses the compact binary format emitted by the IR bytecode emitter and
+//! produces a vector of runtime `Op` values and label maps consumed by the
+//! executor.
+
 use std::collections::HashMap;
 use std::io::Cursor;
 

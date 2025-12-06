@@ -1,3 +1,10 @@
+//! Semantic analyzer for AST nodes.
+//!
+//! This module contains the top-level `Analyzer` that walks an AST, populates
+//! the semantic `SymbolTable`, and collects diagnostics. It can be constructed
+//! with optional plugin manifests to inform symbol resolution for dotted
+//! (plugin) references.
+
 use crate::analyzers::semantic::table::SymbolTable;
 use crate::ast::AstNode;
 use crate::error::MainstageErrorExt;

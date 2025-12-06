@@ -1,3 +1,10 @@
+//! file: core/src/ast/expr.rs
+//! description: parsing helpers for expression-level rules.
+//!
+//! Contains functions that convert `pest` parse `Pair`s for expressions
+//! into `AstNode` trees. These helpers preserve `Location` and `Span`
+//! information for diagnostics and support nested/compound expressions.
+//!
 use crate::{
     ast::{AstNode, AstNodeKind, BinaryOperator, UnaryOperator,MainstageErrorExt, Rule, rules},
     script,

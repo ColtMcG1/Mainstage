@@ -1,3 +1,10 @@
+//! file: core/src/vm/plugin.rs
+//! description: plugin trait & runtime plugin registry.
+//!
+//! Defines the `Plugin` trait used by external and in-process plugin
+//! adapters, as well as `PluginRegistry` and descriptor types used to
+//! discover and register plugins at runtime.
+
 use crate::vm::value::Value;
 use async_trait::async_trait;
 
@@ -28,6 +35,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use crate::vm::manifest::PluginManifest;
 use crate::vm::external::ExternalPlugin;
+use crate::vm::inprocess::InProcessPlugin;
+use log::{warn, info};
 
 #[derive(Clone, Debug)]
 pub struct PluginDescriptor {
@@ -59,6 +68,54 @@ impl PluginRegistry {
         // Only register if descriptor has a path (directory of manifest)
         if let Some(dir) = &desc.path {
             let entry = desc.manifest.entry.clone().unwrap_or_else(|| desc.manifest.name.clone());
+            // Respect manifest preference: only attempt in-process when manifest
+            // explicitly prefers it (or defaults to inprocess via manifest logic).
+            if desc.manifest.prefers_inprocess() {
+                // Try in-process shared library first (platform-specific extensions)
+                let mut libpath = dir.clone();
+                libpath.push(&entry);
+
+                // Build a richer candidate list including common prefixed
+                // names (e.g. lib<entry>.so) so Unix/macOS library naming is
+                // handled.
+                let mut candidates: Vec<std::path::PathBuf> = Vec::new();
+                if cfg!(target_os = "windows") {
+                    candidates.push(libpath.with_extension("dll"));
+                    candidates.push(libpath.clone());
+                } else if cfg!(target_os = "macos") {
+                    candidates.push(libpath.with_extension("dylib"));
+                    let mut pref = libpath.clone(); pref.set_file_name(format!("lib{}", entry)); pref.set_extension("dylib"); candidates.push(pref.clone());
+                    candidates.push(libpath.clone());
+                } else {
+                    candidates.push(libpath.with_extension("so"));
+                    let mut pref = libpath.clone(); pref.set_file_name(format!("lib{}", entry)); pref.set_extension("so"); candidates.push(pref.clone());
+                    candidates.push(libpath.clone());
+                }
+
+                let mut registered = false;
+                for p in candidates.iter() {
+                    if p.exists() && p.is_file() {
+                        match InProcessPlugin::new(p.as_path()) {
+                            Ok(plugin) => {
+                                info!("registered in-process plugin from {}", p.display());
+                                self.register(std::sync::Arc::new(plugin));
+                                registered = true;
+                                break;
+                            }
+                            Err(e) => {
+                                // Log a structured warning so discovery continues
+                                // but the developer gets actionable feedback.
+                                warn!("in-process load failed for {}: {}", p.display(), e);
+                                continue;
+                            }
+                        }
+                    }
+                }
+
+                if registered { return; }
+            }
+
+            // Fallback to external executable
             let mut exe = dir.clone();
             exe.push(entry);
             // On Windows, allow .exe suffix if not provided

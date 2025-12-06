@@ -1,3 +1,10 @@
+//! file: core/src/ir/mod.rs
+//! description: intermediate representation (IR) crate root.
+//!
+//! This module re-exports the IR submodules (lowering, optimizations,
+//! bytecode emission) and provides the `lower_ast_to_ir` convenience
+//! entrypoint used by callers.
+//!
 pub mod lower;
 pub mod opt;
 pub mod bytecode;

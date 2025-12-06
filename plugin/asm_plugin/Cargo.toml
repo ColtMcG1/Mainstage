@@ -3,6 +3,13 @@ name = "asm_plugin"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+crate-type = ["cdylib"]
+
+[[bin]]
+name = "asm_plugin_bin"
+path = "src/main.rs"
+
 [dependencies]
 mainstage_core = { path = "../../core" }
 async-trait = "0.1"

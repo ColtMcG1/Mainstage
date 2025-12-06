@@ -1,0 +1,6 @@
+{
+  "name": "c_plugin_example",
+  "entry": "c_plugin_example",
+  "kind": "inprocess",
+  "description": "Minimal C in-process plugin example (plugin.c)."
+}
