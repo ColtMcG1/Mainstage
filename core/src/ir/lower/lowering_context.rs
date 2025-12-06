@@ -93,6 +93,29 @@ impl LoweringContext {
             ctx.symbols.insert(obj.name.clone(), id);
         }
 
+
+        // Pre-create module-level runtime object registers for all
+        // analyzer-discovered objects. This ensures lowering can resolve
+        // property Get/Set ops and static list initializers even if the
+        // corresponding AST node lowering hasn't yet run or was emitted
+        // in a different pass. It mirrors the behavior of
+        // `lower_project_object` when projects are lowered individually.
+        for obj in &analysis.objects {
+            if let Some(&obj_id) = ctx.objects.get(&obj.node_id) {
+                let obj_reg = ir_mod.alloc_reg();
+                let empty_map: std::collections::HashMap<String, crate::ir::value::Value> =
+                    std::collections::HashMap::new();
+                ir_mod.emit_op(crate::ir::op::IROp::LConst {
+                    dest: obj_reg,
+                    value: crate::ir::value::Value::Object(empty_map),
+                });
+                ctx.bind_object_reg(obj.node_id, obj_reg);
+                ctx.bind_object_reg_by_objid(obj_id, obj_reg);
+            }
+        }
+
+        
+
         // Note: scopes and call_graph are available in `analysis` for more
         // advanced population of the context (scoped symbol tables, topo order).
 

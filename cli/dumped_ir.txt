@@ -1,0 +1,57 @@
+0000: LConst r0 <- Object({})
+0001: LConst r1 <- Object({})
+0002: LConst r2 <- Object({})
+0003: LConst r3 <- Object({})
+0004: LConst r4 <- Array([Str("./src/*.cpp")])
+0005: LConst r5 <- Symbol("srcs")
+0006: SetProp r3.r5 <- r4
+0007: LConst r6 <- Array([Str("-O2")])
+0008: LConst r7 <- Symbol("flags")
+0009: SetProp r3.r7 <- r6
+0010: Label main
+0011: CallLabel r8 <- L13()
+0012: Halt
+0013: Label L13
+0014: LConst r9 <- Symbol("srcs")
+0015: LoadGlobal r10 <- r3
+0016: GetProp r11 <- r10.r9
+0017: LConst r12 <- Symbol("read")
+0018: Call r13 <- r12(r11)
+0019: SLocal local[0] <- r13
+0020: LConst r14 <- Str("Compiling C++ sources:")
+0021: LConst r15 <- Symbol("say")
+0022: Call r16 <- r15(r14)
+0023: LLocal r17 <- local[0]
+0024: LConst r18 <- Symbol("say")
+0025: Call r19 <- r18(r17)
+0026: LLocal r20 <- local[0]
+0027: LConst r21 <- Symbol("flags")
+0028: LoadGlobal r22 <- r3
+0029: GetProp r23 <- r22.r21
+0030: PluginCall r24 <- cpp_plugin.compile(r20, r23)
+0031: SLocal local[1] <- r24
+0032: LConst r25 <- Symbol("ok")
+0033: LLocal r26 <- local[1]
+0034: GetProp r27 <- r26.r25
+0035: BrFalse r27 -> 44
+0036: LConst r28 <- Str("Compilation succeeded. Output binary at: ")
+0037: LConst r29 <- Symbol("path")
+0038: LLocal r30 <- local[1]
+0039: GetProp r31 <- r30.r29
+0040: Add r32 <- r28 + r31
+0041: LConst r33 <- Symbol("say")
+0042: Call r34 <- r33(r32)
+0043: Jump 51
+0044: LConst r35 <- Str("Compilation failed with error: ")
+0045: LConst r36 <- Symbol("error")
+0046: LLocal r37 <- local[1]
+0047: GetProp r38 <- r37.r36
+0048: Add r39 <- r35 + r38
+0049: LConst r40 <- Symbol("say")
+0050: Call r41 <- r40(r39)
+0051: LLocal r42 <- local[1]
+0052: LConst r43 <- Symbol("say")
+0053: Call r44 <- r43(r42)
+0054: LConst r45 <- Null
+0055: Ret r45
+0056: Halt

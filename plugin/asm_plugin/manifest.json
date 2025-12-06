@@ -4,7 +4,8 @@
   "description": "ASM plugin. Provide compilation and linking services for ASM code snippets.",
   "path": "target/debug/asm_plugin.exe",
   "abi": "inprocess",
-  "entry": null,
+  "entry": "asm_plugin",
+  "kind": "inprocess",
   "functions": [
     {
       "name": "compile",

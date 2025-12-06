@@ -236,10 +236,3 @@ Binary encoding (conceptual):
 - 0x95 LoadGlobal(dest,src)
 
 ---
-
-If you'd like, I can also:
-
-- Add a small reference program and its exact serialized byte sequence as a hex dump.
-- Add a `disasm` example that shows produced human-readable ops (or enhance `cli` disassembly output).
-
-Tell me which follow-up you prefer and I'll implement it next.

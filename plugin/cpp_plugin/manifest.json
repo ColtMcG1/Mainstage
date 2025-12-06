@@ -2,9 +2,10 @@
   "name": "cpp",
   "version": "0.1.0",
   "description": "C++ plugin. Provide compilation and linking services for C++ code snippets.",
-  "path": "target/debug/cpp_plugin.exe",
+  "path": "target/release/",
   "abi": "inprocess",
-  "entry": null,
+  "entry": "cpp_plugin",
+  "kind": "inprocess",
   "functions": [
     {
       "name": "compile",

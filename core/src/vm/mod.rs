@@ -9,6 +9,7 @@ mod op;
 pub mod value;
 pub mod manifest;
 pub mod external;
+pub mod inprocess;
 pub mod plugin;
 mod run;
 mod bytecode;

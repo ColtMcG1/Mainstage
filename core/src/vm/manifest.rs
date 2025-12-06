@@ -40,6 +40,10 @@ pub struct PluginManifest {
     #[serde(default = "default_abi")]
     pub abi: String,
     #[serde(default)]
+    /// Optional hint for loader: "inprocess" (shared library) or "external" (separate process).
+    /// Defaults to "inprocess".
+    pub kind: Option<String>,
+    #[serde(default)]
     pub entry: Option<String>,
     #[serde(default)]
     pub functions: Vec<FunctionSpec>,
@@ -69,6 +73,15 @@ impl PluginManifest {
             }
         }
         Ok(())
+    }
+
+    /// Return true when manifest explicitly requests in-process loading.
+    pub fn prefers_inprocess(&self) -> bool {
+        match self.kind.as_deref() {
+            Some("inprocess") => true,
+            Some("external") => false,
+            _ => self.abi == "inprocess",
+        }
     }
 }
 

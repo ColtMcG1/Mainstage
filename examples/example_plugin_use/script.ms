@@ -1,13 +1,19 @@
 import "cpp" as cpp_plugin;
 
 workspace hello_ws {
-    compilers = cpp_plugin.list_compilers();
-    say("Detected compilers:");
-    for compiler in compilers {
-        say(" - " + compiler.name + " at " + compiler.path);
+    // Read source files from the example_plugin_use project and store as an array.
+    sources = read(example_plugin_use.srcs);
+    // Debug output
+    say("Compiling C++ sources:");
+    say(sources);
+    // Compile using the cpp plugin
+    val = cpp_plugin.compile(sources, example_plugin_use.flags);
+    if val.ok {
+        say("Compilation succeeded. Output binary at: " + val.path);
+    } else {
+        say("Compilation failed with error: " + val.error);
     }
-
-    val = cpp_plugin.compile(example_plugin_use.srcs);
+    // Debug
     say(val);
 }
 
